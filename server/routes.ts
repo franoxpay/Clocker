@@ -6,6 +6,30 @@ import { randomBytes } from "crypto";
 import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+import { promises as dns } from "dns";
+
+async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
+  try {
+    const records = await dns.resolveCname(subdomain);
+    
+    if (records && records.length > 0) {
+      return { verified: true };
+    }
+    
+    return { verified: false, error: "No CNAME record found" };
+  } catch (error: any) {
+    if (error.code === "ENODATA") {
+      return { verified: false, error: "No CNAME record configured for this domain" };
+    }
+    if (error.code === "ENOTFOUND") {
+      return { verified: false, error: "Domain not found - DNS not configured" };
+    }
+    if (error.code === "SERVFAIL") {
+      return { verified: false, error: "DNS server error - try again later" };
+    }
+    return { verified: false, error: `DNS lookup failed: ${error.message}` };
+  }
+}
 
 function generateXcode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -492,12 +516,21 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Domain not found" });
       }
 
+      const dnsResult = await verifyDomainDNS(domain.subdomain);
+      
       const updated = await storage.updateDomain(domainId, {
-        isVerified: true,
+        isVerified: dnsResult.verified,
         lastCheckedAt: new Date(),
-        lastVerificationError: null,
-        sslStatus: "active",
+        lastVerificationError: dnsResult.error || null,
+        sslStatus: dnsResult.verified ? "active" : "pending",
       });
+
+      if (!dnsResult.verified) {
+        return res.status(400).json({ 
+          message: dnsResult.error || "DNS verification failed",
+          domain: updated
+        });
+      }
 
       res.json(updated);
     } catch (error) {

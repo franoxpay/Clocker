@@ -99,6 +99,10 @@ export default function Domains() {
     mutationFn: async (id: number) => {
       setVerifyingId(id);
       const res = await apiRequest("POST", `/api/domains/${id}/verify`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Verification failed");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -106,14 +110,44 @@ export default function Domains() {
       setVerifyingId(null);
       toast({
         title: t("common.success"),
-        description: language === "pt-BR" ? "Verificação concluída" : "Verification completed",
+        description: language === "pt-BR" 
+          ? "DNS verificado com sucesso! Domínio ativo." 
+          : "DNS verified successfully! Domain active.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
       setVerifyingId(null);
+      
+      const errorMessages: Record<string, { pt: string; en: string }> = {
+        "No CNAME record configured for this domain": {
+          pt: "Registro CNAME não encontrado. Configure o DNS no seu provedor.",
+          en: "CNAME record not found. Configure DNS at your provider."
+        },
+        "Domain not found - DNS not configured": {
+          pt: "Domínio não encontrado. Verifique se o DNS foi configurado corretamente.",
+          en: "Domain not found. Check if DNS was configured correctly."
+        },
+        "DNS server error - try again later": {
+          pt: "Erro no servidor DNS. Tente novamente mais tarde.",
+          en: "DNS server error. Try again later."
+        },
+        "No CNAME record found": {
+          pt: "Registro CNAME não encontrado. Configure o apontamento DNS.",
+          en: "CNAME record not found. Configure DNS pointing."
+        }
+      };
+      
+      const translated = errorMessages[error.message];
+      const description = translated 
+        ? (language === "pt-BR" ? translated.pt : translated.en)
+        : (language === "pt-BR" 
+            ? `Verificação falhou: ${error.message}` 
+            : `Verification failed: ${error.message}`);
+      
       toast({
-        title: t("common.error"),
-        description: language === "pt-BR" ? "Erro na verificação" : "Verification error",
+        title: language === "pt-BR" ? "DNS não verificado" : "DNS not verified",
+        description,
         variant: "destructive",
       });
     },
