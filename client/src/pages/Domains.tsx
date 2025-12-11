@@ -63,6 +63,9 @@ export default function Domains() {
   const [deleteDomain, setDeleteDomain] = useState<Domain | null>(null);
   const [subdomain, setSubdomain] = useState("");
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
+  const [showDnsInstructions, setShowDnsInstructions] = useState<string | null>(null);
+  
+  const platformDomain = window.location.hostname;
 
   const { data: domains = [], isLoading } = useQuery<Domain[]>({
     queryKey: ["/api/domains"],
@@ -76,6 +79,7 @@ export default function Domains() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
       setIsCreateOpen(false);
+      setShowDnsInstructions(subdomain);
       setSubdomain("");
       toast({
         title: t("common.success"),
@@ -357,6 +361,94 @@ export default function Domains() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!showDnsInstructions} onOpenChange={(open) => !open && setShowDnsInstructions(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {language === "pt-BR" ? "Configurar Apontamento DNS" : "Configure DNS Pointing"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                {language === "pt-BR"
+                  ? "Para que seu domínio funcione, você precisa configurar o apontamento DNS no seu provedor de domínio."
+                  : "For your domain to work, you need to configure DNS pointing at your domain provider."}
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Seu Subdomínio:" : "Your Subdomain:"}
+                </Label>
+                <div className="mt-1 p-2 bg-muted rounded-md font-mono text-sm">
+                  {showDnsInstructions}
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Tipo de Registro:" : "Record Type:"}
+                </Label>
+                <div className="mt-1 p-2 bg-muted rounded-md font-mono text-sm">
+                  CNAME
+                </div>
+              </div>
+              
+              <div>
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Apontar Para (Destino):" : "Point To (Target):"}
+                </Label>
+                <div className="mt-1 p-2 bg-muted rounded-md font-mono text-sm break-all">
+                  {platformDomain}
+                </div>
+              </div>
+            </div>
+            
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p className="font-medium">
+                {language === "pt-BR" ? "Instruções:" : "Instructions:"}
+              </p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>
+                  {language === "pt-BR"
+                    ? "Acesse o painel de controle do seu provedor de domínio"
+                    : "Access your domain provider's control panel"}
+                </li>
+                <li>
+                  {language === "pt-BR"
+                    ? "Vá para a seção de gerenciamento DNS"
+                    : "Go to DNS management section"}
+                </li>
+                <li>
+                  {language === "pt-BR"
+                    ? "Adicione um registro CNAME com os valores acima"
+                    : "Add a CNAME record with the values above"}
+                </li>
+                <li>
+                  {language === "pt-BR"
+                    ? "Aguarde a propagação DNS (pode levar até 48h)"
+                    : "Wait for DNS propagation (can take up to 48h)"}
+                </li>
+                <li>
+                  {language === "pt-BR"
+                    ? "Clique em 'Verificar Agora' na tabela de domínios"
+                    : "Click 'Check Now' on the domains table"}
+                </li>
+              </ol>
+            </div>
+            
+            <div className="flex justify-end">
+              <Button onClick={() => setShowDnsInstructions(null)} data-testid="button-close-dns-instructions">
+                {language === "pt-BR" ? "Entendi" : "Got it"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteDomain} onOpenChange={(open) => !open && setDeleteDomain(null)}>
         <AlertDialogContent>

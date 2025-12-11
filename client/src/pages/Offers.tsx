@@ -238,151 +238,8 @@ export default function Offers() {
     }));
   };
 
-  const OfferForm = () => (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="name">{t("offers.name")}</Label>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          required
-          data-testid="input-offer-name"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="slug">{t("offers.slug")}</Label>
-        <Input
-          id="slug"
-          value={formData.slug}
-          onChange={(e) => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })}
-          placeholder="minha-oferta"
-          required
-          data-testid="input-offer-slug"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="platform">{t("offers.platform")}</Label>
-        <Select
-          value={formData.platform}
-          onValueChange={(value) => setFormData({ ...formData, platform: value })}
-        >
-          <SelectTrigger data-testid="select-offer-platform">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="tiktok">TikTok</SelectItem>
-            <SelectItem value="facebook">Facebook</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="domain">{t("offers.domain")}</Label>
-        <Select
-          value={formData.domainId}
-          onValueChange={(value) => setFormData({ ...formData, domainId: value })}
-        >
-          <SelectTrigger data-testid="select-offer-domain">
-            <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
-          </SelectTrigger>
-          <SelectContent>
-            {domains.filter(d => d.isActive && d.isVerified).map((domain) => (
-              <SelectItem key={domain.id} value={String(domain.id)}>
-                {domain.subdomain}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="blackPageUrl">{t("offers.blackPage")}</Label>
-        <Input
-          id="blackPageUrl"
-          type="url"
-          value={formData.blackPageUrl}
-          onChange={(e) => setFormData({ ...formData, blackPageUrl: e.target.value })}
-          placeholder="https://..."
-          required
-          data-testid="input-offer-black-url"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="whitePageUrl">{t("offers.whitePage")}</Label>
-        <Input
-          id="whitePageUrl"
-          type="url"
-          value={formData.whitePageUrl}
-          onChange={(e) => setFormData({ ...formData, whitePageUrl: e.target.value })}
-          placeholder="https://..."
-          required
-          data-testid="input-offer-white-url"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label>{t("offers.devices")}</Label>
-        <div className="flex flex-wrap gap-3">
-          {devices.map((device) => (
-            <label key={device.id} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                checked={formData.allowedDevices.includes(device.id)}
-                onCheckedChange={() => toggleDevice(device.id)}
-                data-testid={`checkbox-device-${device.id}`}
-              />
-              <span className="text-sm">{t(device.labelKey)}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>{t("offers.countries")}</Label>
-        <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
-          {countries.map((country) => (
-            <label key={country.code} className="flex items-center gap-2 cursor-pointer">
-              <Checkbox
-                checked={formData.allowedCountries.includes(country.code)}
-                onCheckedChange={() => toggleCountry(country.code)}
-                data-testid={`checkbox-country-${country.code}`}
-              />
-              <span className="text-sm">
-                {language === "pt-BR" ? country.namePt : country.name}
-              </span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2 pt-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setIsCreateOpen(false);
-            setEditingOffer(null);
-            resetForm();
-          }}
-          data-testid="button-cancel-offer"
-        >
-          {t("common.cancel")}
-        </Button>
-        <Button
-          type="submit"
-          disabled={createMutation.isPending || updateMutation.isPending}
-          data-testid="button-save-offer"
-        >
-          {createMutation.isPending || updateMutation.isPending
-            ? t("common.loading")
-            : t("common.save")}
-        </Button>
-      </div>
-    </form>
-  );
+  const platformDomain = window.location.hostname;
+  const availableDomains = domains.filter(d => d.isActive);
 
   return (
     <div className="p-6 space-y-6">
@@ -401,7 +258,159 @@ export default function Offers() {
             <DialogHeader>
               <DialogTitle>{t("offers.create")}</DialogTitle>
             </DialogHeader>
-            <OfferForm />
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">{t("offers.name")}</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  required
+                  data-testid="input-offer-name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="slug">{t("offers.slug")}</Label>
+                <Input
+                  id="slug"
+                  value={formData.slug}
+                  onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
+                  placeholder="minha-oferta"
+                  required
+                  data-testid="input-offer-slug"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="platform">{t("offers.platform")}</Label>
+                <Select
+                  value={formData.platform}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
+                >
+                  <SelectTrigger data-testid="select-offer-platform">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="tiktok">TikTok</SelectItem>
+                    <SelectItem value="facebook">Facebook</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="domain">{t("offers.domain")}</Label>
+                <Select
+                  value={formData.domainId}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, domainId: value }))}
+                >
+                  <SelectTrigger data-testid="select-offer-domain">
+                    <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableDomains.length === 0 ? (
+                      <SelectItem value="platform" disabled>
+                        {language === "pt-BR" ? "Nenhum domínio disponível" : "No domains available"}
+                      </SelectItem>
+                    ) : (
+                      availableDomains.map((domain) => (
+                        <SelectItem key={domain.id} value={String(domain.id)}>
+                          {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {availableDomains.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {language === "pt-BR" 
+                      ? "Adicione um domínio primeiro na seção Domínios" 
+                      : "Add a domain first in the Domains section"}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="blackPageUrl">{t("offers.blackPage")}</Label>
+                <Input
+                  id="blackPageUrl"
+                  type="url"
+                  value={formData.blackPageUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
+                  placeholder="https://..."
+                  required
+                  data-testid="input-offer-black-url"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="whitePageUrl">{t("offers.whitePage")}</Label>
+                <Input
+                  id="whitePageUrl"
+                  type="url"
+                  value={formData.whitePageUrl}
+                  onChange={(e) => setFormData(prev => ({ ...prev, whitePageUrl: e.target.value }))}
+                  placeholder="https://..."
+                  required
+                  data-testid="input-offer-white-url"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("offers.devices")}</Label>
+                <div className="flex flex-wrap gap-3">
+                  {devices.map((device) => (
+                    <label key={device.id} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={formData.allowedDevices.includes(device.id)}
+                        onCheckedChange={() => toggleDevice(device.id)}
+                        data-testid={`checkbox-device-${device.id}`}
+                      />
+                      <span className="text-sm">{t(device.labelKey)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>{t("offers.countries")}</Label>
+                <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
+                  {countries.map((country) => (
+                    <label key={country.code} className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={formData.allowedCountries.includes(country.code)}
+                        onCheckedChange={() => toggleCountry(country.code)}
+                        data-testid={`checkbox-country-${country.code}`}
+                      />
+                      <span className="text-sm">
+                        {language === "pt-BR" ? country.namePt : country.name}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setIsCreateOpen(false);
+                    resetForm();
+                  }}
+                  data-testid="button-cancel-offer"
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending}
+                  data-testid="button-save-offer"
+                >
+                  {createMutation.isPending ? t("common.loading") : t("common.save")}
+                </Button>
+              </div>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -523,13 +532,153 @@ export default function Offers() {
           <DialogHeader>
             <DialogTitle>{t("offers.edit")}</DialogTitle>
           </DialogHeader>
-          <OfferForm />
-          {editingOffer && (
-            <div className="mt-4 p-3 bg-muted rounded-md">
-              <Label className="text-xs text-muted-foreground">{t("offers.xcode")}</Label>
-              <code className="block mt-1 text-sm font-mono">{editingOffer.xcode}</code>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">{t("offers.name")}</Label>
+              <Input
+                id="edit-name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                required
+                data-testid="input-edit-offer-name"
+              />
             </div>
-          )}
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-slug">{t("offers.slug")}</Label>
+              <Input
+                id="edit-slug"
+                value={formData.slug}
+                onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
+                placeholder="minha-oferta"
+                required
+                data-testid="input-edit-offer-slug"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-platform">{t("offers.platform")}</Label>
+              <Select
+                value={formData.platform}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
+              >
+                <SelectTrigger data-testid="select-edit-offer-platform">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="facebook">Facebook</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-domain">{t("offers.domain")}</Label>
+              <Select
+                value={formData.domainId}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, domainId: value }))}
+              >
+                <SelectTrigger data-testid="select-edit-offer-domain">
+                  <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableDomains.map((domain) => (
+                    <SelectItem key={domain.id} value={String(domain.id)}>
+                      {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-blackPageUrl">{t("offers.blackPage")}</Label>
+              <Input
+                id="edit-blackPageUrl"
+                type="url"
+                value={formData.blackPageUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
+                placeholder="https://..."
+                required
+                data-testid="input-edit-offer-black-url"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-whitePageUrl">{t("offers.whitePage")}</Label>
+              <Input
+                id="edit-whitePageUrl"
+                type="url"
+                value={formData.whitePageUrl}
+                onChange={(e) => setFormData(prev => ({ ...prev, whitePageUrl: e.target.value }))}
+                placeholder="https://..."
+                required
+                data-testid="input-edit-offer-white-url"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("offers.devices")}</Label>
+              <div className="flex flex-wrap gap-3">
+                {devices.map((device) => (
+                  <label key={device.id} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={formData.allowedDevices.includes(device.id)}
+                      onCheckedChange={() => toggleDevice(device.id)}
+                      data-testid={`checkbox-edit-device-${device.id}`}
+                    />
+                    <span className="text-sm">{t(device.labelKey)}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("offers.countries")}</Label>
+              <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
+                {countries.map((country) => (
+                  <label key={country.code} className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox
+                      checked={formData.allowedCountries.includes(country.code)}
+                      onCheckedChange={() => toggleCountry(country.code)}
+                      data-testid={`checkbox-edit-country-${country.code}`}
+                    />
+                    <span className="text-sm">
+                      {language === "pt-BR" ? country.namePt : country.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {editingOffer && (
+              <div className="p-3 bg-muted rounded-md">
+                <Label className="text-xs text-muted-foreground">{t("offers.xcode")}</Label>
+                <code className="block mt-1 text-sm font-mono">{editingOffer.xcode}</code>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingOffer(null);
+                  resetForm();
+                }}
+                data-testid="button-cancel-edit-offer"
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending}
+                data-testid="button-save-edit-offer"
+              >
+                {updateMutation.isPending ? t("common.loading") : t("common.save")}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
 
