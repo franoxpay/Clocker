@@ -9,26 +9,54 @@ import { db } from "./db";
 import { promises as dns } from "dns";
 
 async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
+  console.log(`[DNS] Verifying domain: ${subdomain}`);
+  
+  // First try CNAME
   try {
-    const records = await dns.resolveCname(subdomain);
-    
-    if (records && records.length > 0) {
+    const cnameRecords = await dns.resolveCname(subdomain);
+    if (cnameRecords && cnameRecords.length > 0) {
+      console.log(`[DNS] CNAME found for ${subdomain}:`, cnameRecords);
       return { verified: true };
     }
-    
-    return { verified: false, error: "No CNAME record found" };
   } catch (error: any) {
+    console.log(`[DNS] CNAME lookup for ${subdomain} failed:`, error.code, error.message);
+    // Continue to try A record
+  }
+  
+  // Try A record (some users configure A instead of CNAME)
+  try {
+    const aRecords = await dns.resolve4(subdomain);
+    if (aRecords && aRecords.length > 0) {
+      console.log(`[DNS] A record found for ${subdomain}:`, aRecords);
+      return { verified: true };
+    }
+  } catch (error: any) {
+    console.log(`[DNS] A record lookup for ${subdomain} failed:`, error.code, error.message);
+  }
+  
+  // Try to resolve any record to check if domain exists
+  try {
+    const anyRecords = await dns.resolve(subdomain);
+    if (anyRecords && anyRecords.length > 0) {
+      console.log(`[DNS] Other records found for ${subdomain}:`, anyRecords);
+      return { verified: true };
+    }
+  } catch (error: any) {
+    console.log(`[DNS] General lookup for ${subdomain} failed:`, error.code, error.message);
+    
     if (error.code === "ENODATA") {
-      return { verified: false, error: "No CNAME record configured for this domain" };
+      return { verified: false, error: "No DNS records configured for this domain" };
     }
     if (error.code === "ENOTFOUND") {
-      return { verified: false, error: "Domain not found - DNS not configured" };
+      return { verified: false, error: "Domain not found - DNS not configured or not propagated yet" };
     }
     if (error.code === "SERVFAIL") {
       return { verified: false, error: "DNS server error - try again later" };
     }
     return { verified: false, error: `DNS lookup failed: ${error.message}` };
   }
+  
+  return { verified: false, error: "No DNS records found for this domain" };
 }
 
 function generateXcode(): string {
