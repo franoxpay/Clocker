@@ -234,6 +234,119 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/export/logs", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const format = req.query.format as string || "csv";
+      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      
+      if (format === "csv") {
+        const headers = ["ID", "Date", "Country", "Device", "Redirect Type", "IP", "User Agent", "Offer Name"];
+        const csvRows = [headers.join(",")];
+        
+        for (const log of logs.logs) {
+          const row = [
+            log.id,
+            new Date(log.createdAt).toISOString(),
+            log.country || "",
+            log.device || "",
+            log.redirectedTo || "",
+            log.ip || "",
+            `"${(log.userAgent || "").replace(/"/g, '""')}"`,
+            `"${((log as any).offer?.name || "").replace(/"/g, '""')}"`
+          ];
+          csvRows.push(row.join(","));
+        }
+        
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename=click_logs_${new Date().toISOString().split("T")[0]}.csv`);
+        return res.send(csvRows.join("\n"));
+      }
+      
+      res.status(400).json({ message: "Unsupported format" });
+    } catch (error) {
+      console.error("Error exporting logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/export/analytics", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const format = req.query.format as string || "csv";
+      const reportType = req.query.type as string || "summary";
+      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      
+      const countryStats = new Map<string, { total: number; black: number; white: number }>();
+      const deviceStats = new Map<string, { total: number; black: number; white: number }>();
+      
+      let totalBlack = 0;
+      let totalWhite = 0;
+      
+      for (const log of logs.logs) {
+        const isBlack = log.redirectedTo === "black";
+        if (isBlack) totalBlack++; else totalWhite++;
+        
+        const country = log.country || "Unknown";
+        if (!countryStats.has(country)) {
+          countryStats.set(country, { total: 0, black: 0, white: 0 });
+        }
+        const cs = countryStats.get(country)!;
+        cs.total++;
+        if (isBlack) cs.black++; else cs.white++;
+        
+        const device = log.device || "Unknown";
+        if (!deviceStats.has(device)) {
+          deviceStats.set(device, { total: 0, black: 0, white: 0 });
+        }
+        const ds = deviceStats.get(device)!;
+        ds.total++;
+        if (isBlack) ds.black++; else ds.white++;
+      }
+      
+      if (format === "csv") {
+        let csvContent = "";
+        const dateStr = new Date().toISOString().split("T")[0];
+        
+        if (reportType === "country" || reportType === "summary") {
+          csvContent += "ANALYTICS BY COUNTRY\n";
+          csvContent += "Country,Total Clicks,Black Redirects,White Redirects,Conversion Rate\n";
+          for (const [name, stats] of countryStats) {
+            const rate = stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0";
+            csvContent += `${name},${stats.total},${stats.black},${stats.white},${rate}%\n`;
+          }
+          csvContent += "\n";
+        }
+        
+        if (reportType === "device" || reportType === "summary") {
+          csvContent += "ANALYTICS BY DEVICE\n";
+          csvContent += "Device,Total Clicks,Black Redirects,White Redirects,Conversion Rate\n";
+          for (const [name, stats] of deviceStats) {
+            const rate = stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0";
+            csvContent += `${name},${stats.total},${stats.black},${stats.white},${rate}%\n`;
+          }
+          csvContent += "\n";
+        }
+        
+        if (reportType === "summary") {
+          const overallRate = logs.total > 0 ? (totalBlack / logs.total * 100).toFixed(1) : "0";
+          csvContent += "SUMMARY\n";
+          csvContent += "Total Clicks,Black Redirects,White Redirects,Overall Conversion Rate\n";
+          csvContent += `${logs.total},${totalBlack},${totalWhite},${overallRate}%\n`;
+        }
+        
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename=analytics_report_${dateStr}.csv`);
+        return res.send(csvContent);
+      }
+      
+      res.status(400).json({ message: "Unsupported format" });
+    } catch (error) {
+      console.error("Error exporting analytics:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/offers", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;

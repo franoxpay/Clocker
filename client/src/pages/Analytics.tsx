@@ -17,7 +17,14 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar } from "lucide-react";
+import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface AdvancedStats {
   totalClicks: number;
@@ -91,6 +98,20 @@ export default function Analytics() {
     noData: isPt ? "Sem dados disponiveis" : "No data available",
     black: "Black",
     white: "White",
+    exportReport: isPt ? "Exportar Relatorio" : "Export Report",
+    exportLogs: isPt ? "Exportar Logs" : "Export Logs",
+    exportAnalytics: isPt ? "Exportar Analytics" : "Export Analytics",
+    exportSummary: isPt ? "Relatorio Completo" : "Full Report",
+    exportByCountry: isPt ? "Por Pais" : "By Country",
+    exportByDevice: isPt ? "Por Dispositivo" : "By Device",
+  };
+
+  const handleExport = (type: string, reportType?: string) => {
+    let url = `/api/export/${type}?format=csv`;
+    if (reportType) {
+      url += `&type=${reportType}`;
+    }
+    window.open(url, "_blank");
   };
 
   const statCards = [
@@ -129,9 +150,39 @@ export default function Analytics() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-semibold" data-testid="title-analytics">
-        {t.title}
-      </h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-semibold" data-testid="title-analytics">
+          {t.title}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" data-testid="button-export-analytics">
+                <Download className="w-4 h-4 mr-2" />
+                {t.exportAnalytics}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("analytics", "summary")} data-testid="export-analytics-summary">
+                <FileText className="w-4 h-4 mr-2" />
+                {t.exportSummary}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("analytics", "country")} data-testid="export-analytics-country">
+                <Globe className="w-4 h-4 mr-2" />
+                {t.exportByCountry}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("analytics", "device")} data-testid="export-analytics-device">
+                <Smartphone className="w-4 h-4 mr-2" />
+                {t.exportByDevice}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" onClick={() => handleExport("logs")} data-testid="button-export-logs">
+            <Download className="w-4 h-4 mr-2" />
+            {t.exportLogs}
+          </Button>
+        </div>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (
