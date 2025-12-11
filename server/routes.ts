@@ -387,7 +387,7 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const parsedDomainId = domainId === "platform" ? 0 : parseInt(domainId);
+      const parsedDomainId = domainId === "platform" || domainId === "0" ? null : parseInt(domainId);
 
       const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
       if (existingOffer) {
@@ -428,7 +428,7 @@ export async function registerRoutes(
 
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const parsedDomainId = domainId === "platform" ? 0 : parseInt(domainId);
+      const parsedDomainId = domainId === "platform" || domainId === "0" ? null : parseInt(domainId);
 
       if (slug !== offer.slug || parsedDomainId !== offer.domainId) {
         const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);

@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, isNull } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -48,7 +48,7 @@ export interface IStorage {
   deleteDomain(id: number): Promise<void>;
 
   getOffer(id: number): Promise<Offer | undefined>;
-  getOfferBySlugAndDomain(slug: string, domainId: number): Promise<Offer | undefined>;
+  getOfferBySlugAndDomain(slug: string, domainId: number | null): Promise<Offer | undefined>;
   getOffersByUserId(userId: string): Promise<Offer[]>;
   createOffer(offer: InsertOffer & { xcode: string }): Promise<Offer>;
   updateOffer(id: number, data: Partial<InsertOffer>): Promise<Offer | undefined>;
@@ -198,11 +198,14 @@ export class DatabaseStorage implements IStorage {
     return offer;
   }
 
-  async getOfferBySlugAndDomain(slug: string, domainId: number): Promise<Offer | undefined> {
+  async getOfferBySlugAndDomain(slug: string, domainId: number | null): Promise<Offer | undefined> {
     const [offer] = await db
       .select()
       .from(offers)
-      .where(and(eq(offers.slug, slug), eq(offers.domainId, domainId)))
+      .where(and(
+        eq(offers.slug, slug), 
+        domainId === null ? isNull(offers.domainId) : eq(offers.domainId, domainId)
+      ))
       .limit(1);
     return offer;
   }

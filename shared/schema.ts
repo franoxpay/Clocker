@@ -96,7 +96,7 @@ export const offers = pgTable(
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    domainId: integer("domain_id").notNull().references(() => domains.id, { onDelete: "cascade" }),
+    domainId: integer("domain_id").references(() => domains.id, { onDelete: "cascade" }),
     name: varchar("name").notNull(),
     slug: varchar("slug").notNull(),
     xcode: varchar("xcode").notNull(),

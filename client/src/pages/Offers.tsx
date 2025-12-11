@@ -189,7 +189,7 @@ export default function Offers() {
       name: offer.name,
       slug: offer.slug,
       platform: offer.platform,
-      domainId: offer.domainId === 0 ? "platform" : String(offer.domainId),
+      domainId: offer.domainId === null || offer.domainId === 0 ? "platform" : String(offer.domainId),
       blackPageUrl: offer.blackPageUrl,
       whitePageUrl: offer.whitePageUrl,
       allowedCountries: offer.allowedCountries,
@@ -222,7 +222,7 @@ export default function Offers() {
   const getGeneratedUrl = (offer: OfferWithDomain) => {
     let domain: string;
     
-    if (offer.domainId === 0 || String(offer.domainId) === "platform") {
+    if (offer.domainId === null || offer.domainId === 0 || String(offer.domainId) === "platform") {
       domain = platformDomain;
     } else {
       domain = offer.domain?.subdomain || domains.find(d => d.id === offer.domainId)?.subdomain || "";
@@ -615,7 +615,7 @@ export default function Offers() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {offer.domainId === 0 
+                      {offer.domainId === null || offer.domainId === 0
                         ? `${platformDomain} (${language === "pt-BR" ? "Plataforma" : "Platform"})` 
                         : (offer.domain?.subdomain || "-")}
                     </TableCell>
