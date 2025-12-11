@@ -931,15 +931,29 @@ export async function registerRoutes(
   app.get("/r/:slug", async (req: Request, res: Response) => {
     const startTime = Date.now();
     const { slug } = req.params;
-    const host = req.get("host") || "";
+    const rawHost = req.get("host") || "";
+    const host = rawHost.split(":")[0]; // Remove port if present
     const userAgent = req.get("user-agent") || "";
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
     const referer = req.get("referer") || "";
 
+    console.log(`[Cloak] Incoming request - Host: ${rawHost}, Slug: ${slug}, IP: ${ip}`);
+    console.log(`[Cloak] Headers: ${JSON.stringify({
+      host: req.get("host"),
+      "x-forwarded-host": req.get("x-forwarded-host"),
+      "x-forwarded-proto": req.get("x-forwarded-proto"),
+    })}`);
+
     try {
-      const domain = await storage.getDomainBySubdomain(host);
+      // Try to find domain by host, or by x-forwarded-host for proxied requests
+      const forwardedHost = (req.get("x-forwarded-host") || "").split(":")[0];
+      const domainToCheck = forwardedHost || host;
+      
+      console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
+      
+      const domain = await storage.getDomainBySubdomain(domainToCheck);
       if (!domain) {
-        console.log(`[Cloak] Domain not found: ${host}`);
+        console.log(`[Cloak] Domain not found: ${domainToCheck} (original host: ${rawHost})`);
         return res.status(404).send("Not found");
       }
 
