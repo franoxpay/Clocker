@@ -684,6 +684,25 @@ export async function registerRoutes(
         return res.redirect(302, offer.whitePageUrl);
       }
 
+      // Check click limits
+      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+      if (plan) {
+        const userOffers = await storage.getOffersByUserId(offer.userId);
+        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+        
+        // If over limit (after 3-day grace period), redirect to white
+        if (totalClicks >= plan.clickLimit) {
+          const gracePeriodEnd = owner.subscriptionRenewalDate 
+            ? new Date(new Date(owner.subscriptionRenewalDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+            : null;
+          
+          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.clickLimit})`);
+            return res.redirect(302, offer.whitePageUrl);
+          }
+        }
+      }
+
       // Validate required parameters based on platform
       const { ttclid, cname, fbcl, xcode } = req.query as Record<string, string>;
       let paramsValid = false;
