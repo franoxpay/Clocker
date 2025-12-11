@@ -126,6 +126,114 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/analytics/advanced", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      
+      const countryStats = new Map<string, { total: number; black: number; white: number }>();
+      const deviceStats = new Map<string, { total: number; black: number; white: number }>();
+      const platformStats = new Map<string, { total: number; black: number; white: number }>();
+      const hourlyStats = new Array(24).fill(null).map(() => ({ total: 0, black: 0, white: 0 }));
+      const weekdayStats = new Array(7).fill(null).map(() => ({ total: 0, black: 0, white: 0 }));
+      
+      let totalBlack = 0;
+      let totalWhite = 0;
+      
+      for (const log of logs.logs) {
+        const isBlack = log.redirectedTo === "black";
+        if (isBlack) totalBlack++; else totalWhite++;
+        
+        const country = log.country || "Unknown";
+        if (!countryStats.has(country)) {
+          countryStats.set(country, { total: 0, black: 0, white: 0 });
+        }
+        const cs = countryStats.get(country)!;
+        cs.total++;
+        if (isBlack) cs.black++; else cs.white++;
+        
+        const device = log.device || "Unknown";
+        if (!deviceStats.has(device)) {
+          deviceStats.set(device, { total: 0, black: 0, white: 0 });
+        }
+        const ds = deviceStats.get(device)!;
+        ds.total++;
+        if (isBlack) ds.black++; else ds.white++;
+        
+        const platform = (log as any).platform || "Unknown";
+        if (!platformStats.has(platform)) {
+          platformStats.set(platform, { total: 0, black: 0, white: 0 });
+        }
+        const ps = platformStats.get(platform)!;
+        ps.total++;
+        if (isBlack) ps.black++; else ps.white++;
+        
+        const logDate = new Date(log.createdAt);
+        const hour = logDate.getHours();
+        const weekday = logDate.getDay();
+        hourlyStats[hour].total++;
+        if (isBlack) hourlyStats[hour].black++; else hourlyStats[hour].white++;
+        weekdayStats[weekday].total++;
+        if (isBlack) weekdayStats[weekday].black++; else weekdayStats[weekday].white++;
+      }
+      
+      const conversionRate = logs.total > 0 ? (totalBlack / logs.total * 100).toFixed(1) : "0";
+      
+      const byCountry = Array.from(countryStats.entries())
+        .map(([name, stats]) => ({
+          name,
+          ...stats,
+          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 10);
+        
+      const byDevice = Array.from(deviceStats.entries())
+        .map(([name, stats]) => ({
+          name,
+          ...stats,
+          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+        }))
+        .sort((a, b) => b.total - a.total);
+        
+      const byPlatform = Array.from(platformStats.entries())
+        .map(([name, stats]) => ({
+          name,
+          ...stats,
+          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+        }))
+        .sort((a, b) => b.total - a.total);
+        
+      const byHour = hourlyStats.map((stats, hour) => ({
+        hour: `${hour.toString().padStart(2, "0")}:00`,
+        ...stats,
+        conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+      }));
+      
+      const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const byWeekday = weekdayStats.map((stats, day) => ({
+        day: weekdayNames[day],
+        ...stats,
+        conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+      }));
+
+      res.json({
+        totalClicks: logs.total,
+        totalBlack,
+        totalWhite,
+        conversionRate,
+        byCountry,
+        byDevice,
+        byPlatform,
+        byHour,
+        byWeekday,
+      });
+    } catch (error) {
+      console.error("Error fetching advanced analytics:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/offers", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;

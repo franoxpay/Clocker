@@ -26,6 +26,7 @@ import {
   Users,
   CreditCard,
   Cog,
+  BarChart3,
 } from "lucide-react";
 
 const userNavItems = [
@@ -33,6 +34,7 @@ const userNavItems = [
   { key: "offers", path: "/offers", icon: LinkIcon, label: "nav.offers" },
   { key: "domains", path: "/domains", icon: Globe, label: "nav.domains" },
   { key: "logs", path: "/logs", icon: FileText, label: "nav.logs" },
+  { key: "analytics", path: "/analytics", icon: BarChart3, label: "nav.analytics" },
   { key: "settings", path: "/settings", icon: Settings, label: "nav.settings" },
 ];
 
