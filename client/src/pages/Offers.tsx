@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,13 +6,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -48,7 +41,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { countries, getCountryName } from "@/lib/countries";
+import { countries } from "@/lib/countries";
 import type { Offer, Domain } from "@shared/schema";
 import { 
   Plus, 
@@ -58,6 +51,8 @@ import {
   Copy, 
   Check,
   ExternalLink,
+  ArrowLeft,
+  Search,
 } from "lucide-react";
 
 interface OfferWithDomain extends Offer {
@@ -70,19 +65,22 @@ const devices = [
   { id: "tablet", labelKey: "device.tablet" },
 ];
 
+type ViewMode = "list" | "create" | "edit";
+
 export default function Offers() {
   const { t, language } = useLanguage();
   const { toast } = useToast();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [editingOffer, setEditingOffer] = useState<OfferWithDomain | null>(null);
   const [deleteOffer, setDeleteOffer] = useState<OfferWithDomain | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [countrySearch, setCountrySearch] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
     platform: "tiktok",
-    domainId: "",
+    domainId: "platform",
     blackPageUrl: "",
     whitePageUrl: "",
     allowedCountries: ["BR"],
@@ -105,7 +103,7 @@ export default function Offers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/offers"] });
-      setIsCreateOpen(false);
+      setViewMode("list");
       resetForm();
       toast({
         title: t("common.success"),
@@ -128,6 +126,7 @@ export default function Offers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/offers"] });
+      setViewMode("list");
       setEditingOffer(null);
       resetForm();
       toast({
@@ -153,7 +152,7 @@ export default function Offers() {
       setDeleteOffer(null);
       toast({
         title: t("common.success"),
-        description: language === "pt-BR" ? "Oferta excluída com sucesso" : "Offer deleted successfully",
+        description: language === "pt-BR" ? "Oferta excluída" : "Offer deleted",
       });
     },
     onError: () => {
@@ -170,16 +169,22 @@ export default function Offers() {
       name: "",
       slug: "",
       platform: "tiktok",
-      domainId: "",
+      domainId: "platform",
       blackPageUrl: "",
       whitePageUrl: "",
       allowedCountries: ["BR"],
       allowedDevices: ["smartphone"],
       isActive: true,
     });
+    setCountrySearch("");
   };
 
-  const openEditDialog = (offer: OfferWithDomain) => {
+  const openCreateMode = () => {
+    resetForm();
+    setViewMode("create");
+  };
+
+  const openEditMode = (offer: OfferWithDomain) => {
     setFormData({
       name: offer.name,
       slug: offer.slug,
@@ -192,16 +197,27 @@ export default function Offers() {
       isActive: offer.isActive,
     });
     setEditingOffer(offer);
+    setCountrySearch("");
+    setViewMode("edit");
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingOffer) {
+    if (viewMode === "edit" && editingOffer) {
       updateMutation.mutate({ ...formData, id: editingOffer.id, domainId: formData.domainId });
     } else {
       createMutation.mutate(formData);
     }
   };
+
+  const handleBack = () => {
+    setViewMode("list");
+    setEditingOffer(null);
+    resetForm();
+  };
+
+  const platformDomain = window.location.host;
+  const availableDomains = domains.filter(d => d.isActive);
 
   const getGeneratedUrl = (offer: OfferWithDomain) => {
     let domain: string;
@@ -245,15 +261,296 @@ export default function Offers() {
     }));
   };
 
-  const platformDomain = window.location.host;
-  const availableDomains = domains.filter(d => d.isActive);
-  
-  const platformDomainOption = {
-    id: 0,
-    subdomain: platformDomain,
-    isVerified: true,
-    isPlatform: true,
-  };
+  const displayedCountries = useMemo(() => {
+    const selected = countries.filter(c => formData.allowedCountries.includes(c.code));
+    const unselected = countries.filter(c => !formData.allowedCountries.includes(c.code));
+    
+    if (countrySearch.trim()) {
+      const searchLower = countrySearch.toLowerCase();
+      const filtered = unselected.filter(c => 
+        c.name.toLowerCase().includes(searchLower) || 
+        c.namePt.toLowerCase().includes(searchLower) ||
+        c.code.toLowerCase().includes(searchLower)
+      );
+      return [...selected, ...filtered];
+    }
+    
+    return [...selected, ...unselected.slice(0, 5)];
+  }, [formData.allowedCountries, countrySearch]);
+
+  const hasMoreCountries = countries.length > displayedCountries.length && !countrySearch.trim();
+
+  if (viewMode === "create" || viewMode === "edit") {
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={handleBack} data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <h1 className="text-3xl font-semibold">
+            {viewMode === "create" 
+              ? (language === "pt-BR" ? "Nova Oferta" : "New Offer")
+              : (language === "pt-BR" ? "Editar Oferta" : "Edit Offer")}
+          </h1>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {language === "pt-BR" ? "Informações Básicas" : "Basic Information"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">{t("offers.name")}</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder={language === "pt-BR" ? "Ex: Campanha Black Friday" : "Ex: Black Friday Campaign"}
+                    required
+                    data-testid="input-offer-name"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="slug">{t("offers.slug")}</Label>
+                  <Input
+                    id="slug"
+                    value={formData.slug}
+                    onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
+                    placeholder="minha-oferta"
+                    required
+                    data-testid="input-offer-slug"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {language === "pt-BR" 
+                      ? "Será usado na URL: /minha-oferta" 
+                      : "Will be used in URL: /my-offer"}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="platform">{t("offers.platform")}</Label>
+                  <Select
+                    value={formData.platform}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
+                  >
+                    <SelectTrigger data-testid="select-offer-platform">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="tiktok">TikTok Ads</SelectItem>
+                      <SelectItem value="facebook">Facebook Ads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="domain">{t("offers.domain")}</Label>
+                  <Select
+                    value={formData.domainId}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, domainId: value }))}
+                  >
+                    <SelectTrigger data-testid="select-offer-domain">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="platform">
+                        {platformDomain} ({language === "pt-BR" ? "Domínio da Plataforma" : "Platform Domain"})
+                      </SelectItem>
+                      {availableDomains.map((domain) => (
+                        <SelectItem key={domain.id} value={String(domain.id)}>
+                          {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {language === "pt-BR" ? "Páginas de Destino" : "Landing Pages"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="blackPageUrl">
+                    {t("offers.blackPage")}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({language === "pt-BR" ? "Página real" : "Real page"})
+                    </span>
+                  </Label>
+                  <Input
+                    id="blackPageUrl"
+                    type="url"
+                    value={formData.blackPageUrl}
+                    onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
+                    placeholder="https://sua-pagina-real.com"
+                    required
+                    data-testid="input-offer-black-url"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {language === "pt-BR" 
+                      ? "Página exibida para tráfego válido" 
+                      : "Page shown for valid traffic"}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="whitePageUrl">
+                    {t("offers.whitePage")}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      ({language === "pt-BR" ? "Página segura" : "Safe page"})
+                    </span>
+                  </Label>
+                  <Input
+                    id="whitePageUrl"
+                    type="url"
+                    value={formData.whitePageUrl}
+                    onChange={(e) => setFormData(prev => ({ ...prev, whitePageUrl: e.target.value }))}
+                    placeholder="https://sua-pagina-segura.com"
+                    required
+                    data-testid="input-offer-white-url"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {language === "pt-BR" 
+                      ? "Página exibida para revisores e bots" 
+                      : "Page shown for reviewers and bots"}
+                  </p>
+                </div>
+
+                {viewMode === "edit" && editingOffer && (
+                  <div className="p-3 bg-muted rounded-md">
+                    <Label className="text-xs text-muted-foreground">{t("offers.xcode")}</Label>
+                    <code className="block mt-1 text-sm font-mono">{editingOffer.xcode}</code>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {language === "pt-BR" ? "Dispositivos Permitidos" : "Allowed Devices"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-4">
+                  {devices.map((device) => (
+                    <label key={device.id} className="flex items-center gap-2 cursor-pointer p-3 border rounded-md hover-elevate">
+                      <Checkbox
+                        checked={formData.allowedDevices.includes(device.id)}
+                        onCheckedChange={() => toggleDevice(device.id)}
+                        data-testid={`checkbox-device-${device.id}`}
+                      />
+                      <span className="text-sm font-medium">{t(device.labelKey)}</span>
+                    </label>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  {language === "pt-BR" ? "Países Permitidos" : "Allowed Countries"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    placeholder={language === "pt-BR" ? "Buscar país..." : "Search country..."}
+                    value={countrySearch}
+                    onChange={(e) => setCountrySearch(e.target.value)}
+                    className="pl-9"
+                    data-testid="input-country-search"
+                  />
+                </div>
+
+                {formData.allowedCountries.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {formData.allowedCountries.map((code) => {
+                      const country = countries.find(c => c.code === code);
+                      return (
+                        <Badge 
+                          key={code} 
+                          variant="default" 
+                          className="cursor-pointer"
+                          onClick={() => toggleCountry(code)}
+                        >
+                          {language === "pt-BR" ? country?.namePt : country?.name}
+                          <span className="ml-1">×</span>
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {displayedCountries.map((country) => {
+                    const isSelected = formData.allowedCountries.includes(country.code);
+                    return (
+                      <label 
+                        key={country.code} 
+                        className={`flex items-center gap-3 cursor-pointer p-2 rounded-md ${isSelected ? 'bg-primary/10' : 'hover-elevate'}`}
+                      >
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleCountry(country.code)}
+                          data-testid={`checkbox-country-${country.code}`}
+                        />
+                        <span className="text-sm">
+                          {language === "pt-BR" ? country.namePt : country.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">({country.code})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {hasMoreCountries && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {language === "pt-BR" 
+                      ? `+ ${countries.length - displayedCountries.length} países. Use a busca para encontrar mais.`
+                      : `+ ${countries.length - displayedCountries.length} countries. Use search to find more.`}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleBack}
+              data-testid="button-cancel"
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              data-testid="button-save-offer"
+            >
+              {(createMutation.isPending || updateMutation.isPending) 
+                ? t("common.loading") 
+                : (viewMode === "create" 
+                    ? (language === "pt-BR" ? "Criar Oferta" : "Create Offer")
+                    : t("common.save"))}
+            </Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -261,175 +558,35 @@ export default function Offers() {
         <h1 className="text-3xl font-semibold" data-testid="title-offers">
           {t("offers.title")}
         </h1>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-offer" onClick={() => resetForm()}>
-              <Plus className="w-4 h-4 mr-2" />
-              {t("offers.create")}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{t("offers.create")}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">{t("offers.name")}</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                  required
-                  data-testid="input-offer-name"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="slug">{t("offers.slug")}</Label>
-                <Input
-                  id="slug"
-                  value={formData.slug}
-                  onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
-                  placeholder="minha-oferta"
-                  required
-                  data-testid="input-offer-slug"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="platform">{t("offers.platform")}</Label>
-                <Select
-                  value={formData.platform}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
-                >
-                  <SelectTrigger data-testid="select-offer-platform">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tiktok">TikTok</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="domain">{t("offers.domain")}</Label>
-                <Select
-                  value={formData.domainId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, domainId: value }))}
-                >
-                  <SelectTrigger data-testid="select-offer-domain">
-                    <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="platform">
-                      {platformDomain} ({language === "pt-BR" ? "Domínio da Plataforma" : "Platform Domain"})
-                    </SelectItem>
-                    {availableDomains.map((domain) => (
-                      <SelectItem key={domain.id} value={String(domain.id)}>
-                        {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="blackPageUrl">{t("offers.blackPage")}</Label>
-                <Input
-                  id="blackPageUrl"
-                  type="url"
-                  value={formData.blackPageUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
-                  placeholder="https://..."
-                  required
-                  data-testid="input-offer-black-url"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="whitePageUrl">{t("offers.whitePage")}</Label>
-                <Input
-                  id="whitePageUrl"
-                  type="url"
-                  value={formData.whitePageUrl}
-                  onChange={(e) => setFormData(prev => ({ ...prev, whitePageUrl: e.target.value }))}
-                  placeholder="https://..."
-                  required
-                  data-testid="input-offer-white-url"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("offers.devices")}</Label>
-                <div className="flex flex-wrap gap-3">
-                  {devices.map((device) => (
-                    <label key={device.id} className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={formData.allowedDevices.includes(device.id)}
-                        onCheckedChange={() => toggleDevice(device.id)}
-                        data-testid={`checkbox-device-${device.id}`}
-                      />
-                      <span className="text-sm">{t(device.labelKey)}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>{t("offers.countries")}</Label>
-                <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
-                  {countries.map((country) => (
-                    <label key={country.code} className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
-                        checked={formData.allowedCountries.includes(country.code)}
-                        onCheckedChange={() => toggleCountry(country.code)}
-                        data-testid={`checkbox-country-${country.code}`}
-                      />
-                      <span className="text-sm">
-                        {language === "pt-BR" ? country.namePt : country.name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsCreateOpen(false);
-                    resetForm();
-                  }}
-                  data-testid="button-cancel-offer"
-                >
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  data-testid="button-save-offer"
-                >
-                  {createMutation.isPending ? t("common.loading") : t("common.save")}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={openCreateMode} data-testid="button-create-offer">
+          <Plus className="w-4 h-4 mr-2" />
+          {t("offers.create")}
+        </Button>
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardHeader>
+          <CardTitle>{language === "pt-BR" ? "Suas Ofertas" : "Your Offers"}</CardTitle>
+        </CardHeader>
+        <CardContent>
           {isLoading ? (
-            <div className="p-6 space-y-4">
-              {[...Array(3)].map((_, i) => (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
           ) : offers.length === 0 ? (
-            <div className="p-12 text-center text-muted-foreground">
-              {t("offers.noOffers")}
+            <div className="text-center py-12 text-muted-foreground">
+              <p>{language === "pt-BR" ? "Nenhuma oferta criada ainda" : "No offers created yet"}</p>
+              <Button 
+                variant="outline" 
+                className="mt-4" 
+                onClick={openCreateMode}
+                data-testid="button-create-first-offer"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {language === "pt-BR" ? "Criar primeira oferta" : "Create first offer"}
+              </Button>
             </div>
           ) : (
             <Table>
@@ -439,18 +596,17 @@ export default function Offers() {
                   <TableHead>{t("offers.platform")}</TableHead>
                   <TableHead>{t("offers.domain")}</TableHead>
                   <TableHead>{t("offers.xcode")}</TableHead>
-                  <TableHead>{t("offers.clicks")}</TableHead>
                   <TableHead>{t("offers.status")}</TableHead>
-                  <TableHead className="w-12">{t("common.actions")}</TableHead>
+                  <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {offers.map((offer) => (
-                  <TableRow key={offer.id} data-testid={`row-offer-${offer.id}`}>
-                    <TableCell>
+                  <TableRow key={offer.id}>
+                    <TableCell className="font-medium">
                       <div>
-                        <div className="font-medium">{offer.name}</div>
-                        <div className="text-sm text-muted-foreground">/{offer.slug}</div>
+                        <span data-testid={`text-offer-name-${offer.id}`}>{offer.name}</span>
+                        <p className="text-xs text-muted-foreground">/{offer.slug}</p>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -469,19 +625,11 @@ export default function Offers() {
                       </code>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">
-                        <span className="font-medium">{offer.totalClicks}</span>
-                        <span className="text-muted-foreground ml-1">
-                          ({offer.blackClicks}B / {offer.whiteClicks}W)
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <Badge variant={offer.isActive ? "default" : "secondary"}>
                         {offer.isActive ? t("offers.active") : t("offers.inactive")}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" data-testid={`button-offer-menu-${offer.id}`}>
@@ -498,7 +646,7 @@ export default function Offers() {
                             ) : (
                               <Copy className="w-4 h-4 mr-2" />
                             )}
-                            {copiedId === offer.id ? t("common.copied") : t("common.copy")} URL
+                            {language === "pt-BR" ? "Copiar URL" : "Copy URL"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => window.open(offer.blackPageUrl, "_blank")}
@@ -508,7 +656,7 @@ export default function Offers() {
                             {language === "pt-BR" ? "Ver Black" : "View Black"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => openEditDialog(offer)}
+                            onClick={() => openEditMode(offer)}
                             data-testid={`menu-edit-offer-${offer.id}`}
                           >
                             <Pencil className="w-4 h-4 mr-2" />
@@ -532,164 +680,6 @@ export default function Offers() {
           )}
         </CardContent>
       </Card>
-
-      <Dialog open={!!editingOffer} onOpenChange={(open) => !open && setEditingOffer(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t("offers.edit")}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">{t("offers.name")}</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                required
-                data-testid="input-edit-offer-name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-slug">{t("offers.slug")}</Label>
-              <Input
-                id="edit-slug"
-                value={formData.slug}
-                onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
-                placeholder="minha-oferta"
-                required
-                data-testid="input-edit-offer-slug"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-platform">{t("offers.platform")}</Label>
-              <Select
-                value={formData.platform}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
-              >
-                <SelectTrigger data-testid="select-edit-offer-platform">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tiktok">TikTok</SelectItem>
-                  <SelectItem value="facebook">Facebook</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-domain">{t("offers.domain")}</Label>
-              <Select
-                value={formData.domainId}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, domainId: value }))}
-              >
-                <SelectTrigger data-testid="select-edit-offer-domain">
-                  <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="platform">
-                    {platformDomain} ({language === "pt-BR" ? "Domínio da Plataforma" : "Platform Domain"})
-                  </SelectItem>
-                  {availableDomains.map((domain) => (
-                    <SelectItem key={domain.id} value={String(domain.id)}>
-                      {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-blackPageUrl">{t("offers.blackPage")}</Label>
-              <Input
-                id="edit-blackPageUrl"
-                type="url"
-                value={formData.blackPageUrl}
-                onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
-                placeholder="https://..."
-                required
-                data-testid="input-edit-offer-black-url"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="edit-whitePageUrl">{t("offers.whitePage")}</Label>
-              <Input
-                id="edit-whitePageUrl"
-                type="url"
-                value={formData.whitePageUrl}
-                onChange={(e) => setFormData(prev => ({ ...prev, whitePageUrl: e.target.value }))}
-                placeholder="https://..."
-                required
-                data-testid="input-edit-offer-white-url"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>{t("offers.devices")}</Label>
-              <div className="flex flex-wrap gap-3">
-                {devices.map((device) => (
-                  <label key={device.id} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={formData.allowedDevices.includes(device.id)}
-                      onCheckedChange={() => toggleDevice(device.id)}
-                      data-testid={`checkbox-edit-device-${device.id}`}
-                    />
-                    <span className="text-sm">{t(device.labelKey)}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>{t("offers.countries")}</Label>
-              <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-2">
-                {countries.map((country) => (
-                  <label key={country.code} className="flex items-center gap-2 cursor-pointer">
-                    <Checkbox
-                      checked={formData.allowedCountries.includes(country.code)}
-                      onCheckedChange={() => toggleCountry(country.code)}
-                      data-testid={`checkbox-edit-country-${country.code}`}
-                    />
-                    <span className="text-sm">
-                      {language === "pt-BR" ? country.namePt : country.name}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {editingOffer && (
-              <div className="p-3 bg-muted rounded-md">
-                <Label className="text-xs text-muted-foreground">{t("offers.xcode")}</Label>
-                <code className="block mt-1 text-sm font-mono">{editingOffer.xcode}</code>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setEditingOffer(null);
-                  resetForm();
-                }}
-                data-testid="button-cancel-edit-offer"
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending}
-                data-testid="button-save-edit-offer"
-              >
-                {updateMutation.isPending ? t("common.loading") : t("common.save")}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       <AlertDialog open={!!deleteOffer} onOpenChange={(open) => !open && setDeleteOffer(null)}>
         <AlertDialogContent>
