@@ -65,7 +65,7 @@ const devices = [
   { id: "tablet", labelKey: "device.tablet" },
 ];
 
-type ViewMode = "list" | "create" | "edit";
+type ViewMode = "list" | "create" | "edit" | "details";
 
 export default function Offers() {
   const { t, language } = useLanguage();
@@ -73,7 +73,9 @@ export default function Offers() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [editingOffer, setEditingOffer] = useState<OfferWithDomain | null>(null);
   const [deleteOffer, setDeleteOffer] = useState<OfferWithDomain | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<OfferWithDomain | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   const [countrySearch, setCountrySearch] = useState("");
 
   const [formData, setFormData] = useState({
@@ -101,10 +103,11 @@ export default function Offers() {
       const res = await apiRequest("POST", "/api/offers", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (newOffer: OfferWithDomain) => {
       queryClient.invalidateQueries({ queryKey: ["/api/offers"] });
-      setViewMode("list");
       resetForm();
+      setSelectedOffer(newOffer);
+      setViewMode("details");
       toast({
         title: t("common.success"),
         description: language === "pt-BR" ? "Oferta criada com sucesso" : "Offer created successfully",
@@ -201,6 +204,11 @@ export default function Offers() {
     setViewMode("edit");
   };
 
+  const openDetailsMode = (offer: OfferWithDomain) => {
+    setSelectedOffer(offer);
+    setViewMode("details");
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (viewMode === "edit" && editingOffer) {
@@ -241,6 +249,36 @@ export default function Offers() {
     await navigator.clipboard.writeText(text);
     setCopiedId(offerId);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const copyField = async (text: string, fieldName: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({
+      title: language === "pt-BR" ? "Copiado!" : "Copied!",
+      description: language === "pt-BR" ? "Link copiado para a área de transferência" : "Link copied to clipboard",
+    });
+  };
+
+  const getBaseUrl = (offer: OfferWithDomain) => {
+    let domain: string;
+    if (offer.domainId === null || offer.domainId === 0) {
+      domain = platformDomain;
+    } else {
+      domain = offer.domain?.subdomain || domains.find(d => d.id === offer.domainId)?.subdomain || "";
+    }
+    if (!domain) return "";
+    return `https://${domain}/${offer.slug}`;
+  };
+
+  const getFullUrl = (offer: OfferWithDomain) => {
+    const baseUrl = getBaseUrl(offer);
+    if (!baseUrl) return "";
+    const params = offer.platform === "tiktok"
+      ? `?ttclid=CLICKID&cname=CAMPAIGN_NAME&xcode=${offer.xcode}`
+      : `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
+    return `${baseUrl}${params}`;
   };
 
   const toggleCountry = (code: string) => {
@@ -552,6 +590,232 @@ export default function Offers() {
     );
   }
 
+  if (viewMode === "details" && selectedOffer) {
+    const baseUrl = getBaseUrl(selectedOffer);
+    const fullUrl = getFullUrl(selectedOffer);
+    
+    return (
+      <div className="p-6 space-y-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={handleBack} data-testid="button-back-details">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-semibold" data-testid="text-offer-detail-name">
+              {selectedOffer.name}
+            </h1>
+            <p className="text-muted-foreground">/{selectedOffer.slug}</p>
+          </div>
+          <Badge variant={selectedOffer.isActive ? "default" : "secondary"} className="ml-auto">
+            {selectedOffer.isActive ? t("offers.active") : t("offers.inactive")}
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ExternalLink className="w-5 h-5" />
+                {language === "pt-BR" ? "Links da Oferta" : "Offer Links"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Link Base" : "Base Link"}
+                </Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={baseUrl} 
+                    readOnly 
+                    className="font-mono text-sm"
+                    data-testid="input-base-url"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => copyField(baseUrl, "base")}
+                    data-testid="button-copy-base-url"
+                  >
+                    {copiedField === "base" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Link Completo (com parâmetros)" : "Full Link (with parameters)"}
+                </Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={fullUrl} 
+                    readOnly 
+                    className="font-mono text-xs"
+                    data-testid="input-full-url"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => copyField(fullUrl, "full")}
+                    data-testid="button-copy-full-url"
+                  >
+                    {copiedField === "full" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {language === "pt-BR" 
+                    ? "Use este link nas suas campanhas de anúncios" 
+                    : "Use this link in your ad campaigns"}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                {language === "pt-BR" ? "Parâmetros" : "Parameters"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">XCode</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={selectedOffer.xcode} 
+                    readOnly 
+                    className="font-mono"
+                    data-testid="input-xcode"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => copyField(selectedOffer.xcode, "xcode")}
+                    data-testid="button-copy-xcode"
+                  >
+                    {copiedField === "xcode" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {language === "pt-BR" 
+                    ? "Código único de identificação da oferta" 
+                    : "Unique offer identification code"}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Parâmetros Requeridos" : "Required Parameters"}
+                </Label>
+                <div className="bg-muted p-3 rounded-md space-y-1">
+                  {selectedOffer.platform === "tiktok" ? (
+                    <>
+                      <p className="text-sm font-mono">ttclid = <span className="text-muted-foreground">CLICKID</span></p>
+                      <p className="text-sm font-mono">cname = <span className="text-muted-foreground">CAMPAIGN_NAME</span></p>
+                      <p className="text-sm font-mono">xcode = <span className="text-primary">{selectedOffer.xcode}</span></p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-mono">fbcl = <span className="text-muted-foreground">{"{{campaign.name}}|{{campaign.id}}"}</span></p>
+                      <p className="text-sm font-mono">xcode = <span className="text-primary">{selectedOffer.xcode}</span></p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                {language === "pt-BR" ? "Configuração" : "Configuration"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("offers.platform")}</span>
+                <Badge variant="outline">
+                  {selectedOffer.platform === "tiktok" ? "TikTok" : "Facebook"}
+                </Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{t("offers.domain")}</span>
+                <span className="text-sm">
+                  {selectedOffer.domainId === null || selectedOffer.domainId === 0
+                    ? `${platformDomain} (${language === "pt-BR" ? "Plataforma" : "Platform"})`
+                    : (selectedOffer.domain?.subdomain || "-")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{language === "pt-BR" ? "Países" : "Countries"}</span>
+                <span className="text-sm">{selectedOffer.allowedCountries.join(", ")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">{language === "pt-BR" ? "Dispositivos" : "Devices"}</span>
+                <span className="text-sm">{selectedOffer.allowedDevices.join(", ")}</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">
+                {language === "pt-BR" ? "Páginas" : "Pages"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">{t("offers.blackPage")}</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={selectedOffer.blackPageUrl} 
+                    readOnly 
+                    className="text-sm"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => window.open(selectedOffer.blackPageUrl, "_blank")}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm font-medium">{t("offers.whitePage")}</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={selectedOffer.whitePageUrl} 
+                    readOnly 
+                    className="text-sm"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => window.open(selectedOffer.whitePageUrl, "_blank")}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            onClick={() => openEditMode(selectedOffer)}
+            data-testid="button-edit-from-details"
+          >
+            <Pencil className="w-4 h-4 mr-2" />
+            {t("common.edit")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -595,14 +859,13 @@ export default function Offers() {
                   <TableHead>{t("offers.name")}</TableHead>
                   <TableHead>{t("offers.platform")}</TableHead>
                   <TableHead>{t("offers.domain")}</TableHead>
-                  <TableHead>{t("offers.xcode")}</TableHead>
                   <TableHead>{t("offers.status")}</TableHead>
                   <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {offers.map((offer) => (
-                  <TableRow key={offer.id}>
+                  <TableRow key={offer.id} className="cursor-pointer hover-elevate" onClick={() => openDetailsMode(offer)}>
                     <TableCell className="font-medium">
                       <div>
                         <span data-testid={`text-offer-name-${offer.id}`}>{offer.name}</span>
@@ -620,25 +883,27 @@ export default function Offers() {
                         : (offer.domain?.subdomain || "-")}
                     </TableCell>
                     <TableCell>
-                      <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
-                        {offer.xcode}
-                      </code>
-                    </TableCell>
-                    <TableCell>
                       <Badge variant={offer.isActive ? "default" : "secondary"}>
                         {offer.isActive ? t("offers.active") : t("offers.inactive")}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="icon" data-testid={`button-offer-menu-${offer.id}`}>
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => copyToClipboard(getGeneratedUrl(offer), offer.id)}
+                            onClick={(e) => { e.stopPropagation(); openDetailsMode(offer); }}
+                            data-testid={`menu-view-details-${offer.id}`}
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            {language === "pt-BR" ? "Ver Detalhes" : "View Details"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => { e.stopPropagation(); copyToClipboard(getGeneratedUrl(offer), offer.id); }}
                             data-testid={`menu-copy-url-${offer.id}`}
                           >
                             {copiedId === offer.id ? (
@@ -649,21 +914,14 @@ export default function Offers() {
                             {language === "pt-BR" ? "Copiar URL" : "Copy URL"}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => window.open(offer.blackPageUrl, "_blank")}
-                            data-testid={`menu-view-black-${offer.id}`}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            {language === "pt-BR" ? "Ver Black" : "View Black"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => openEditMode(offer)}
+                            onClick={(e) => { e.stopPropagation(); openEditMode(offer); }}
                             data-testid={`menu-edit-offer-${offer.id}`}
                           >
                             <Pencil className="w-4 h-4 mr-2" />
                             {t("common.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => setDeleteOffer(offer)}
+                            onClick={(e) => { e.stopPropagation(); setDeleteOffer(offer); }}
                             className="text-destructive"
                             data-testid={`menu-delete-offer-${offer.id}`}
                           >
