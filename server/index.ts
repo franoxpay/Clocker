@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { runMigrations } from 'stripe-replit-sync';
 import { getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 const httpServer = createServer(app);
@@ -78,6 +79,31 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Rate limiting configuration for API protection
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later" },
+  skip: (req) => req.path.startsWith("/r/"), // Skip cloaking redirect endpoint
+});
+
+// Stricter rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // limit each IP to 10 login attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many login attempts, please try again in an hour" },
+});
+
+// Apply rate limiting to API routes
+app.use("/api", apiLimiter);
+app.use("/api/login", authLimiter);
+app.use("/api/auth/callback", authLimiter);
+app.use("/api/password-reset", authLimiter);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
