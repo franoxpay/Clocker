@@ -129,7 +129,7 @@ export async function registerRoutes(
   app.get("/api/analytics/advanced", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      const logs = await storage.getClickLogs(userId, 1, 10000);
       
       const countryStats = new Map<string, { total: number; black: number; white: number }>();
       const deviceStats = new Map<string, { total: number; black: number; white: number }>();
@@ -238,7 +238,7 @@ export async function registerRoutes(
     try {
       const userId = (req.user as any).id;
       const format = req.query.format as string || "csv";
-      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      const logs = await storage.getClickLogs(userId, 1, 10000);
       
       if (format === "csv") {
         const headers = ["ID", "Date", "Country", "Device", "Redirect Type", "IP", "User Agent", "Offer Name"];
@@ -275,7 +275,7 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const format = req.query.format as string || "csv";
       const reportType = req.query.type as string || "summary";
-      const logs = await storage.getClickLogsByUserId(userId, 1, 10000);
+      const logs = await storage.getClickLogs(userId, 1, 10000);
       
       const countryStats = new Map<string, { total: number; black: number; white: number }>();
       const deviceStats = new Map<string, { total: number; black: number; white: number }>();
