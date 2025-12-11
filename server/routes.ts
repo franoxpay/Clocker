@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { randomBytes } from "crypto";
-import { getUncachableStripeClient, getStripePublishableKey } from "./stripeClient";
+import { getStripeClient, getStripePublishableKey, isStripeConfigured } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { promises as dns } from "dns";
@@ -601,7 +601,7 @@ export async function registerRoutes(
 
   app.get("/api/stripe/config", async (req: Request, res: Response) => {
     try {
-      const publishableKey = await getStripePublishableKey();
+      const publishableKey = getStripePublishableKey();
       res.json({ publishableKey });
     } catch (error) {
       console.error("Error fetching Stripe config:", error);
@@ -623,7 +623,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Plan not found" });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       
       let customerId = user.stripeCustomerId;
       if (!customerId) {
@@ -688,7 +688,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No billing account found" });
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       const session = await stripe.billingPortal.sessions.create({
         customer: user.stripeCustomerId,
         return_url: `${req.protocol}://${req.get('host')}/settings`,
@@ -709,7 +709,7 @@ export async function registerRoutes(
         return res.json([]);
       }
 
-      const stripe = await getUncachableStripeClient();
+      const stripe = getStripeClient();
       const invoices = await stripe.invoices.list({
         customer: user.stripeCustomerId,
         limit: 10,

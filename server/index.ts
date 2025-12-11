@@ -2,8 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { runMigrations } from 'stripe-replit-sync';
-import { getStripeSync } from "./stripeClient";
+import { isStripeConfigured } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
@@ -18,37 +17,15 @@ declare module "http" {
 }
 
 async function initStripe() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    console.log('DATABASE_URL not set, skipping Stripe initialization');
+  if (!isStripeConfigured()) {
+    console.log('Stripe not configured, skipping initialization. Set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY in .env');
     return;
   }
-
-  try {
-    console.log('Initializing Stripe schema...');
-    await runMigrations({ databaseUrl });
-    console.log('Stripe schema ready');
-
-    const stripeSync = await getStripeSync();
-
-    console.log('Setting up managed webhook...');
-    const webhookBaseUrl = `https://${process.env.REPLIT_DOMAINS?.split(',')[0]}`;
-    const { webhook, uuid } = await stripeSync.findOrCreateManagedWebhook(
-      `${webhookBaseUrl}/api/stripe/webhook`,
-      { enabled_events: ['*'], description: 'Managed webhook for Stripe sync' }
-    );
-    console.log(`Webhook configured: ${webhook.url} (UUID: ${uuid})`);
-
-    stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err: any) => console.error('Error syncing Stripe data:', err));
-  } catch (error) {
-    console.error('Failed to initialize Stripe:', error);
-  }
+  console.log('Stripe configured successfully via environment variables');
 }
 
 app.post(
-  '/api/stripe/webhook/:uuid',
+  '/api/stripe/webhook',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const signature = req.headers['stripe-signature'];
@@ -61,8 +38,7 @@ app.post(
         console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer');
         return res.status(500).json({ error: 'Webhook processing error' });
       }
-      const { uuid } = req.params;
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig, uuid);
+      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
       res.status(200).json({ received: true });
     } catch (error: any) {
       console.error('Webhook error:', error.message);
@@ -81,26 +57,23 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
-// Rate limiting configuration for API protection
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later" },
-  skip: (req) => req.path.startsWith("/r/"), // Skip cloaking redirect endpoint
+  skip: (req) => req.path.startsWith("/r/"),
 });
 
-// Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // limit each IP to 10 login attempts per hour
+  windowMs: 60 * 60 * 1000,
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many login attempts, please try again in an hour" },
 });
 
-// Apply rate limiting to API routes
 app.use("/api", apiLimiter);
 app.use("/api/login", authLimiter);
 app.use("/api/auth/callback", authLimiter);
@@ -156,9 +129,6 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -166,10 +136,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
