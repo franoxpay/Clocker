@@ -52,6 +52,7 @@ import {
   Clock,
   AlertTriangle,
   Shield,
+  Info,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -363,6 +364,13 @@ export default function Domains() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => setShowDnsInstructions(domain.subdomain)}
+                            data-testid={`menu-dns-domain-${domain.id}`}
+                          >
+                            <Info className="w-4 h-4 mr-2" />
+                            {language === "pt-BR" ? "Ver Apontamento DNS" : "View DNS Pointing"}
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => verifyMutation.mutate(domain.id)}
                             disabled={verifyingId === domain.id}
