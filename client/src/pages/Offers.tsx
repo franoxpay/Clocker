@@ -184,7 +184,7 @@ export default function Offers() {
       name: offer.name,
       slug: offer.slug,
       platform: offer.platform,
-      domainId: String(offer.domainId),
+      domainId: offer.domainId === 0 ? "platform" : String(offer.domainId),
       blackPageUrl: offer.blackPageUrl,
       whitePageUrl: offer.whitePageUrl,
       allowedCountries: offer.allowedCountries,
@@ -204,7 +204,14 @@ export default function Offers() {
   };
 
   const getGeneratedUrl = (offer: OfferWithDomain) => {
-    const domain = offer.domain?.subdomain || domains.find(d => d.id === offer.domainId)?.subdomain;
+    let domain: string;
+    
+    if (offer.domainId === 0 || String(offer.domainId) === "platform") {
+      domain = platformDomain;
+    } else {
+      domain = offer.domain?.subdomain || domains.find(d => d.id === offer.domainId)?.subdomain || "";
+    }
+    
     if (!domain) return "";
 
     const params = offer.platform === "tiktok"
@@ -238,8 +245,15 @@ export default function Offers() {
     }));
   };
 
-  const platformDomain = window.location.hostname;
+  const platformDomain = window.location.host;
   const availableDomains = domains.filter(d => d.isActive);
+  
+  const platformDomainOption = {
+    id: 0,
+    subdomain: platformDomain,
+    isVerified: true,
+    isPlatform: true,
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -308,26 +322,16 @@ export default function Offers() {
                     <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableDomains.length === 0 ? (
-                      <SelectItem value="platform" disabled>
-                        {language === "pt-BR" ? "Nenhum domínio disponível" : "No domains available"}
+                    <SelectItem value="platform">
+                      {platformDomain} ({language === "pt-BR" ? "Domínio da Plataforma" : "Platform Domain"})
+                    </SelectItem>
+                    {availableDomains.map((domain) => (
+                      <SelectItem key={domain.id} value={String(domain.id)}>
+                        {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
                       </SelectItem>
-                    ) : (
-                      availableDomains.map((domain) => (
-                        <SelectItem key={domain.id} value={String(domain.id)}>
-                          {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}
-                        </SelectItem>
-                      ))
-                    )}
+                    ))}
                   </SelectContent>
                 </Select>
-                {availableDomains.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {language === "pt-BR" 
-                      ? "Adicione um domínio primeiro na seção Domínios" 
-                      : "Add a domain first in the Domains section"}
-                  </p>
-                )}
               </div>
 
               <div className="space-y-2">
@@ -455,7 +459,9 @@ export default function Offers() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {offer.domain?.subdomain || "-"}
+                      {offer.domainId === 0 
+                        ? `${platformDomain} (${language === "pt-BR" ? "Plataforma" : "Platform"})` 
+                        : (offer.domain?.subdomain || "-")}
                     </TableCell>
                     <TableCell>
                       <code className="text-xs bg-muted px-2 py-1 rounded font-mono">
@@ -582,6 +588,9 @@ export default function Offers() {
                   <SelectValue placeholder={language === "pt-BR" ? "Selecione um domínio" : "Select a domain"} />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="platform">
+                    {platformDomain} ({language === "pt-BR" ? "Domínio da Plataforma" : "Platform Domain"})
+                  </SelectItem>
                   {availableDomains.map((domain) => (
                     <SelectItem key={domain.id} value={String(domain.id)}>
                       {domain.subdomain} {!domain.isVerified && `(${language === "pt-BR" ? "pendente" : "pending"})`}

@@ -387,7 +387,9 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const existingOffer = await storage.getOfferBySlugAndDomain(slug, parseInt(domainId));
+      const parsedDomainId = domainId === "platform" ? 0 : parseInt(domainId);
+
+      const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
       if (existingOffer) {
         return res.status(400).json({ message: "Slug already exists on this domain" });
       }
@@ -398,7 +400,7 @@ export async function registerRoutes(
         name,
         slug,
         platform,
-        domainId: parseInt(domainId),
+        domainId: parsedDomainId,
         blackPageUrl,
         whitePageUrl,
         allowedCountries: allowedCountries || ["BR"],
@@ -426,8 +428,10 @@ export async function registerRoutes(
 
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      if (slug !== offer.slug || parseInt(domainId) !== offer.domainId) {
-        const existingOffer = await storage.getOfferBySlugAndDomain(slug, parseInt(domainId));
+      const parsedDomainId = domainId === "platform" ? 0 : parseInt(domainId);
+
+      if (slug !== offer.slug || parsedDomainId !== offer.domainId) {
+        const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
         if (existingOffer && existingOffer.id !== offerId) {
           return res.status(400).json({ message: "Slug already exists on this domain" });
         }
@@ -437,7 +441,7 @@ export async function registerRoutes(
         name,
         slug,
         platform,
-        domainId: parseInt(domainId),
+        domainId: parsedDomainId,
         blackPageUrl,
         whitePageUrl,
         allowedCountries,
