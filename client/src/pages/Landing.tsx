@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -5,6 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Link as LinkIcon, Shield, Zap, Globe, BarChart3, Check } from "lucide-react";
+import Auth from "./Auth";
 
 const plans = [
   {
@@ -40,6 +42,7 @@ const plans = [
 
 export default function Landing() {
   const { t, language } = useLanguage();
+  const [showAuth, setShowAuth] = useState(false);
 
   const features = [
     {
@@ -72,6 +75,10 @@ export default function Landing() {
     },
   ];
 
+  if (showAuth) {
+    return <Auth onBack={() => setShowAuth(false)} />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b">
@@ -85,8 +92,8 @@ export default function Landing() {
           <div className="flex items-center gap-2">
             <LanguageToggle />
             <ThemeToggle />
-            <Button asChild data-testid="button-login">
-              <a href="/api/login">{t("auth.login")}</a>
+            <Button onClick={() => setShowAuth(true)} data-testid="button-login">
+              {t("auth.login")}
             </Button>
           </div>
         </div>
@@ -109,10 +116,8 @@ export default function Landing() {
                 : "Advanced filtering by country, device and ad parameters for TikTok and Facebook Ads"}
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <Button size="lg" asChild data-testid="button-start-now">
-                <a href="/api/login">
-                  {language === "pt-BR" ? "Começar Agora" : "Start Now"}
-                </a>
+              <Button size="lg" onClick={() => setShowAuth(true)} data-testid="button-start-now">
+                {language === "pt-BR" ? "Começar Agora" : "Start Now"}
               </Button>
               <Button variant="outline" size="lg" asChild data-testid="button-learn-more">
                 <a href="#pricing">
@@ -212,10 +217,10 @@ export default function Landing() {
                     <Button
                       className="w-full mt-6"
                       variant={plan.popular ? "default" : "outline"}
-                      asChild
+                      onClick={() => setShowAuth(true)}
                       data-testid={`button-select-plan-${plan.id}`}
                     >
-                      <a href="/api/login">{t("plan.select")}</a>
+                      {t("plan.select")}
                     </Button>
                   </CardContent>
                 </Card>
