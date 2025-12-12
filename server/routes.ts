@@ -1049,19 +1049,22 @@ export async function registerRoutes(
       // Log the click
       await storage.createClickLog({
         offerId: offer.id,
-        domainId: domain.id,
-        platform: offer.platform,
-        redirectType,
+        userId: offer.userId,
         ipAddress: ip,
         userAgent,
         country,
-        deviceType,
-        referer,
-        ttclid: ttclid || null,
-        fbcl: fbcl || null,
-        campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
-        campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-        failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+        device: deviceType,
+        redirectedTo: redirectType,
+        allParams: {
+          domainId: domain.id,
+          platform: offer.platform,
+          referer,
+          ttclid: ttclid || null,
+          fbcl: fbcl || null,
+          campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+          campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+          failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+        },
       });
 
       // Increment click counters
@@ -1189,19 +1192,22 @@ export async function registerRoutes(
 
       await storage.createClickLog({
         offerId: offer.id,
-        domainId: domain.id,
-        platform: offer.platform,
-        redirectType,
+        userId: offer.userId,
         ipAddress: ip,
         userAgent,
         country,
-        deviceType,
-        referer,
-        ttclid: ttclid || null,
-        fbcl: fbcl || null,
-        campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
-        campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-        failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+        device: deviceType,
+        redirectedTo: redirectType,
+        allParams: {
+          domainId: domain.id,
+          platform: offer.platform,
+          referer,
+          ttclid: ttclid || null,
+          fbcl: fbcl || null,
+          campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+          campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+          failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+        },
       });
 
       await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
