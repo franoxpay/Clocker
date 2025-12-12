@@ -415,7 +415,7 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const parsedDomainId = domainId === "platform" || domainId === "0" ? null : parseInt(domainId);
+      const parsedDomainId = domainId === "platform" || domainId === "0" || domainId === "" || domainId === null ? null : parseInt(domainId);
 
       const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
       if (existingOffer) {
@@ -423,6 +423,20 @@ export async function registerRoutes(
       }
 
       const xcode = generateXcode();
+      console.log("[CreateOffer] Creating offer with data:", {
+        userId,
+        name,
+        slug,
+        platform,
+        domainId: parsedDomainId,
+        blackPageUrl,
+        whitePageUrl,
+        allowedCountries: allowedCountries || ["BR"],
+        allowedDevices: allowedDevices || ["smartphone"],
+        isActive: isActive !== false,
+        xcode,
+      });
+      
       const offer = await storage.createOffer({
         userId,
         name,
@@ -438,9 +452,10 @@ export async function registerRoutes(
       });
 
       res.json(offer);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating offer:", error);
-      res.status(500).json({ message: "Internal server error" });
+      console.error("Error details:", error?.message, error?.stack);
+      res.status(500).json({ message: "Internal server error", details: error?.message });
     }
   });
 
