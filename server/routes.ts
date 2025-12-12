@@ -423,20 +423,6 @@ export async function registerRoutes(
       }
 
       const xcode = generateXcode();
-      console.log("[CreateOffer] Creating offer with data:", {
-        userId,
-        name,
-        slug,
-        platform,
-        domainId: parsedDomainId,
-        blackPageUrl,
-        whitePageUrl,
-        allowedCountries: allowedCountries || ["BR"],
-        allowedDevices: allowedDevices || ["smartphone"],
-        isActive: isActive !== false,
-        xcode,
-      });
-      
       const offer = await storage.createOffer({
         userId,
         name,
@@ -452,10 +438,9 @@ export async function registerRoutes(
       });
 
       res.json(offer);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error creating offer:", error);
-      console.error("Error details:", error?.message, error?.stack);
-      res.status(500).json({ message: "Internal server error", details: error?.message });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 
