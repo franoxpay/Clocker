@@ -13,22 +13,31 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   app.use("*", (req: Request, res: Response, next: NextFunction) => {
-    const host = (req.get("x-forwarded-host") || req.get("host") || "").split(":")[0].toLowerCase();
+    const rawHost = req.get("host") || "";
+    const forwardedHost = req.get("x-forwarded-host") || "";
+    const host = (forwardedHost || rawHost).split(":")[0].toLowerCase();
     const mainDomain = (process.env.MAIN_DOMAIN || "clocker.franox.com.br").toLowerCase();
     const easypanelHost = ".easypanel.host";
+    
+    console.log(`[STATIC FALLBACK] Path: ${req.path}, Host: ${host}, RawHost: ${rawHost}, ForwardedHost: ${forwardedHost}, MainDomain: ${mainDomain}`);
     
     const isMainDomain = host === mainDomain || 
                          host.endsWith(easypanelHost) || 
                          host === "localhost" ||
                          host.includes("replit");
     
+    console.log(`[STATIC FALLBACK] IsMainDomain: ${isMainDomain}`);
+    
     if (isMainDomain) {
+      console.log(`[STATIC FALLBACK] Serving index.html for main domain`);
       res.sendFile(path.resolve(distPath, "index.html"));
     } else {
+      console.log(`[STATIC FALLBACK] Custom domain not handled by cloaking routes - returning 404`);
       res.status(404).json({ 
         error: "Offer not found", 
         message: "The requested offer does not exist or the domain is not configured correctly.",
-        host: host
+        host: host,
+        path: req.path
       });
     }
   });

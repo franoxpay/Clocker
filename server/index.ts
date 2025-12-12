@@ -96,7 +96,12 @@ export function log(message: string, source = "express") {
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
+  const host = req.get("host") || "";
+  const forwardedHost = req.get("x-forwarded-host") || "";
+  const forwardedProto = req.get("x-forwarded-proto") || "";
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+  console.log(`[REQUEST] ${req.method} ${path} - Host: ${host}, X-Forwarded-Host: ${forwardedHost}, Proto: ${forwardedProto}`);
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -106,6 +111,7 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
+    console.log(`[RESPONSE] ${req.method} ${path} ${res.statusCode} in ${duration}ms - Host: ${forwardedHost || host}`);
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {

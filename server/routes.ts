@@ -1088,9 +1088,12 @@ export async function registerRoutes(
   app.get("/:slug", async (req: Request, res: Response, next: NextFunction) => {
     const { slug } = req.params;
     
+    console.log(`[CLOAK /:slug] Received request for slug: ${slug}`);
+    
     // Skip known routes and static files
     const skipPaths = ["api", "assets", "src", "@", "node_modules", "favicon.ico", "robots.txt"];
     if (skipPaths.some(p => slug.startsWith(p)) || slug.includes(".")) {
+      console.log(`[CLOAK /:slug] Skipping - matches skip pattern`);
       return next();
     }
     
@@ -1099,17 +1102,27 @@ export async function registerRoutes(
     const forwardedHost = (req.get("x-forwarded-host") || "").split(":")[0];
     const domainToCheck = forwardedHost || host;
     
+    console.log(`[CLOAK /:slug] Host check - rawHost: ${rawHost}, forwardedHost: ${forwardedHost}, domainToCheck: ${domainToCheck}`);
+    
     // Only handle if it's a registered custom domain (not the main app domain)
     const domain = await storage.getDomainBySubdomain(domainToCheck);
+    console.log(`[CLOAK /:slug] Domain lookup result:`, domain ? { id: domain.id, subdomain: domain.subdomain, isActive: domain.isActive, isVerified: domain.isVerified } : null);
+    
     if (!domain || !domain.isActive || !domain.isVerified) {
+      console.log(`[CLOAK /:slug] Domain not found/inactive/unverified - passing to next()`);
       return next(); // Let other routes handle it
     }
     
     // Check if offer exists for this slug
     const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+    console.log(`[CLOAK /:slug] Offer lookup result:`, offer ? { id: offer.id, slug: offer.slug, domainId: offer.domainId } : null);
+    
     if (!offer) {
+      console.log(`[CLOAK /:slug] Offer not found for slug ${slug} on domain ${domain.id} - passing to next()`);
       return next(); // Not a valid offer slug
     }
+    
+    console.log(`[CLOAK /:slug] Processing cloaking for offer: ${offer.slug}`);
     
     // Forward to the main cloaking handler by rewriting the URL
     req.url = `/r/${slug}`;
