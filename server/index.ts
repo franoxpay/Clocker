@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
 
 const app = express();
+app.set('trust proxy', true);
 const httpServer = createServer(app);
 
 declare module "http" {
