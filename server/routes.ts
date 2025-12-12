@@ -1059,7 +1059,7 @@ export async function registerRoutes(
         device: deviceType,
         redirectedTo: redirectType,
         allParams: {
-          domainId: domain.id,
+          domainId: domain?.id || offer.domainId || null,
           platform: offer.platform,
           referer,
           ttclid: ttclid || null,
@@ -1202,7 +1202,7 @@ export async function registerRoutes(
         device: deviceType,
         redirectedTo: redirectType,
         allParams: {
-          domainId: domain.id,
+          domainId: domain?.id || offer.domainId || null,
           platform: offer.platform,
           referer,
           ttclid: ttclid || null,
