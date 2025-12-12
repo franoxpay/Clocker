@@ -951,20 +951,23 @@ export async function registerRoutes(
       
       console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
       
-      const domain = await storage.getDomainBySubdomain(domainToCheck);
-      if (!domain) {
-        console.log(`[Cloak] Domain not found: ${domainToCheck} (original host: ${rawHost})`);
-        return res.status(404).send("Not found");
+      let domain = await storage.getDomainBySubdomain(domainToCheck);
+      let offer = null;
+      
+      if (domain && domain.isActive && domain.isVerified) {
+        // Found valid domain, get offer by slug and domain
+        offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+      } else {
+        // Fallback: try to find offer by slug only (for testing/development)
+        console.log(`[Cloak] Domain not found or invalid, trying fallback lookup for slug: ${slug}`);
+        offer = await storage.getOfferBySlug(slug);
+        if (offer && offer.domainId) {
+          domain = await storage.getDomain(offer.domainId);
+        }
       }
-
-      if (!domain.isActive || !domain.isVerified) {
-        console.log(`[Cloak] Domain inactive/unverified: ${host}`);
-        return res.status(404).send("Not found");
-      }
-
-      const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+      
       if (!offer) {
-        console.log(`[Cloak] Offer not found: ${slug} on ${host}`);
+        console.log(`[Cloak] Offer not found: ${slug}`);
         return res.status(404).send("Not found");
       }
 

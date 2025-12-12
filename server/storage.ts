@@ -49,6 +49,7 @@ export interface IStorage {
   deleteDomain(id: number): Promise<void>;
 
   getOffer(id: number): Promise<Offer | undefined>;
+  getOfferBySlug(slug: string): Promise<Offer | undefined>;
   getOfferBySlugAndDomain(slug: string, domainId: number | null): Promise<Offer | undefined>;
   getOffersByUserId(userId: string): Promise<Offer[]>;
   createOffer(offer: InsertOffer & { xcode: string }): Promise<Offer>;
@@ -201,6 +202,11 @@ export class DatabaseStorage implements IStorage {
 
   async getOffer(id: number): Promise<Offer | undefined> {
     const [offer] = await db.select().from(offers).where(eq(offers.id, id)).limit(1);
+    return offer;
+  }
+
+  async getOfferBySlug(slug: string): Promise<Offer | undefined> {
+    const [offer] = await db.select().from(offers).where(eq(offers.slug, slug)).limit(1);
     return offer;
   }
 
