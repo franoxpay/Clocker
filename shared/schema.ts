@@ -77,6 +77,7 @@ export const domains = pgTable(
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     subdomain: varchar("subdomain").notNull(),
+    easypanelDomainId: varchar("easypanel_domain_id"),
     isActive: boolean("is_active").default(true).notNull(),
     isVerified: boolean("is_verified").default(false).notNull(),
     lastCheckedAt: timestamp("last_checked_at"),

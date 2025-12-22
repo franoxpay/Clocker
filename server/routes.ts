@@ -523,7 +523,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Domain already exists" });
       }
 
-      const domain = await storage.createDomain({
+      let domain = await storage.createDomain({
         userId,
         subdomain,
         isActive: true,
@@ -537,7 +537,13 @@ export async function registerRoutes(
       if (easypanelService.isConfigured()) {
         const result = await easypanelService.addDomain(subdomain);
         console.log(`[EasyPanel] Add domain result:`, result);
-        if (!result.success) {
+        if (result.success && result.domainId) {
+          // Save the EasyPanel domain ID
+          domain = await storage.updateDomain(domain.id, {
+            easypanelDomainId: result.domainId
+          });
+          console.log(`[EasyPanel] Saved EasyPanel domain ID: ${result.domainId}`);
+        } else if (!result.success) {
           console.log(`[EasyPanel] Failed to add domain, but continuing: ${result.error}`);
         }
       } else {
@@ -596,11 +602,14 @@ export async function registerRoutes(
 
       // Sync with EasyPanel (remove domain automatically)
       const { easypanelService } = await import("./easypanel");
-      if (easypanelService.isConfigured()) {
-        const result = await easypanelService.removeDomain(domain.subdomain);
+      if (easypanelService.isConfigured() && domain.easypanelDomainId) {
+        console.log(`[EasyPanel] Removing domain with EasyPanel ID: ${domain.easypanelDomainId}`);
+        const result = await easypanelService.removeDomain(domain.easypanelDomainId);
         if (!result.success) {
           console.log(`[EasyPanel] Failed to remove domain, but continuing: ${result.error}`);
         }
+      } else if (!domain.easypanelDomainId) {
+        console.log(`[EasyPanel] No EasyPanel domain ID stored, skipping removal`);
       }
 
       await storage.deleteDomain(domainId);

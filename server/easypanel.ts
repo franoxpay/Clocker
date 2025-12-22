@@ -17,6 +17,7 @@ interface DomainParams {
 interface EasyPanelDomainResult {
   success: boolean;
   error?: string;
+  domainId?: string;
 }
 
 class EasyPanelService {
@@ -165,54 +166,51 @@ class EasyPanelService {
         }
       };
 
-      await this.makeRequest('/api/trpc/domains.createDomain', payload);
+      const result = await this.makeRequest('/api/trpc/domains.createDomain', payload);
 
       console.log(`[EasyPanel] Successfully added domain: ${domain}`);
+      console.log(`[EasyPanel] Create domain result:`, JSON.stringify(result));
       
-      return { success: true };
+      // Extract the domain ID from the response
+      // tRPC batch response: [{ result: { data: { json: { id: "..." } } } }]
+      const domainId = result?.[0]?.result?.data?.json?.id || 
+                       result?.result?.data?.json?.id ||
+                       null;
+      
+      console.log(`[EasyPanel] Domain ID: ${domainId}`);
+      
+      return { success: true, domainId };
     } catch (error: any) {
       console.error(`[EasyPanel] Error adding domain ${domain}:`, error);
       return { success: false, error: error.message };
     }
   }
 
-  async removeDomain(domain: string): Promise<EasyPanelDomainResult> {
+  async removeDomain(domainId: string): Promise<EasyPanelDomainResult> {
     if (!this.isConfigured()) {
       console.log('[EasyPanel] Not configured, skipping domain removal');
       return { success: false, error: 'EasyPanel not configured' };
     }
 
-    try {
-      console.log(`[EasyPanel] Removing domain: ${domain}`);
+    if (!domainId) {
+      console.log('[EasyPanel] No domain ID provided, skipping removal');
+      return { success: false, error: 'No EasyPanel domain ID' };
+    }
 
-      // First, we need to find the domain ID by listing domains
-      // For now, try to delete by host name - the endpoint might accept host directly
-      // Common endpoints: domains.destroyDomain, domains.deleteDomain
-      
+    try {
+      console.log(`[EasyPanel] Removing domain with ID: ${domainId}`);
+
       const payload = {
         json: {
-          host: domain
+          id: domainId
         }
       };
 
-      try {
-        await this.makeRequest('/api/trpc/domains.destroyDomain', payload);
-        console.log(`[EasyPanel] Successfully removed domain: ${domain}`);
-        return { success: true };
-      } catch (error: any) {
-        // Try alternative endpoint if first fails
-        console.log(`[EasyPanel] destroyDomain failed, trying deleteDomain...`);
-        try {
-          await this.makeRequest('/api/trpc/domains.deleteDomain', payload);
-          console.log(`[EasyPanel] Successfully removed domain: ${domain}`);
-          return { success: true };
-        } catch (error2: any) {
-          console.log(`[EasyPanel] Domain removal failed - may need manual removal`);
-          return { success: false, error: error2.message };
-        }
-      }
+      await this.makeRequest('/api/trpc/domains.deleteDomain', payload);
+      console.log(`[EasyPanel] Successfully removed domain: ${domainId}`);
+      return { success: true };
     } catch (error: any) {
-      console.error(`[EasyPanel] Error removing domain ${domain}:`, error);
+      console.error(`[EasyPanel] Error removing domain ${domainId}:`, error);
       return { success: false, error: error.message };
     }
   }
