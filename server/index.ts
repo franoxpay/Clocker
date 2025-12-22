@@ -7,6 +7,7 @@ import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
 import { initEasyPanel } from "./easypanel";
+import { storage } from "./storage";
 
 const app = express();
 app.set('trust proxy', true);
@@ -82,6 +83,131 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
 app.use("/api/auth/callback", authLimiter);
 app.use("/api/password-reset", authLimiter);
+
+// Helper function to check if host is the main application domain
+function isMainDomain(host: string): boolean {
+  const mainDomains = (process.env.MAIN_DOMAIN || "").split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+  const replitDomains = (process.env.REPLIT_DOMAINS || "").split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+  const replitDevDomain = (process.env.REPLIT_DEV_DOMAIN || "").toLowerCase();
+  
+  const hostLower = host.toLowerCase().split(":")[0]; // Remove port if present
+  
+  // Check if it's a main domain
+  if (mainDomains.some(d => hostLower === d || hostLower.endsWith(`.${d}`))) {
+    return true;
+  }
+  
+  // Check if it's a Replit domain
+  if (replitDomains.some(d => hostLower === d || hostLower.endsWith(`.${d}`))) {
+    return true;
+  }
+  
+  // Check if it's the Replit dev domain
+  if (replitDevDomain && (hostLower === replitDevDomain || hostLower.includes("replit"))) {
+    return true;
+  }
+  
+  // Also allow localhost for development
+  if (hostLower.startsWith("localhost") || hostLower.startsWith("127.0.0.1")) {
+    return true;
+  }
+  
+  return false;
+}
+
+// Middleware to block access to cloaking domains without valid slugs
+app.use(async (req: Request, res: Response, next: NextFunction) => {
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  const path = req.path;
+  
+  // If it's the main domain, allow everything
+  if (isMainDomain(host)) {
+    return next();
+  }
+  
+  // For custom domains, only allow specific paths
+  // Allow: /r/:slug, /:slug (if slug is valid offer), favicon.ico, robots.txt
+  const allowedPaths = ["/favicon.ico", "/robots.txt", "/favicon.png"];
+  
+  if (allowedPaths.includes(path)) {
+    return next();
+  }
+  
+  // If path starts with /r/, let the cloaking route handle it
+  if (path.startsWith("/r/")) {
+    return next();
+  }
+  
+  // For root path on custom domain, show a simple 404
+  if (path === "/" || path === "") {
+    console.log(`[DOMAIN GUARD] Blocking root access to custom domain: ${host}`);
+    return res.status(404).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Not Found</title>
+          <style>
+            body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; padding: 40px; }
+            h1 { color: #333; margin-bottom: 10px; }
+            p { color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>404</h1>
+            <p>Page not found</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+  
+  // For paths like /:slug on custom domain, check if it's a valid offer
+  // Extract the slug (first path segment)
+  const slug = path.split("/")[1];
+  
+  if (slug && !slug.includes(".")) {
+    // Check if this domain has an offer with this slug
+    const hostClean = host.split(":")[0];
+    const domain = await storage.getDomainBySubdomain(hostClean);
+    
+    if (domain && domain.isActive && domain.isVerified) {
+      const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+      if (offer && offer.isActive) {
+        // Valid offer, let the cloaking route handle it
+        return next();
+      }
+    }
+    
+    // Not a valid offer slug on this domain
+    console.log(`[DOMAIN GUARD] Invalid slug "${slug}" on custom domain: ${host}`);
+    return res.status(404).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Not Found</title>
+          <style>
+            body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+            .container { text-align: center; padding: 40px; }
+            h1 { color: #333; margin-bottom: 10px; }
+            p { color: #666; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>404</h1>
+            <p>Page not found</p>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+  
+  // For other paths (like assets), block on custom domains
+  console.log(`[DOMAIN GUARD] Blocking path "${path}" on custom domain: ${host}`);
+  return res.status(404).send("Not found");
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
