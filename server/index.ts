@@ -6,6 +6,7 @@ import { isStripeConfigured } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
+import { initEasyPanel } from "./easypanel";
 
 const app = express();
 app.set('trust proxy', true);
@@ -127,6 +128,7 @@ app.use((req, res, next) => {
 
 (async () => {
   await initStripe();
+  initEasyPanel();
   setupWebSocket(httpServer);
   await registerRoutes(httpServer, app);
 

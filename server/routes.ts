@@ -531,6 +531,15 @@ export async function registerRoutes(
         sslStatus: "pending",
       });
 
+      // Sync with EasyPanel (add domain automatically)
+      const { easypanelService } = await import("./easypanel");
+      if (easypanelService.isConfigured()) {
+        const result = await easypanelService.addDomain(subdomain);
+        if (!result.success) {
+          console.log(`[EasyPanel] Failed to add domain, but continuing: ${result.error}`);
+        }
+      }
+
       res.json(domain);
     } catch (error) {
       console.error("Error creating domain:", error);
@@ -579,6 +588,15 @@ export async function registerRoutes(
 
       if (!domain || domain.userId !== userId) {
         return res.status(404).json({ message: "Domain not found" });
+      }
+
+      // Sync with EasyPanel (remove domain automatically)
+      const { easypanelService } = await import("./easypanel");
+      if (easypanelService.isConfigured()) {
+        const result = await easypanelService.removeDomain(domain.subdomain);
+        if (!result.success) {
+          console.log(`[EasyPanel] Failed to remove domain, but continuing: ${result.error}`);
+        }
       }
 
       await storage.deleteDomain(domainId);
