@@ -109,6 +109,48 @@ class EasyPanelService {
     }
   }
 
+  async getAllDomains(): Promise<any[]> {
+    if (!this.config) {
+      throw new Error('EasyPanel not configured');
+    }
+
+    try {
+      const result = await this.getRequest('/api/trpc/domains.listDomains', {
+        json: {}
+      });
+
+      console.log('[EasyPanel] List domains response:', JSON.stringify(result).substring(0, 1000));
+      
+      // tRPC batch response format: [{ result: { data: { json: [...] } } }]
+      const domains = result?.[0]?.result?.data?.json || 
+                      result?.result?.data?.json || 
+                      [];
+      return domains;
+    } catch (error) {
+      console.error('[EasyPanel] Error listing domains:', error);
+      return [];
+    }
+  }
+
+  async findDomainIdByHost(host: string): Promise<string | null> {
+    try {
+      const domains = await this.getAllDomains();
+      console.log(`[EasyPanel] Looking for domain with host: ${host}`);
+      
+      const domain = domains.find((d: any) => d.host === host);
+      if (domain) {
+        console.log(`[EasyPanel] Found domain:`, JSON.stringify(domain));
+        return domain.id || null;
+      }
+      
+      console.log(`[EasyPanel] Domain not found in list`);
+      return null;
+    } catch (error) {
+      console.error('[EasyPanel] Error finding domain by host:', error);
+      return null;
+    }
+  }
+
   async getCurrentDomains(): Promise<DomainParams[]> {
     if (!this.config) {
       throw new Error('EasyPanel not configured');
@@ -180,11 +222,21 @@ class EasyPanelService {
       console.log(`[EasyPanel] Response data:`, JSON.stringify(responseData));
       console.log(`[EasyPanel] Extracted domain ID: ${domainId}`);
       
-      if (!domainId) {
-        console.warn(`[EasyPanel] WARNING: Domain created but no ID was returned. Response structure may have changed.`);
+      // If no ID was returned in the response, try to find it by listing domains
+      let finalDomainId = domainId;
+      if (!finalDomainId) {
+        console.log(`[EasyPanel] No ID in response, fetching from domain list...`);
+        // Small delay to ensure the domain is registered
+        await new Promise(resolve => setTimeout(resolve, 500));
+        finalDomainId = await this.findDomainIdByHost(domain);
+        console.log(`[EasyPanel] Found domain ID from list: ${finalDomainId}`);
       }
       
-      return { success: true, domainId };
+      if (!finalDomainId) {
+        console.warn(`[EasyPanel] WARNING: Domain created but could not retrieve ID.`);
+      }
+      
+      return { success: true, domainId: finalDomainId };
     } catch (error: any) {
       console.error(`[EasyPanel] Error adding domain ${domain}:`, error);
       return { success: false, error: error.message };
