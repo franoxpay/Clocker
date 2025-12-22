@@ -40,21 +40,36 @@ class EasyPanelService {
       throw new Error('EasyPanel not configured');
     }
 
-    const response = await fetch(`${this.config.endpoint}${route}`, {
+    const url = `${this.config.endpoint}${route}?batch=1`;
+    const trpcBody = {
+      "0": body
+    };
+
+    console.log(`[EasyPanel] Making request to: ${url}`);
+    console.log(`[EasyPanel] Request body:`, JSON.stringify(trpcBody, null, 2));
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': this.config.token,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(trpcBody),
     });
 
+    const text = await response.text();
+    console.log(`[EasyPanel] Response status: ${response.status}`);
+    console.log(`[EasyPanel] Response body: ${text}`);
+
     if (!response.ok) {
-      const text = await response.text();
       throw new Error(`EasyPanel API error: ${response.status} - ${text}`);
     }
 
-    return response.json();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   }
 
   private async getRequest(route: string, params?: any): Promise<any> {
@@ -62,13 +77,13 @@ class EasyPanelService {
       throw new Error('EasyPanel not configured');
     }
 
-    let url = `${this.config.endpoint}${route}`;
+    let url = `${this.config.endpoint}${route}?batch=1`;
     if (params) {
-      const queryString = new URLSearchParams({
-        input: JSON.stringify(params)
-      }).toString();
-      url += `?${queryString}`;
+      const input = encodeURIComponent(JSON.stringify({ "0": params }));
+      url += `&input=${input}`;
     }
+
+    console.log(`[EasyPanel] GET request to: ${url}`);
 
     const response = await fetch(url, {
       method: 'GET',
@@ -78,12 +93,19 @@ class EasyPanelService {
       },
     });
 
+    const text = await response.text();
+    console.log(`[EasyPanel] GET Response status: ${response.status}`);
+    console.log(`[EasyPanel] GET Response body: ${text.substring(0, 500)}`);
+
     if (!response.ok) {
-      const text = await response.text();
       throw new Error(`EasyPanel API error: ${response.status} - ${text}`);
     }
 
-    return response.json();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
   }
 
   async getCurrentDomains(): Promise<DomainParams[]> {
@@ -99,7 +121,14 @@ class EasyPanelService {
         }
       });
 
-      return result?.result?.data?.json?.domains || [];
+      console.log('[EasyPanel] Inspect result structure:', JSON.stringify(result, null, 2).substring(0, 1000));
+      
+      // tRPC batch response format: [{ result: { data: { json: ... } } }]
+      const domains = result?.[0]?.result?.data?.json?.domains || 
+                      result?.result?.data?.json?.domains || 
+                      [];
+      console.log('[EasyPanel] Current domains:', domains);
+      return domains;
     } catch (error) {
       console.error('[EasyPanel] Error getting current domains:', error);
       return [];
