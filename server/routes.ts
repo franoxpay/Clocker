@@ -533,11 +533,15 @@ export async function registerRoutes(
 
       // Sync with EasyPanel (add domain automatically)
       const { easypanelService } = await import("./easypanel");
+      console.log(`[EasyPanel] Attempting to add domain: ${subdomain}, isConfigured: ${easypanelService.isConfigured()}`);
       if (easypanelService.isConfigured()) {
         const result = await easypanelService.addDomain(subdomain);
+        console.log(`[EasyPanel] Add domain result:`, result);
         if (!result.success) {
           console.log(`[EasyPanel] Failed to add domain, but continuing: ${result.error}`);
         }
+      } else {
+        console.log(`[EasyPanel] Skipping - not configured`);
       }
 
       res.json(domain);

@@ -230,6 +230,12 @@ export function initEasyPanel() {
   const projectName = process.env.EASYPANEL_PROJECT_NAME;
   const serviceName = process.env.EASYPANEL_SERVICE_NAME;
 
+  console.log('[EasyPanel] Checking configuration...');
+  console.log(`[EasyPanel] EASYPANEL_URL: ${endpoint ? 'SET' : 'NOT SET'}`);
+  console.log(`[EasyPanel] EASYPANEL_TOKEN: ${token ? 'SET (' + token.substring(0, 8) + '...)' : 'NOT SET'}`);
+  console.log(`[EasyPanel] EASYPANEL_PROJECT_NAME: ${projectName || 'NOT SET'}`);
+  console.log(`[EasyPanel] EASYPANEL_SERVICE_NAME: ${serviceName || 'NOT SET'}`);
+
   if (endpoint && token && projectName && serviceName) {
     easypanelService.configure({
       endpoint,
