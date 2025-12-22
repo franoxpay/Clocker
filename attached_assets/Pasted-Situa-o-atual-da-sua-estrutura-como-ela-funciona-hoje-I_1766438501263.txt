@@ -1,0 +1,140 @@
+Situação atual da sua estrutura (como ela funciona hoje)
+
+Imagine sua estrutura em 4 camadas:
+
+Usuário final (quem clica no link)
+
+DNS
+
+Proxy / EasyPanel
+
+Seu Clocker (backend do SaaS)
+
+🔹 1. O que você já faz corretamente
+
+✔️ Você pede para o cliente criar um CNAME
+✔️ O CNAME aponta para algo como:
+
+dominio-cliente.com → track.seusistema.com
+
+
+✔️ O DNS está correto
+✔️ O request chega no seu servidor
+
+👉 Até aqui, tudo certo.
+
+🔹 2. Onde está o problema (o erro da arquitetura)
+
+Quando o request chega no servidor, ele passa antes pelo proxy do EasyPanel.
+
+O proxy funciona assim:
+
+“Eu só aceito requisições de domínios que eu conheço.”
+
+O que acontece hoje:
+
+O domínio do cliente não está cadastrado no EasyPanel
+
+O proxy olha o Host: dominio-cliente.com
+
+Ele bloqueia ou ignora
+
+O request não chega no clocker
+
+⚠️ Por isso:
+
+O clocker não redireciona
+
+Só funciona quando você adiciona o domínio manualmente no EasyPanel
+
+🔹 3. Por que isso acontece mesmo usando CNAME
+
+Isso é um ponto importante:
+
+👉 CNAME resolve DNS, não proxy
+
+DNS só diz: “vá para esse servidor”
+
+O proxy ainda precisa aceitar o Host
+
+EasyPanel, por padrão, não aceita hosts desconhecidos
+
+❌ O que está errado na sua estrutura
+
+❌ Proxy depende de cadastro manual de domínio
+❌ Arquitetura não é multi-tenant
+❌ Não é escalável para SaaS
+❌ Cada novo cliente exige ação manual
+
+Essa arquitetura não é a usada por empresas grandes de cloaker.
+
+✅ Como sua estrutura DEVE funcionar (modelo correto)
+
+Agora o modelo certo, usado em produção.
+
+🔹 1. Proxy com wildcard (ponto mais importante)
+
+O proxy deve aceitar qualquer domínio, sem cadastro manual.
+
+Exemplo conceitual:
+
+Aceitar qualquer Host: *
+
+
+Ou seja:
+
+Um único serviço
+
+Um único endpoint
+
+Zero domínio criado manualmente
+
+🔹 2. CNAME como entrada padrão
+
+O cliente sempre faz:
+
+dominio-cliente.com → CNAME → track.seusistema.com
+
+
+Nada mais.
+
+🔹 3. Clocker decide tudo pelo Host
+
+O backend lê:
+
+req.headers.host
+
+
+Com isso:
+
+Identifica o cliente
+
+Aplica filtros
+
+Decide black ou white
+
+Redireciona
+
+🔹 4. SSL centralizado
+
+SSL existe somente em track.seusistema.com
+
+O domínio do cliente herda isso via CNAME
+
+Não há certificado por domínio
+
+🧠 Visual mental da arquitetura correta
+Usuário
+  ↓
+dominio-cliente.com
+  ↓ CNAME
+track.seusistema.com
+  ↓
+Proxy (aceita qualquer Host)
+  ↓
+Clocker (decide black/white)
+
+🧾 Resumo final (frase de professor)
+
+“O DNS do aluno está certo, mas o proxy não aceita alunos novos sem matrícula.
+A solução é um sistema onde qualquer aluno pode entrar, e o professor decide quem vai pra qual sala.”
