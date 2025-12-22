@@ -174,7 +174,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getDomainBySubdomain(subdomain: string): Promise<Domain | undefined> {
-    const [domain] = await db.select().from(domains).where(eq(domains.subdomain, subdomain)).limit(1);
+    // Normalize the subdomain: lowercase and remove www prefix
+    const normalizedSubdomain = subdomain.toLowerCase().replace(/^www\./, '');
+    
+    // First try exact match with normalized subdomain
+    let [domain] = await db.select().from(domains).where(eq(domains.subdomain, normalizedSubdomain)).limit(1);
+    
+    if (!domain) {
+      // Try with www prefix if not found
+      [domain] = await db.select().from(domains).where(eq(domains.subdomain, `www.${normalizedSubdomain}`)).limit(1);
+    }
+    
+    if (!domain) {
+      // Try case-insensitive match using SQL LOWER
+      [domain] = await db.select().from(domains).where(sql`LOWER(${domains.subdomain}) = ${normalizedSubdomain}`).limit(1);
+    }
+    
     return domain;
   }
 

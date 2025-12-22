@@ -927,6 +927,33 @@ export async function registerRoutes(
     }
   });
 
+  // Helper function to extract domain from request headers
+  // Checks multiple headers that reverse proxies like EasyPanel, Nginx, Traefik may use
+  function extractDomainFromRequest(req: Request): string {
+    // Priority order for host detection from reverse proxies
+    const hostHeaders = [
+      req.get("x-forwarded-host"),
+      req.get("x-original-host"),
+      req.get("x-real-host"),
+      req.get("x-host"),
+      req.get("forwarded")?.match(/host=([^;,]+)/)?.[1],
+      req.get("host"),
+    ];
+    
+    for (const header of hostHeaders) {
+      if (header) {
+        // Remove port if present and normalize
+        const domain = header.split(":")[0].toLowerCase().replace(/^www\./, '');
+        if (domain && domain !== 'localhost' && !domain.match(/^127\./)) {
+          return domain;
+        }
+      }
+    }
+    
+    // Fallback to host header
+    return (req.get("host") || "").split(":")[0].toLowerCase().replace(/^www\./, '');
+  }
+
   // Cloaking redirect endpoint - handles clicks from TikTok/Facebook ads
   app.get("/r/:slug", async (req: Request, res: Response) => {
     const startTime = Date.now();
@@ -938,16 +965,19 @@ export async function registerRoutes(
     const referer = req.get("referer") || "";
 
     console.log(`[Cloak] Incoming request - Host: ${rawHost}, Slug: ${slug}, IP: ${ip}`);
-    console.log(`[Cloak] Headers: ${JSON.stringify({
+    console.log(`[Cloak] All relevant headers: ${JSON.stringify({
       host: req.get("host"),
       "x-forwarded-host": req.get("x-forwarded-host"),
+      "x-original-host": req.get("x-original-host"),
+      "x-real-host": req.get("x-real-host"),
+      "x-host": req.get("x-host"),
+      "forwarded": req.get("forwarded"),
       "x-forwarded-proto": req.get("x-forwarded-proto"),
     })}`);
 
     try {
-      // Try to find domain by host, or by x-forwarded-host for proxied requests
-      const forwardedHost = (req.get("x-forwarded-host") || "").split(":")[0];
-      const domainToCheck = forwardedHost || host;
+      // Extract domain using the helper function that checks multiple headers
+      const domainToCheck = extractDomainFromRequest(req);
       
       console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
       
@@ -1097,12 +1127,18 @@ export async function registerRoutes(
       return next();
     }
     
-    const rawHost = req.get("host") || "";
-    const host = rawHost.split(":")[0];
-    const forwardedHost = (req.get("x-forwarded-host") || "").split(":")[0];
-    const domainToCheck = forwardedHost || host;
+    // Use the same helper function to extract domain from request headers
+    const domainToCheck = extractDomainFromRequest(req);
     
-    console.log(`[CLOAK /:slug] Host check - rawHost: ${rawHost}, forwardedHost: ${forwardedHost}, domainToCheck: ${domainToCheck}`);
+    console.log(`[CLOAK /:slug] Host check - domainToCheck: ${domainToCheck}`);
+    console.log(`[CLOAK /:slug] All relevant headers: ${JSON.stringify({
+      host: req.get("host"),
+      "x-forwarded-host": req.get("x-forwarded-host"),
+      "x-original-host": req.get("x-original-host"),
+      "x-real-host": req.get("x-real-host"),
+      "x-host": req.get("x-host"),
+      "forwarded": req.get("forwarded"),
+    })}`);
     
     // Only handle if it's a registered custom domain (not the main app domain)
     const domain = await storage.getDomainBySubdomain(domainToCheck);
