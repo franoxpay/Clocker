@@ -172,12 +172,17 @@ class EasyPanelService {
       console.log(`[EasyPanel] Create domain result:`, JSON.stringify(result));
       
       // Extract the domain ID from the response
-      // tRPC batch response: [{ result: { data: { json: { id: "..." } } } }]
-      const domainId = result?.[0]?.result?.data?.json?.id || 
-                       result?.result?.data?.json?.id ||
-                       null;
+      // tRPC batch response: [{ result: { data: { json: { domain: { id: "..." } } } } }]
+      // The API returns the ID nested under json.domain.id, not json.id
+      const responseData = result?.[0]?.result?.data?.json || result?.result?.data?.json;
+      const domainId = responseData?.domain?.id || responseData?.id || null;
       
-      console.log(`[EasyPanel] Domain ID: ${domainId}`);
+      console.log(`[EasyPanel] Response data:`, JSON.stringify(responseData));
+      console.log(`[EasyPanel] Extracted domain ID: ${domainId}`);
+      
+      if (!domainId) {
+        console.warn(`[EasyPanel] WARNING: Domain created but no ID was returned. Response structure may have changed.`);
+      }
       
       return { success: true, domainId };
     } catch (error: any) {
