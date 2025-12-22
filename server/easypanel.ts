@@ -135,7 +135,7 @@ class EasyPanelService {
     }
   }
 
-  async addDomain(domain: string, port: number = 3000): Promise<EasyPanelDomainResult> {
+  async addDomain(domain: string, port: number = 80): Promise<EasyPanelDomainResult> {
     if (!this.isConfigured()) {
       console.log('[EasyPanel] Not configured, skipping domain addition');
       return { success: false, error: 'EasyPanel not configured' };
@@ -144,39 +144,30 @@ class EasyPanelService {
     try {
       console.log(`[EasyPanel] Adding domain: ${domain}`);
 
-      // Get current domains
-      const currentDomains = await this.getCurrentDomains();
-      
-      // Check if domain already exists
-      const domainExists = currentDomains.some(d => d.host.toLowerCase() === domain.toLowerCase());
-      if (domainExists) {
-        console.log(`[EasyPanel] Domain ${domain} already exists`);
-        return { success: true };
-      }
-
-      // Add new domain to list
-      const newDomains: DomainParams[] = [
-        ...currentDomains,
-        {
-          host: domain,
-          https: true,
-          port: port,
-        }
-      ];
-
-      // Update domains
-      await this.makeRequest('/api/trpc/services.app.updateDomains', {
+      // Use the correct endpoint: domains.createDomain
+      const payload = {
         json: {
-          projectName: this.config!.projectName,
-          serviceName: this.config!.serviceName,
-          domains: newDomains,
+          id: "",
+          https: true,
+          host: domain,
+          path: "/",
+          middlewares: [],
+          certificateResolver: "",
+          wildcard: false,
+          destinationType: "service",
+          serviceDestination: {
+            protocol: "http",
+            port: port,
+            path: "/",
+            projectName: this.config!.projectName,
+            serviceName: this.config!.serviceName
+          }
         }
-      });
+      };
+
+      await this.makeRequest('/api/trpc/domains.createDomain', payload);
 
       console.log(`[EasyPanel] Successfully added domain: ${domain}`);
-      
-      // Deploy to apply changes
-      await this.deployService();
       
       return { success: true };
     } catch (error: any) {
@@ -194,35 +185,32 @@ class EasyPanelService {
     try {
       console.log(`[EasyPanel] Removing domain: ${domain}`);
 
-      // Get current domains
-      const currentDomains = await this.getCurrentDomains();
+      // First, we need to find the domain ID by listing domains
+      // For now, try to delete by host name - the endpoint might accept host directly
+      // Common endpoints: domains.destroyDomain, domains.deleteDomain
       
-      // Filter out the domain to remove (keep others)
-      const newDomains = currentDomains.filter(
-        d => d.host.toLowerCase() !== domain.toLowerCase()
-      );
-
-      // If no change, domain wasn't found
-      if (newDomains.length === currentDomains.length) {
-        console.log(`[EasyPanel] Domain ${domain} not found in EasyPanel`);
-        return { success: true };
-      }
-
-      // Update domains
-      await this.makeRequest('/api/trpc/services.app.updateDomains', {
+      const payload = {
         json: {
-          projectName: this.config!.projectName,
-          serviceName: this.config!.serviceName,
-          domains: newDomains,
+          host: domain
         }
-      });
+      };
 
-      console.log(`[EasyPanel] Successfully removed domain: ${domain}`);
-      
-      // Deploy to apply changes
-      await this.deployService();
-      
-      return { success: true };
+      try {
+        await this.makeRequest('/api/trpc/domains.destroyDomain', payload);
+        console.log(`[EasyPanel] Successfully removed domain: ${domain}`);
+        return { success: true };
+      } catch (error: any) {
+        // Try alternative endpoint if first fails
+        console.log(`[EasyPanel] destroyDomain failed, trying deleteDomain...`);
+        try {
+          await this.makeRequest('/api/trpc/domains.deleteDomain', payload);
+          console.log(`[EasyPanel] Successfully removed domain: ${domain}`);
+          return { success: true };
+        } catch (error2: any) {
+          console.log(`[EasyPanel] Domain removal failed - may need manual removal`);
+          return { success: false, error: error2.message };
+        }
+      }
     } catch (error: any) {
       console.error(`[EasyPanel] Error removing domain ${domain}:`, error);
       return { success: false, error: error.message };
