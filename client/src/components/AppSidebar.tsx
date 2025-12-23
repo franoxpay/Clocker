@@ -88,7 +88,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           <img 
             src={theme === "dark" ? logoBranca : logoPreta} 
             alt="Clerion" 
-            className="h-8 w-auto"
+            className="h-10 w-auto"
           />
         </div>
       </SidebarHeader>
