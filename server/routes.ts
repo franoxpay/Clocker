@@ -1312,6 +1312,9 @@ export async function registerRoutes(
       // Calculate response time before logging
       const duration = Date.now() - startTime;
 
+      // Build full request URL for logging
+      const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
       // Log the click with response time
       await storage.createClickLog({
         offerId: offer.id,
@@ -1321,6 +1324,7 @@ export async function registerRoutes(
         country,
         device: deviceType,
         redirectedTo: redirectType,
+        requestUrl,
         responseTimeMs: duration,
         hasError: false,
         allParams: {
@@ -1499,6 +1503,9 @@ export async function registerRoutes(
       // Calculate response time before logging
       const duration = Date.now() - startTime;
 
+      // Build full request URL for logging
+      const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
       await storage.createClickLog({
         offerId: offer.id,
         userId: offer.userId,
@@ -1507,6 +1514,7 @@ export async function registerRoutes(
         country,
         device: deviceType,
         redirectedTo: redirectType,
+        requestUrl,
         responseTimeMs: duration,
         hasError: false,
         allParams: {

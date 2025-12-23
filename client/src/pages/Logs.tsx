@@ -211,7 +211,7 @@ export default function Logs() {
                       <TableHead>{t("logs.redirectType")}</TableHead>
                       <TableHead>{t("logs.country")}</TableHead>
                       <TableHead>{t("logs.device")}</TableHead>
-                      <TableHead>{language === "pt-BR" ? "Origem" : "Source"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "URL de Entrada" : "Request URL"}</TableHead>
                       <TableHead>{t("logs.ip")}</TableHead>
                       <TableHead className="max-w-xs">{t("logs.userAgent")}</TableHead>
                     </TableRow>
@@ -239,26 +239,40 @@ export default function Logs() {
                           {log.country ? getCountryName(log.country, language) : "-"}
                         </TableCell>
                         <TableCell className="capitalize">{log.device || "-"}</TableCell>
-                        <TableCell className="max-w-[150px]">
-                          <div className="text-xs text-muted-foreground truncate" title={(log.allParams as any)?.referer || ""}>
-                            {(log.allParams as any)?.referer ? (
-                              <span className="text-foreground">
-                                {(() => {
-                                  const referer = (log.allParams as any).referer;
+                        <TableCell className="max-w-[300px]">
+                          {log.requestUrl ? (
+                            <div 
+                              className="text-xs font-mono text-muted-foreground truncate cursor-pointer hover:text-foreground"
+                              title={log.requestUrl}
+                              onClick={() => {
+                                navigator.clipboard.writeText(log.requestUrl || "");
+                              }}
+                            >
+                              {(() => {
+                                try {
+                                  const url = new URL(log.requestUrl);
+                                  return url.pathname + url.search;
+                                } catch {
+                                  return log.requestUrl;
+                                }
+                              })()}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">
+                              {(log.allParams as any)?.referer ? (
+                                (() => {
                                   try {
-                                    const url = new URL(referer);
+                                    const url = new URL((log.allParams as any).referer);
                                     return url.hostname.replace('www.', '').replace('m.', '');
                                   } catch {
-                                    return referer || "-";
+                                    return (log.allParams as any).referer;
                                   }
-                                })()}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground italic">
-                                {language === "pt-BR" ? "Direto" : "Direct"}
-                              </span>
-                            )}
-                          </div>
+                                })()
+                              ) : (
+                                language === "pt-BR" ? "Sem dados" : "No data"
+                              )}
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm font-mono">{log.ipAddress || "-"}</TableCell>
                         <TableCell className="max-w-xs">
