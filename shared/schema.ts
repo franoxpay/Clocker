@@ -152,6 +152,9 @@ export const clickLogs = pgTable(
     device: varchar("device"),
     redirectedTo: varchar("redirected_to").notNull(),
     allParams: jsonb("all_params"),
+    responseTimeMs: integer("response_time_ms"),
+    hasError: boolean("has_error").default(false),
+    errorMessage: text("error_message"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
