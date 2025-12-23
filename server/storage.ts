@@ -38,6 +38,7 @@ export interface IStorage {
   updateUser(id: string, data: Partial<UpsertUser>): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(page: number, limit: number, search?: string): Promise<{ users: User[]; total: number }>;
+  deleteUserWithCascade(userId: string): Promise<void>;
 
   getPlan(id: number): Promise<Plan | undefined>;
   getAllPlans(): Promise<Plan[]>;
@@ -155,6 +156,17 @@ export class DatabaseStorage implements IStorage {
     const result = await query.orderBy(desc(users.createdAt)).limit(limit).offset(offset);
     
     return { users: result, total: Number(count) };
+  }
+
+  async deleteUserWithCascade(userId: string): Promise<void> {
+    await db.delete(clickLogs).where(eq(clickLogs.userId, userId));
+    await db.delete(dailyClickMetrics).where(eq(dailyClickMetrics.userId, userId));
+    await db.delete(notifications).where(eq(notifications.userId, userId));
+    await db.delete(offers).where(eq(offers.userId, userId));
+    await db.delete(domains).where(eq(domains.userId, userId));
+    await db.delete(adminImpersonations).where(eq(adminImpersonations.targetUserId, userId));
+    await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, userId));
+    await db.delete(users).where(eq(users.id, userId));
   }
 
   async getPlan(id: number): Promise<Plan | undefined> {

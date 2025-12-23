@@ -897,6 +897,28 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/users/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (user.email?.toLowerCase() === adminEmail) {
+        return res.status(400).json({ message: "Cannot delete admin user" });
+      }
+      
+      await storage.deleteUserWithCascade(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/impersonate/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const adminId = (req.user as any).id;

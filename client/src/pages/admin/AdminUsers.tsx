@@ -37,6 +37,16 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Plan } from "@shared/schema";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { 
   Search, 
   MoreVertical, 
@@ -48,6 +58,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Key,
+  Trash2,
 } from "lucide-react";
 
 interface UsersResponse {
@@ -67,9 +78,12 @@ export default function AdminUsers() {
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [daysToAdd, setDaysToAdd] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [deleteUser, setDeleteUser] = useState<User | null>(null);
 
+  const usersUrl = `/api/admin/users?page=${page}${search ? `&search=${encodeURIComponent(search)}` : ""}`;
+  
   const { data, isLoading } = useQuery<UsersResponse>({
-    queryKey: ["/api/admin/users", page, search],
+    queryKey: [usersUrl],
   });
 
   const { data: plans = [] } = useQuery<Plan[]>({
@@ -81,7 +95,7 @@ export default function AdminUsers() {
       await apiRequest("POST", `/api/admin/users/${userId}/suspend`, { suspend });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       toast({
         title: t("common.success"),
         description: language === "pt-BR" ? "Usuário atualizado" : "User updated",
@@ -116,7 +130,7 @@ export default function AdminUsers() {
       await apiRequest("POST", `/api/admin/users/${userId}/force-payment`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       toast({
         title: t("common.success"),
         description: language === "pt-BR" ? "Pagamento registrado" : "Payment registered",
@@ -135,7 +149,7 @@ export default function AdminUsers() {
       await apiRequest("POST", `/api/admin/users/${userId}/change-plan`, { planId });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       setActionType(null);
       setSelectedUser(null);
       toast({
@@ -156,7 +170,7 @@ export default function AdminUsers() {
       await apiRequest("POST", `/api/admin/users/${userId}/add-days`, { days });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       setActionType(null);
       setSelectedUser(null);
       setDaysToAdd("");
@@ -178,7 +192,7 @@ export default function AdminUsers() {
       await apiRequest("POST", `/api/admin/users/${userId}/change-password`, { password });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       setActionType(null);
       setSelectedUser(null);
       setNewPassword("");
@@ -190,6 +204,27 @@ export default function AdminUsers() {
     onError: () => {
       toast({
         title: t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await apiRequest("DELETE", `/api/admin/users/${userId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
+      setDeleteUser(null);
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Usuário deletado com sucesso" : "User deleted successfully",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: language === "pt-BR" ? "Erro ao deletar usuário" : "Error deleting user",
         variant: "destructive",
       });
     },
@@ -342,6 +377,13 @@ export default function AdminUsers() {
                               {user.suspendedAt !== null
                                 ? t("admin.users.activate")
                                 : t("admin.users.suspend")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setDeleteUser(user)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {language === "pt-BR" ? "Deletar Usuário" : "Delete User"}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -502,6 +544,30 @@ export default function AdminUsers() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === "pt-BR" ? "Deletar Usuário" : "Delete User"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === "pt-BR" 
+                ? `Tem certeza que deseja deletar o usuário "${deleteUser?.email}"? Esta ação é irreversível e vai deletar todos os domínios e ofertas associados.`
+                : `Are you sure you want to delete the user "${deleteUser?.email}"? This action is irreversible and will delete all associated domains and offers.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.id)}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {deleteUserMutation.isPending ? t("common.loading") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
