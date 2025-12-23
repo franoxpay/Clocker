@@ -8,8 +8,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { Shield, Zap, Globe, BarChart3, Check } from "lucide-react";
 import Auth from "./Auth";
-import logoPreta from "@assets/preta_1766452084601.png";
-import logoBranca from "@assets/branca_1766452088725.png";
+const logoPreta = "/images/logo-dark.png";
+const logoBranca = "/images/logo-light.png";
 
 const plans = [
   {
