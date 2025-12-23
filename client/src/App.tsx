@@ -25,6 +25,7 @@ import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminPlans from "@/pages/admin/AdminPlans";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminSharedDomains from "@/pages/admin/AdminSharedDomains";
+import AdminMonitoring from "@/pages/admin/AdminMonitoring";
 import NotFound from "@/pages/not-found";
 
 function UserRoutes() {
@@ -48,6 +49,7 @@ function AdminRoutes() {
       <Route path="/confg-admin/users" component={AdminUsers} />
       <Route path="/confg-admin/plans" component={AdminPlans} />
       <Route path="/confg-admin/shared-domains" component={AdminSharedDomains} />
+      <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
       <Route path="/confg-admin/settings" component={AdminSettings} />
       <Route component={NotFound} />
     </Switch>
