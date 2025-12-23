@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, Eye, Trash2, ShieldBan, Copy, ExternalLink } from "lucide-react";
+import { Plus, Eye, Trash2, ShieldBan, Copy, Check, ChevronDown, ChevronUp, Link, Settings2 } from "lucide-react";
 import type { Offer } from "@shared/schema";
 
 interface PatternStats {
@@ -30,6 +30,8 @@ export default function AdminHoneypots() {
   const [statsOpen, setStatsOpen] = useState(false);
   const [selectedHoneypot, setSelectedHoneypot] = useState<Offer | null>(null);
   const [selectedPatterns, setSelectedPatterns] = useState<Array<{ type: string; value: string; platform: string }>>([]);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -118,10 +120,27 @@ export default function AdminHoneypots() {
     return selectedPatterns.some(p => p.type === type && p.value === value);
   };
 
-  const copyUrl = (honeypot: Offer) => {
-    const url = `${window.location.origin}/r/${honeypot.slug}?xcode=${honeypot.xcode}`;
-    navigator.clipboard.writeText(url);
-    toast({ title: "URL copiada!" });
+  const getHoneypotUrl = (hp: Offer) => {
+    const domain = window.location.host;
+    return `https://${domain}/${hp.slug}`;
+  };
+
+  const getHoneypotParams = (hp: Offer) => {
+    if (hp.platform === "tiktok") {
+      return `?ttclid=__CLICKID__&adid=__CID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&domain=__DOMAIN__&placement=__PLACEMENT__&xcode=${hp.xcode}`;
+    }
+    return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${hp.xcode}`;
+  };
+
+  const copyToClipboard = (text: string, fieldId: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldId);
+    setTimeout(() => setCopiedField(null), 2000);
+    toast({ title: "Copiado!" });
+  };
+
+  const toggleExpand = (id: number) => {
+    setExpandedId(expandedId === id ? null : id);
   };
 
   if (isLoading) {
@@ -206,7 +225,7 @@ export default function AdminHoneypots() {
         <CardHeader>
           <CardTitle>Honeypots Ativos</CardTitle>
           <CardDescription>
-            Use essas ofertas em campanhas de teste para capturar padrões de bots
+            Use essas ofertas em campanhas de teste para capturar padrões de bots. Clique para expandir e ver parâmetros.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -214,6 +233,7 @@ export default function AdminHoneypots() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-8"></TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Plataforma</TableHead>
                   <TableHead>Slug</TableHead>
@@ -224,53 +244,139 @@ export default function AdminHoneypots() {
               </TableHeader>
               <TableBody>
                 {honeypots.map(hp => (
-                  <TableRow key={hp.id} data-testid={`row-honeypot-${hp.id}`}>
-                    <TableCell className="font-medium">{hp.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{hp.platform}</Badge>
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">{hp.slug}</TableCell>
-                    <TableCell>{hp.totalClicks}</TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={hp.isActive}
-                        onCheckedChange={checked => toggleMutation.mutate({ id: hp.id, isActive: checked })}
-                        data-testid={`switch-honeypot-${hp.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => copyUrl(hp)}
-                          data-testid={`button-copy-url-${hp.id}`}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => {
-                            setSelectedHoneypot(hp);
-                            setSelectedPatterns([]);
-                            setStatsOpen(true);
-                          }}
-                          data-testid={`button-view-stats-${hp.id}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => deleteMutation.mutate(hp.id)}
-                          data-testid={`button-delete-honeypot-${hp.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
+                  <Fragment key={hp.id}>
+                    <TableRow 
+                      className="cursor-pointer"
+                      onClick={() => toggleExpand(hp.id)}
+                      data-testid={`row-honeypot-${hp.id}`}
+                    >
+                      <TableCell>
+                        {expandedId === hp.id ? (
+                          <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{hp.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{hp.platform}</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{hp.slug}</TableCell>
+                      <TableCell>{hp.totalClicks}</TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <Switch
+                          checked={hp.isActive}
+                          onCheckedChange={checked => toggleMutation.mutate({ id: hp.id, isActive: checked })}
+                          data-testid={`switch-honeypot-${hp.id}`}
+                        />
+                      </TableCell>
+                      <TableCell onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedHoneypot(hp);
+                              setSelectedPatterns([]);
+                              setStatsOpen(true);
+                            }}
+                            data-testid={`button-view-stats-${hp.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteMutation.mutate(hp.id)}
+                            data-testid={`button-delete-honeypot-${hp.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {expandedId === hp.id && (
+                      <TableRow key={`${hp.id}-expanded`} className="bg-muted/50">
+                        <TableCell colSpan={7} className="p-4">
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium flex items-center gap-2">
+                                <Link className="w-4 h-4" />
+                                URL da Campanha:
+                              </Label>
+                              <div className="flex items-center gap-2 bg-background border rounded-md">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => copyToClipboard(getHoneypotUrl(hp), `url-${hp.id}`)}
+                                  data-testid={`button-copy-url-${hp.id}`}
+                                >
+                                  {copiedField === `url-${hp.id}` ? (
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <div className="flex items-center flex-1 overflow-hidden">
+                                  <span className="text-muted-foreground text-sm px-2 py-2 bg-muted rounded-l shrink-0">
+                                    https://{window.location.host}/
+                                  </span>
+                                  <span className="text-sm font-medium px-2 py-2">
+                                    {hp.slug}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium flex items-center gap-2">
+                                <Settings2 className="w-4 h-4" />
+                                Parâmetros ({hp.platform === "tiktok" ? "TikTok" : "Facebook"}):
+                              </Label>
+                              <div className="flex items-center gap-2 bg-background border rounded-md">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => copyToClipboard(getHoneypotParams(hp), `params-${hp.id}`)}
+                                  data-testid={`button-copy-params-${hp.id}`}
+                                >
+                                  {copiedField === `params-${hp.id}` ? (
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => copyToClipboard(getHoneypotUrl(hp) + getHoneypotParams(hp), `full-${hp.id}`)}
+                                  data-testid={`button-copy-full-${hp.id}`}
+                                  title="Copiar URL completa com parâmetros"
+                                >
+                                  {copiedField === `full-${hp.id}` ? (
+                                    <Check className="w-4 h-4 text-green-500" />
+                                  ) : (
+                                    <Link className="w-4 h-4" />
+                                  )}
+                                </Button>
+                                <div className="flex-1 overflow-x-auto py-2 px-2">
+                                  <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
+                                    {getHoneypotParams(hp)}
+                                  </code>
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                xcode: <span className="font-mono">{hp.xcode}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
