@@ -211,6 +211,7 @@ export default function Logs() {
                       <TableHead>{t("logs.redirectType")}</TableHead>
                       <TableHead>{t("logs.country")}</TableHead>
                       <TableHead>{t("logs.device")}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Origem" : "Source"}</TableHead>
                       <TableHead>{t("logs.ip")}</TableHead>
                       <TableHead className="max-w-xs">{t("logs.userAgent")}</TableHead>
                     </TableRow>
@@ -238,6 +239,27 @@ export default function Logs() {
                           {log.country ? getCountryName(log.country, language) : "-"}
                         </TableCell>
                         <TableCell className="capitalize">{log.device || "-"}</TableCell>
+                        <TableCell className="max-w-[150px]">
+                          <div className="text-xs text-muted-foreground truncate" title={(log.allParams as any)?.referer || ""}>
+                            {(log.allParams as any)?.referer ? (
+                              <span className="text-foreground">
+                                {(() => {
+                                  const referer = (log.allParams as any).referer;
+                                  try {
+                                    const url = new URL(referer);
+                                    return url.hostname.replace('www.', '').replace('m.', '');
+                                  } catch {
+                                    return referer || "-";
+                                  }
+                                })()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground italic">
+                                {language === "pt-BR" ? "Direto" : "Direct"}
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-sm font-mono">{log.ipAddress || "-"}</TableCell>
                         <TableCell className="max-w-xs">
                           <div className="text-xs text-muted-foreground truncate" title={log.userAgent || ""}>
