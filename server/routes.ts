@@ -114,7 +114,11 @@ export async function registerRoutes(
       const { password, ...userWithoutPassword } = user;
       const isSuspended = user.suspendedAt !== null;
       const isTrialing = user.trialEndsAt !== null && new Date(user.trialEndsAt) > new Date();
-      res.json({ ...userWithoutPassword, isSuspended, isTrialing });
+      
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
+      
+      res.json({ ...userWithoutPassword, isSuspended, isTrialing, isAdmin });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Internal server error" });

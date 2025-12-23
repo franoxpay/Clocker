@@ -155,7 +155,14 @@ export const isAdmin: RequestHandler = async (req, res, next) => {
 
   try {
     const user = await storage.getUser(userId);
-    if (!user?.isAdmin) {
+    if (!user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+    const isAdminUser = adminEmail && user.email?.toLowerCase() === adminEmail;
+    
+    if (!isAdminUser) {
       return res.status(403).json({ message: "Forbidden" });
     }
     (req as any).user = { id: userId };
