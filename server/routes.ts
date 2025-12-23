@@ -1298,7 +1298,10 @@ export async function registerRoutes(
       const redirectType = shouldRedirectToBlack ? "black" : "white";
       const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
 
-      // Log the click
+      // Calculate response time before logging
+      const duration = Date.now() - startTime;
+
+      // Log the click with response time
       await storage.createClickLog({
         offerId: offer.id,
         userId: offer.userId,
@@ -1307,6 +1310,8 @@ export async function registerRoutes(
         country,
         device: deviceType,
         redirectedTo: redirectType,
+        responseTimeMs: duration,
+        hasError: false,
         allParams: {
           domainId: domain?.id || offer.domainId || null,
           platform: offer.platform,
@@ -1322,7 +1327,6 @@ export async function registerRoutes(
       // Increment click counters
       await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
 
-      const duration = Date.now() - startTime;
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
 
       // Build final redirect URL with all query params for black page
@@ -1481,6 +1485,9 @@ export async function registerRoutes(
       const redirectType = shouldRedirectToBlack ? "black" : "white";
       const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
 
+      // Calculate response time before logging
+      const duration = Date.now() - startTime;
+
       await storage.createClickLog({
         offerId: offer.id,
         userId: offer.userId,
@@ -1489,6 +1496,8 @@ export async function registerRoutes(
         country,
         device: deviceType,
         redirectedTo: redirectType,
+        responseTimeMs: duration,
+        hasError: false,
         allParams: {
           domainId: domain?.id || offer.domainId || null,
           platform: offer.platform,
@@ -1503,7 +1512,6 @@ export async function registerRoutes(
 
       await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
 
-      const duration = Date.now() - startTime;
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
 
       // Build final redirect URL with all query params for black page
