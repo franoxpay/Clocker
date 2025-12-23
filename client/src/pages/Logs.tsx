@@ -61,7 +61,7 @@ export default function Logs() {
   });
 
   const { data, isLoading } = useQuery<LogsResponse>({
-    queryKey: ["/api/logs", queryParams.toString()],
+    queryKey: [`/api/logs?${queryParams.toString()}`],
   });
 
   const totalPages = data ? Math.ceil(data.total / data.limit) : 0;
