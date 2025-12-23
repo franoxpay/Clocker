@@ -91,6 +91,26 @@ export const domains = pgTable(
   ]
 );
 
+// Shared domains table (admin-managed domains available to all users)
+export const sharedDomains = pgTable(
+  "shared_domains",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    subdomain: varchar("subdomain").notNull(),
+    easypanelDomainId: varchar("easypanel_domain_id"),
+    isActive: boolean("is_active").default(true).notNull(),
+    isVerified: boolean("is_verified").default(false).notNull(),
+    lastCheckedAt: timestamp("last_checked_at"),
+    lastVerificationError: text("last_verification_error"),
+    sslStatus: varchar("ssl_status").default("pending"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("shared_domains_subdomain_idx").on(table.subdomain),
+  ]
+);
+
 // Offers table
 export const offers = pgTable(
   "offers",
@@ -98,6 +118,7 @@ export const offers = pgTable(
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     domainId: integer("domain_id").references(() => domains.id, { onDelete: "cascade" }),
+    sharedDomainId: integer("shared_domain_id").references(() => sharedDomains.id, { onDelete: "set null" }),
     name: varchar("name").notNull(),
     slug: varchar("slug").notNull(),
     xcode: varchar("xcode").notNull(),
@@ -239,7 +260,15 @@ export const offersRelations = relations(offers, ({ one, many }) => ({
     fields: [offers.domainId],
     references: [domains.id],
   }),
+  sharedDomain: one(sharedDomains, {
+    fields: [offers.sharedDomainId],
+    references: [sharedDomains.id],
+  }),
   clickLogs: many(clickLogs),
+}));
+
+export const sharedDomainsRelations = relations(sharedDomains, ({ many }) => ({
+  offers: many(offers),
 }));
 
 export const clickLogsRelations = relations(clickLogs, ({ one }) => ({
@@ -279,6 +308,12 @@ export const insertDomainSchema = createInsertSchema(domains).omit({
   updatedAt: true,
 });
 
+export const insertSharedDomainSchema = createInsertSchema(sharedDomains).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertOfferSchema = createInsertSchema(offers).omit({
   id: true,
   xcode: true,
@@ -309,6 +344,9 @@ export type InsertPlan = z.infer<typeof insertPlanSchema>;
 
 export type Domain = typeof domains.$inferSelect;
 export type InsertDomain = z.infer<typeof insertDomainSchema>;
+
+export type SharedDomain = typeof sharedDomains.$inferSelect;
+export type InsertSharedDomain = z.infer<typeof insertSharedDomainSchema>;
 
 export type Offer = typeof offers.$inferSelect;
 export type InsertOffer = z.infer<typeof insertOfferSchema>;

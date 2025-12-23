@@ -958,6 +958,120 @@ export async function registerRoutes(
     }
   });
 
+  // Shared domains - Admin routes
+  app.get("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domains = await storage.getAllSharedDomains();
+      res.json(domains);
+    } catch (error) {
+      console.error("Error fetching shared domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { subdomain } = req.body;
+      
+      // Check if domain already exists in regular domains or shared domains
+      const existingDomain = await storage.getDomainBySubdomain(subdomain);
+      const existingShared = await storage.getSharedDomainBySubdomain(subdomain);
+      
+      if (existingDomain || existingShared) {
+        return res.status(400).json({ message: "Domain already exists" });
+      }
+      
+      let domain = await storage.createSharedDomain({
+        subdomain,
+        isActive: true,
+        isVerified: false,
+        sslStatus: "pending",
+      });
+      
+      // Sync with EasyPanel
+      const { easypanelService } = await import("./easypanel");
+      if (easypanelService.isConfigured()) {
+        const result = await easypanelService.addDomain(subdomain);
+        if (result.success && result.domainId) {
+          domain = await storage.updateSharedDomain(domain.id, {
+            easypanelDomainId: result.domainId
+          }) || domain;
+        }
+      }
+      
+      res.json(domain);
+    } catch (error) {
+      console.error("Error creating shared domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/shared-domains/:id/verify", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domainId = parseInt(req.params.id);
+      const domain = await storage.getSharedDomain(domainId);
+      
+      if (!domain) {
+        return res.status(404).json({ message: "Domain not found" });
+      }
+      
+      const dnsResult = await verifyDomainDNS(domain.subdomain);
+      
+      const updated = await storage.updateSharedDomain(domainId, {
+        isVerified: dnsResult.verified,
+        lastCheckedAt: new Date(),
+        lastVerificationError: dnsResult.error || null,
+        sslStatus: dnsResult.verified ? "active" : "pending",
+      });
+      
+      if (!dnsResult.verified) {
+        return res.status(400).json({ 
+          message: dnsResult.error || "DNS verification failed",
+          domain: updated
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error verifying shared domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/shared-domains/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domainId = parseInt(req.params.id);
+      const domain = await storage.getSharedDomain(domainId);
+      
+      if (!domain) {
+        return res.status(404).json({ message: "Domain not found" });
+      }
+      
+      // Sync with EasyPanel
+      const { easypanelService } = await import("./easypanel");
+      if (easypanelService.isConfigured() && domain.easypanelDomainId) {
+        await easypanelService.removeDomain(domain.easypanelDomainId);
+      }
+      
+      await storage.deleteSharedDomain(domainId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting shared domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Shared domains - User route (get available shared domains)
+  app.get("/api/shared-domains", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const domains = await storage.getActiveSharedDomains();
+      res.json(domains);
+    } catch (error) {
+      console.error("Error fetching shared domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Helper function to extract domain from request headers
   // Checks multiple headers that reverse proxies like EasyPanel, Nginx, Traefik may use
   function extractDomainFromRequest(req: Request): string {
@@ -1013,17 +1127,26 @@ export async function registerRoutes(
       console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
       
       let domain = await storage.getDomainBySubdomain(domainToCheck);
+      let sharedDomain = null;
       let offer = null;
       
       if (domain && domain.isActive && domain.isVerified) {
-        // Found valid domain, get offer by slug and domain
+        // Found valid user domain, get offer by slug and domain
         offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
       } else {
-        // Fallback: try to find offer by slug only (for testing/development)
-        console.log(`[Cloak] Domain not found or invalid, trying fallback lookup for slug: ${slug}`);
-        offer = await storage.getOfferBySlug(slug);
-        if (offer && offer.domainId) {
-          domain = await storage.getDomain(offer.domainId);
+        // Check if it's a shared domain
+        sharedDomain = await storage.getSharedDomainBySubdomain(domainToCheck);
+        
+        if (sharedDomain && sharedDomain.isActive && sharedDomain.isVerified) {
+          // Found valid shared domain, get offer by slug and sharedDomainId
+          offer = await storage.getOfferBySlugAndSharedDomain(slug, sharedDomain.id);
+        } else {
+          // Fallback: try to find offer by slug only (for testing/development)
+          console.log(`[Cloak] Domain not found or invalid, trying fallback lookup for slug: ${slug}`);
+          offer = await storage.getOfferBySlug(slug);
+          if (offer && offer.domainId) {
+            domain = await storage.getDomain(offer.domainId);
+          }
         }
       }
       

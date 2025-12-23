@@ -4,6 +4,7 @@ import {
   users,
   plans,
   domains,
+  sharedDomains,
   offers,
   clickLogs,
   dailyClickMetrics,
@@ -18,6 +19,8 @@ import {
   type InsertPlan,
   type Domain,
   type InsertDomain,
+  type SharedDomain,
+  type InsertSharedDomain,
   type Offer,
   type InsertOffer,
   type ClickLog,
@@ -48,9 +51,18 @@ export interface IStorage {
   updateDomain(id: number, data: Partial<InsertDomain>): Promise<Domain | undefined>;
   deleteDomain(id: number): Promise<void>;
 
+  getSharedDomain(id: number): Promise<SharedDomain | undefined>;
+  getSharedDomainBySubdomain(subdomain: string): Promise<SharedDomain | undefined>;
+  getAllSharedDomains(): Promise<SharedDomain[]>;
+  getActiveSharedDomains(): Promise<SharedDomain[]>;
+  createSharedDomain(domain: InsertSharedDomain): Promise<SharedDomain>;
+  updateSharedDomain(id: number, data: Partial<InsertSharedDomain>): Promise<SharedDomain | undefined>;
+  deleteSharedDomain(id: number): Promise<void>;
+
   getOffer(id: number): Promise<Offer | undefined>;
   getOfferBySlug(slug: string): Promise<Offer | undefined>;
   getOfferBySlugAndDomain(slug: string, domainId: number | null): Promise<Offer | undefined>;
+  getOfferBySlugAndSharedDomain(slug: string, sharedDomainId: number): Promise<Offer | undefined>;
   getOffersByUserId(userId: string): Promise<Offer[]>;
   createOffer(offer: InsertOffer & { xcode: string }): Promise<Offer>;
   updateOffer(id: number, data: Partial<InsertOffer>): Promise<Offer | undefined>;
@@ -215,6 +227,42 @@ export class DatabaseStorage implements IStorage {
     await db.delete(domains).where(eq(domains.id, id));
   }
 
+  async getSharedDomain(id: number): Promise<SharedDomain | undefined> {
+    const [domain] = await db.select().from(sharedDomains).where(eq(sharedDomains.id, id)).limit(1);
+    return domain;
+  }
+
+  async getSharedDomainBySubdomain(subdomain: string): Promise<SharedDomain | undefined> {
+    const [domain] = await db.select().from(sharedDomains).where(eq(sharedDomains.subdomain, subdomain)).limit(1);
+    return domain;
+  }
+
+  async getAllSharedDomains(): Promise<SharedDomain[]> {
+    return db.select().from(sharedDomains).orderBy(desc(sharedDomains.createdAt));
+  }
+
+  async getActiveSharedDomains(): Promise<SharedDomain[]> {
+    return db.select().from(sharedDomains).where(and(eq(sharedDomains.isActive, true), eq(sharedDomains.isVerified, true))).orderBy(sharedDomains.subdomain);
+  }
+
+  async createSharedDomain(domain: InsertSharedDomain): Promise<SharedDomain> {
+    const [created] = await db.insert(sharedDomains).values(domain).returning();
+    return created;
+  }
+
+  async updateSharedDomain(id: number, data: Partial<InsertSharedDomain>): Promise<SharedDomain | undefined> {
+    const [updated] = await db
+      .update(sharedDomains)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(sharedDomains.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSharedDomain(id: number): Promise<void> {
+    await db.delete(sharedDomains).where(eq(sharedDomains.id, id));
+  }
+
   async getOffer(id: number): Promise<Offer | undefined> {
     const [offer] = await db.select().from(offers).where(eq(offers.id, id)).limit(1);
     return offer;
@@ -232,6 +280,18 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(offers.slug, slug), 
         domainId === null ? isNull(offers.domainId) : eq(offers.domainId, domainId)
+      ))
+      .limit(1);
+    return offer;
+  }
+
+  async getOfferBySlugAndSharedDomain(slug: string, sharedDomainId: number): Promise<Offer | undefined> {
+    const [offer] = await db
+      .select()
+      .from(offers)
+      .where(and(
+        eq(offers.slug, slug),
+        eq(offers.sharedDomainId, sharedDomainId)
       ))
       .limit(1);
     return offer;
