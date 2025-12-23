@@ -28,6 +28,7 @@ import {
   CreditCard,
   Cog,
   BarChart3,
+  ArrowLeft,
 } from "lucide-react";
 const logoPreta = "/images/logo-dark.png";
 const logoBranca = "/images/logo-light.png";
@@ -130,6 +131,23 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                     <Link href="/confg-admin" data-testid="nav-admin-panel">
                       <Cog className="w-4 h-4" />
                       <span>Painel Admin</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <Link href="/" data-testid="nav-back-to-user">
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>{t("nav.backToUser")}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
