@@ -51,6 +51,7 @@ export interface IStorage {
   getDomain(id: number): Promise<Domain | undefined>;
   getDomainBySubdomain(subdomain: string): Promise<Domain | undefined>;
   getDomainsByUserId(userId: string): Promise<Domain[]>;
+  getAllDomains(): Promise<Domain[]>;
   createDomain(domain: InsertDomain): Promise<Domain>;
   updateDomain(id: number, data: Partial<InsertDomain>): Promise<Domain | undefined>;
   deleteDomain(id: number): Promise<void>;
@@ -134,7 +135,7 @@ export interface IStorage {
 
   // Admin honeypot methods
   getAdminHoneypots(): Promise<Offer[]>;
-  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null }): Promise<Offer>;
+  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null; domainId?: number | null }): Promise<Offer>;
   getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }>;
   getHoneypotPatternStats(offerId: number): Promise<{
     topUserAgents: Array<{ userAgent: string; count: number }>;
@@ -266,6 +267,10 @@ export class DatabaseStorage implements IStorage {
 
   async getDomainsByUserId(userId: string): Promise<Domain[]> {
     return db.select().from(domains).where(eq(domains.userId, userId)).orderBy(desc(domains.createdAt));
+  }
+
+  async getAllDomains(): Promise<Domain[]> {
+    return db.select().from(domains).orderBy(desc(domains.createdAt));
   }
 
   async createDomain(domain: InsertDomain): Promise<Domain> {
@@ -771,7 +776,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(offers.createdAt));
   }
 
-  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null }): Promise<Offer> {
+  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null; domainId?: number | null }): Promise<Offer> {
     const [created] = await db
       .insert(offers)
       .values({
@@ -783,6 +788,7 @@ export class DatabaseStorage implements IStorage {
         blackPageUrl: data.blackPageUrl,
         whitePageUrl: data.whitePageUrl,
         sharedDomainId: data.sharedDomainId || null,
+        domainId: data.domainId || null,
         allowedCountries: [],
         allowedDevices: [],
         isActive: true,

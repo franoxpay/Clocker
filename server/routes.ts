@@ -1025,6 +1025,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/all-domains", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userDomains = await storage.getAllDomains();
+      res.json(userDomains);
+    } catch (error) {
+      console.error("Error fetching all domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
     try {
       let { subdomain } = req.body;
@@ -1265,13 +1275,13 @@ export async function registerRoutes(
 
   app.post("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { name, platform, blackPageUrl, whitePageUrl, sharedDomainId } = req.body;
+      const { name, slug: customSlug, platform, blackPageUrl, whitePageUrl, sharedDomainId, domainId } = req.body;
       
       if (!name || !platform || !blackPageUrl || !whitePageUrl) {
         return res.status(400).json({ message: "Missing required fields" });
       }
       
-      const slug = `hp-${Date.now().toString(36)}`;
+      const slug = customSlug && customSlug.trim() ? customSlug.trim() : `hp-${Date.now().toString(36)}`;
       const xcode = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       
       const honeypot = await storage.createAdminHoneypot({
@@ -1282,6 +1292,7 @@ export async function registerRoutes(
         blackPageUrl,
         whitePageUrl,
         sharedDomainId: sharedDomainId || null,
+        domainId: domainId || null,
       });
       
       res.status(201).json(honeypot);

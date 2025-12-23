@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Eye, Trash2, ShieldBan, Copy, Check, ChevronDown, ChevronUp, Link, Settings2 } from "lucide-react";
-import type { Offer, SharedDomain } from "@shared/schema";
+import type { Offer, SharedDomain, Domain } from "@shared/schema";
 
 interface PatternStats {
   topUserAgents: Array<{ userAgent: string; count: number }>;
@@ -35,10 +35,12 @@ export default function AdminHoneypots() {
   
   const [formData, setFormData] = useState({
     name: "",
+    slug: "",
     platform: "facebook",
     blackPageUrl: "",
     whitePageUrl: "",
-    sharedDomainId: "platform",
+    domainType: "platform" as "platform" | "shared" | "user",
+    domainId: "",
   });
 
   const platformDomain = typeof window !== "undefined" ? window.location.host : "";
@@ -51,6 +53,10 @@ export default function AdminHoneypots() {
     queryKey: ["/api/admin/shared-domains"],
   });
 
+  const { data: userDomains = [] } = useQuery<Domain[]>({
+    queryKey: ["/api/admin/all-domains"],
+  });
+
   const { data: stats, isLoading: statsLoading } = useQuery<PatternStats>({
     queryKey: ["/api/admin/honeypots", selectedHoneypot?.id, "stats"],
     enabled: !!selectedHoneypot,
@@ -59,15 +65,20 @@ export default function AdminHoneypots() {
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const submitData = {
-        ...data,
-        sharedDomainId: data.sharedDomainId === "platform" ? null : parseInt(data.sharedDomainId),
+        name: data.name,
+        slug: data.slug || undefined,
+        platform: data.platform,
+        blackPageUrl: data.blackPageUrl,
+        whitePageUrl: data.whitePageUrl,
+        sharedDomainId: data.domainType === "shared" && data.domainId ? parseInt(data.domainId) : null,
+        domainId: data.domainType === "user" && data.domainId ? parseInt(data.domainId) : null,
       };
       return apiRequest("POST", "/api/admin/honeypots", submitData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/honeypots"] });
       setCreateOpen(false);
-      setFormData({ name: "", platform: "facebook", blackPageUrl: "", whitePageUrl: "", sharedDomainId: "platform" });
+      setFormData({ name: "", slug: "", platform: "facebook", blackPageUrl: "", whitePageUrl: "", domainType: "platform", domainId: "" });
       toast({ title: "Honeypot criado com sucesso" });
     },
     onError: () => {
@@ -132,6 +143,10 @@ export default function AdminHoneypots() {
   };
 
   const getHoneypotDomain = (hp: Offer) => {
+    if (hp.domainId) {
+      const userDomain = userDomains.find(d => d.id === hp.domainId);
+      if (userDomain) return userDomain.subdomain;
+    }
     if (hp.sharedDomainId) {
       const sharedDomain = sharedDomains.find(d => d.id === hp.sharedDomainId);
       if (sharedDomain) return sharedDomain.subdomain;
@@ -199,6 +214,16 @@ export default function AdminHoneypots() {
                 />
               </div>
               <div className="space-y-2">
+                <Label>Slug (URL personalizada)</Label>
+                <Input
+                  data-testid="input-honeypot-slug"
+                  value={formData.slug}
+                  onChange={e => setFormData({ ...formData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+                  placeholder="meu-slug (deixe vazio para auto-gerar)"
+                />
+                <p className="text-xs text-muted-foreground">Deixe vazio para gerar automaticamente</p>
+              </div>
+              <div className="space-y-2">
                 <Label>Plataforma</Label>
                 <Select value={formData.platform} onValueChange={v => setFormData({ ...formData, platform: v })}>
                   <SelectTrigger data-testid="select-honeypot-platform">
@@ -211,23 +236,52 @@ export default function AdminHoneypots() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Domínio</Label>
-                <Select value={formData.sharedDomainId} onValueChange={v => setFormData({ ...formData, sharedDomainId: v })}>
-                  <SelectTrigger data-testid="select-honeypot-domain">
+                <Label>Tipo de Domínio</Label>
+                <Select value={formData.domainType} onValueChange={(v: "platform" | "shared" | "user") => setFormData({ ...formData, domainType: v, domainId: "" })}>
+                  <SelectTrigger data-testid="select-honeypot-domain-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="platform">
-                      {platformDomain} (Plataforma)
-                    </SelectItem>
-                    {sharedDomains.filter(d => d.isActive).map(domain => (
-                      <SelectItem key={domain.id} value={String(domain.id)}>
-                        {domain.subdomain}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="platform">Domínio da Plataforma</SelectItem>
+                    <SelectItem value="shared">Domínio Compartilhado</SelectItem>
+                    <SelectItem value="user">Domínio de Usuário</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {formData.domainType === "shared" && (
+                <div className="space-y-2">
+                  <Label>Domínio Compartilhado</Label>
+                  <Select value={formData.domainId} onValueChange={v => setFormData({ ...formData, domainId: v })}>
+                    <SelectTrigger data-testid="select-honeypot-shared-domain">
+                      <SelectValue placeholder="Selecione um domínio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sharedDomains.filter(d => d.isActive).map(domain => (
+                        <SelectItem key={domain.id} value={String(domain.id)}>
+                          {domain.subdomain}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {formData.domainType === "user" && (
+                <div className="space-y-2">
+                  <Label>Domínio de Usuário</Label>
+                  <Select value={formData.domainId} onValueChange={v => setFormData({ ...formData, domainId: v })}>
+                    <SelectTrigger data-testid="select-honeypot-user-domain">
+                      <SelectValue placeholder="Selecione um domínio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {userDomains.filter(d => d.isActive).map(domain => (
+                        <SelectItem key={domain.id} value={String(domain.id)}>
+                          {domain.subdomain} ({domain.userId.slice(0, 8)}...)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>URL da Página Preta (armadilha)</Label>
                 <Input
