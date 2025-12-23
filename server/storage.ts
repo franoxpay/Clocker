@@ -12,6 +12,7 @@ import {
   adminSettings,
   passwordResetTokens,
   adminImpersonations,
+  botBans,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -28,6 +29,8 @@ import {
   type Notification,
   type InsertNotification,
   type AdminSettings,
+  type BotBan,
+  type InsertBotBan,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -118,6 +121,15 @@ export interface IStorage {
       hasError: boolean | null;
     }>;
   }>;
+
+  // Bot bans methods
+  getAllBotBans(): Promise<BotBan[]>;
+  getActiveBotBans(): Promise<BotBan[]>;
+  createBotBan(ban: InsertBotBan): Promise<BotBan>;
+  updateBotBan(id: number, data: Partial<InsertBotBan>): Promise<BotBan | undefined>;
+  deleteBotBan(id: number): Promise<void>;
+  incrementBotBanHitCount(id: number): Promise<void>;
+  checkIfBotBanned(ip: string, userAgent: string, platform?: string): Promise<{ banned: boolean; banId?: number; reason?: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -627,6 +639,116 @@ export class DatabaseStorage implements IStorage {
         hasError: row.hasError,
       })),
     };
+  }
+
+  // Bot bans methods
+  async getAllBotBans(): Promise<BotBan[]> {
+    return db.select().from(botBans).orderBy(desc(botBans.createdAt));
+  }
+
+  async getActiveBotBans(): Promise<BotBan[]> {
+    return db.select().from(botBans).where(eq(botBans.isActive, true));
+  }
+
+  async createBotBan(ban: InsertBotBan): Promise<BotBan> {
+    const [created] = await db.insert(botBans).values(ban).returning();
+    return created;
+  }
+
+  async updateBotBan(id: number, data: Partial<InsertBotBan>): Promise<BotBan | undefined> {
+    const [updated] = await db
+      .update(botBans)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(botBans.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteBotBan(id: number): Promise<void> {
+    await db.delete(botBans).where(eq(botBans.id, id));
+  }
+
+  async incrementBotBanHitCount(id: number): Promise<void> {
+    await db
+      .update(botBans)
+      .set({
+        hitCount: sql`${botBans.hitCount} + 1`,
+        lastHitAt: new Date(),
+      })
+      .where(eq(botBans.id, id));
+  }
+
+  async checkIfBotBanned(ip: string, userAgent: string, platform?: string): Promise<{ banned: boolean; banId?: number; reason?: string }> {
+    const activeBans = await this.getActiveBotBans();
+    
+    for (const ban of activeBans) {
+      // Check platform filter - skip platform-specific bans if:
+      // 1. The ban targets a specific platform (not "all")
+      // 2. AND either request platform is undefined OR doesn't match the ban's platform
+      if (ban.platform && ban.platform !== "all") {
+        if (!platform || ban.platform !== platform) {
+          continue;
+        }
+      }
+
+      if (ban.type === "user_agent") {
+        // Check if user-agent contains the banned string (case-insensitive)
+        if (userAgent.toLowerCase().includes(ban.value.toLowerCase())) {
+          return { banned: true, banId: ban.id, reason: `user_agent:${ban.value}` };
+        }
+      } else if (ban.type === "ip") {
+        // Exact IP match
+        if (ip === ban.value) {
+          return { banned: true, banId: ban.id, reason: `ip:${ban.value}` };
+        }
+      } else if (ban.type === "ip_range") {
+        // Check if IP is in CIDR range
+        if (this.isIpInRange(ip, ban.value)) {
+          return { banned: true, banId: ban.id, reason: `ip_range:${ban.value}` };
+        }
+      }
+    }
+
+    return { banned: false };
+  }
+
+  async checkIfBotBanExists(type: string, value: string, platform?: string): Promise<boolean> {
+    const conditions = [
+      eq(botBans.type, type as "user_agent" | "ip" | "ip_range"),
+      eq(botBans.value, value),
+    ];
+    
+    if (platform) {
+      conditions.push(eq(botBans.platform, platform as "all" | "facebook" | "tiktok"));
+    }
+    
+    const existing = await db.select({ id: botBans.id })
+      .from(botBans)
+      .where(and(...conditions))
+      .limit(1);
+    
+    return existing.length > 0;
+  }
+
+  // Helper function to check if IP is in CIDR range
+  private isIpInRange(ip: string, cidr: string): boolean {
+    try {
+      const [range, bits] = cidr.split("/");
+      const mask = bits ? parseInt(bits, 10) : 32;
+      
+      const ipParts = ip.split(".").map(Number);
+      const rangeParts = range.split(".").map(Number);
+      
+      if (ipParts.length !== 4 || rangeParts.length !== 4) return false;
+      
+      const ipNum = (ipParts[0] << 24) + (ipParts[1] << 16) + (ipParts[2] << 8) + ipParts[3];
+      const rangeNum = (rangeParts[0] << 24) + (rangeParts[1] << 16) + (rangeParts[2] << 8) + rangeParts[3];
+      const maskNum = ~((1 << (32 - mask)) - 1);
+      
+      return (ipNum & maskNum) === (rangeNum & maskNum);
+    } catch {
+      return false;
+    }
   }
 }
 

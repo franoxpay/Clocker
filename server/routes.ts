@@ -1137,6 +1137,121 @@ export async function registerRoutes(
     }
   });
 
+  // Bot bans - Admin routes
+  app.get("/api/admin/bot-bans", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const bans = await storage.getAllBotBans();
+      res.json(bans);
+    } catch (error) {
+      console.error("Error fetching bot bans:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/bot-bans", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { type, value, description, platform, isActive } = req.body;
+      
+      if (!type || !value) {
+        return res.status(400).json({ message: "Type and value are required" });
+      }
+      
+      if (!["user_agent", "ip", "ip_range"].includes(type)) {
+        return res.status(400).json({ message: "Invalid ban type" });
+      }
+      
+      const ban = await storage.createBotBan({
+        type,
+        value,
+        description: description || null,
+        platform: platform || null,
+        isActive: isActive !== false,
+      });
+      
+      res.json(ban);
+    } catch (error) {
+      console.error("Error creating bot ban:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.put("/api/admin/bot-bans/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const banId = parseInt(req.params.id);
+      const { type, value, description, platform, isActive } = req.body;
+      
+      const updated = await storage.updateBotBan(banId, {
+        type,
+        value,
+        description,
+        platform,
+        isActive,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Ban not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating bot ban:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/bot-bans/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const banId = parseInt(req.params.id);
+      await storage.deleteBotBan(banId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting bot ban:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Add common bot patterns as presets
+  app.post("/api/admin/bot-bans/add-presets", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const presets = [
+        // Facebook bots
+        { type: "user_agent", value: "facebookexternalhit", description: "Facebook link preview bot", platform: "facebook" },
+        { type: "ip_range", value: "69.63.0.0/16", description: "Facebook IP range", platform: "facebook" },
+        { type: "ip_range", value: "66.220.0.0/16", description: "Facebook IP range 2", platform: "facebook" },
+        { type: "ip_range", value: "173.252.0.0/16", description: "Facebook IP range 3", platform: "facebook" },
+        // TikTok bots
+        { type: "user_agent", value: "TikTok", description: "TikTok bot user agent", platform: "tiktok" },
+        { type: "user_agent", value: "Bytespider", description: "ByteDance/TikTok crawler", platform: "tiktok" },
+        // Generic bots
+        { type: "user_agent", value: "Googlebot", description: "Google crawler", platform: null },
+        { type: "user_agent", value: "bingbot", description: "Bing crawler", platform: null },
+        { type: "user_agent", value: "Slurp", description: "Yahoo crawler", platform: null },
+        { type: "user_agent", value: "DuckDuckBot", description: "DuckDuckGo crawler", platform: null },
+      ];
+      
+      const created = [];
+      for (const preset of presets) {
+        // Check if already exists by type/value/platform combination
+        const exists = await storage.checkIfBotBanExists(preset.type, preset.value, preset.platform || undefined);
+        if (!exists) {
+          const ban = await storage.createBotBan({
+            type: preset.type as "user_agent" | "ip" | "ip_range",
+            value: preset.value,
+            description: preset.description,
+            platform: preset.platform,
+            isActive: true,
+          });
+          created.push(ban);
+        }
+      }
+      
+      res.json({ message: `Added ${created.length} preset bans`, bans: created });
+    } catch (error) {
+      console.error("Error adding preset bans:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Shared domains - User route (get available shared domains)
   app.get("/api/shared-domains", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -1234,6 +1349,85 @@ export async function registerRoutes(
       if (!offer.isActive) {
         console.log(`[Cloak] Offer inactive: ${slug}`);
         return res.status(404).send("Not found");
+      }
+
+      // Check if this is a honeypot offer (auto-ban visitors)
+      if (offer.isHoneypot) {
+        console.log(`[Cloak] Honeypot offer triggered: ${slug}, IP: ${ip}, UA: ${userAgent}`);
+        
+        // Auto-ban the IP
+        const existingIpBan = await storage.checkIfBotBanned(ip, "", offer.platform);
+        if (!existingIpBan.banned) {
+          await storage.createBotBan({
+            type: "ip",
+            value: ip,
+            description: `Auto-banned from honeypot offer: ${offer.name}`,
+            platform: offer.platform,
+            isActive: true,
+          });
+          console.log(`[Cloak] Auto-banned IP from honeypot: ${ip}`);
+        }
+        
+        // Auto-ban the User-Agent if it looks like a bot
+        if (userAgent.toLowerCase().includes("bot") || 
+            userAgent.toLowerCase().includes("crawler") ||
+            userAgent.toLowerCase().includes("facebookexternalhit") ||
+            userAgent.toLowerCase().includes("tiktok")) {
+          const existingUaBan = await storage.checkIfBotBanned("", userAgent, offer.platform);
+          if (!existingUaBan.banned) {
+            await storage.createBotBan({
+              type: "user_agent",
+              value: userAgent.substring(0, 255),
+              description: `Auto-banned from honeypot offer: ${offer.name}`,
+              platform: offer.platform,
+              isActive: true,
+            });
+            console.log(`[Cloak] Auto-banned User-Agent from honeypot: ${userAgent.substring(0, 100)}...`);
+          }
+        }
+        
+        // Always redirect to white page for honeypot
+        return res.redirect(302, offer.whitePageUrl);
+      }
+
+      // Check if visitor is a banned bot
+      const botCheck = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
+      if (botCheck.banned) {
+        console.log(`[Cloak] Banned bot detected: ${botCheck.reason}, redirecting to white`);
+        
+        // Increment hit count for the ban
+        if (botCheck.banId) {
+          await storage.incrementBotBanHitCount(botCheck.banId);
+        }
+        
+        // Log the click as white redirect with ban reason
+        const duration = Date.now() - startTime;
+        const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+        const country = await getCountryFromIP(ip);
+        const deviceType = parseUserAgent(userAgent);
+        
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: "white",
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            failReason: `bot_banned:${botCheck.reason}`,
+          },
+        });
+        
+        await storage.incrementOfferClicks(offer.id, false);
+        
+        return res.redirect(302, offer.whitePageUrl);
       }
 
       const owner = await storage.getUser(offer.userId);
@@ -1447,6 +1641,78 @@ export async function registerRoutes(
       if (!offer.isActive) {
         console.log(`[Cloak] Offer inactive: ${slug}`);
         return res.status(404).send("Not found");
+      }
+
+      // Check if this is a honeypot offer (auto-ban visitors)
+      if (offer.isHoneypot) {
+        console.log(`[Cloak] Honeypot offer triggered: ${slug}, IP: ${ip}, UA: ${userAgent}`);
+        
+        const existingIpBan = await storage.checkIfBotBanned(ip, "", offer.platform);
+        if (!existingIpBan.banned) {
+          await storage.createBotBan({
+            type: "ip",
+            value: ip,
+            description: `Auto-banned from honeypot offer: ${offer.name}`,
+            platform: offer.platform,
+            isActive: true,
+          });
+        }
+        
+        if (userAgent.toLowerCase().includes("bot") || 
+            userAgent.toLowerCase().includes("crawler") ||
+            userAgent.toLowerCase().includes("facebookexternalhit") ||
+            userAgent.toLowerCase().includes("tiktok")) {
+          const existingUaBan = await storage.checkIfBotBanned("", userAgent, offer.platform);
+          if (!existingUaBan.banned) {
+            await storage.createBotBan({
+              type: "user_agent",
+              value: userAgent.substring(0, 255),
+              description: `Auto-banned from honeypot offer: ${offer.name}`,
+              platform: offer.platform,
+              isActive: true,
+            });
+          }
+        }
+        
+        return res.redirect(302, offer.whitePageUrl);
+      }
+
+      // Check if visitor is a banned bot
+      const botCheck2 = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
+      if (botCheck2.banned) {
+        console.log(`[Cloak] Banned bot detected: ${botCheck2.reason}, redirecting to white`);
+        
+        if (botCheck2.banId) {
+          await storage.incrementBotBanHitCount(botCheck2.banId);
+        }
+        
+        const duration = Date.now() - startTime;
+        const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+        const country = await getCountryFromIP(ip);
+        const deviceType = parseUserAgent(userAgent);
+        
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: "white",
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            failReason: `bot_banned:${botCheck2.reason}`,
+          },
+        });
+        
+        await storage.incrementOfferClicks(offer.id, false);
+        
+        return res.redirect(302, offer.whitePageUrl);
       }
 
       const owner = await storage.getUser(offer.userId);

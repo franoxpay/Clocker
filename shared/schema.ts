@@ -128,6 +128,7 @@ export const offers = pgTable(
     allowedCountries: text("allowed_countries").array().default(sql`ARRAY['BR']`).notNull(),
     allowedDevices: text("allowed_devices").array().default(sql`ARRAY['smartphone']`).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
+    isHoneypot: boolean("is_honeypot").default(false).notNull(),
     totalClicks: integer("total_clicks").default(0).notNull(),
     blackClicks: integer("black_clicks").default(0).notNull(),
     whiteClicks: integer("white_clicks").default(0).notNull(),
@@ -230,6 +231,27 @@ export const adminImpersonations = pgTable("admin_impersonations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
 });
+
+// Bot bans table - for blocking bots by user-agent, IP, or IP range
+export const botBans = pgTable(
+  "bot_bans",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    type: varchar("type").notNull(), // 'user_agent', 'ip', 'ip_range'
+    value: text("value").notNull(), // The pattern to match (user-agent string, IP, or CIDR range)
+    description: text("description"), // Optional description for admin reference
+    platform: varchar("platform"), // 'facebook', 'tiktok', 'all' (null = all)
+    isActive: boolean("is_active").default(true).notNull(),
+    hitCount: integer("hit_count").default(0).notNull(), // How many times this ban was triggered
+    lastHitAt: timestamp("last_hit_at"), // Last time this ban was triggered
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("bot_bans_type_idx").on(table.type),
+    index("bot_bans_active_idx").on(table.isActive),
+  ]
+);
 
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -365,3 +387,14 @@ export type DailyClickMetric = typeof dailyClickMetrics.$inferSelect;
 export type AdminSettings = typeof adminSettings.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type AdminImpersonation = typeof adminImpersonations.$inferSelect;
+
+export const insertBotBanSchema = createInsertSchema(botBans).omit({
+  id: true,
+  hitCount: true,
+  lastHitAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type BotBan = typeof botBans.$inferSelect;
+export type InsertBotBan = z.infer<typeof insertBotBanSchema>;
