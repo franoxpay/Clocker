@@ -66,6 +66,8 @@ export default function AdminMonitoring() {
   const { data: metrics, isLoading } = useQuery<SystemMetrics>({
     queryKey: ["/api/admin/system-metrics"],
     refetchInterval: 30000,
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   const formatDateTime = (dateStr: string) => {
