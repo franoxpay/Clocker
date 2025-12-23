@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { Link as LinkIcon, Shield, Zap, Globe, BarChart3, Check } from "lucide-react";
+import { Shield, Zap, Globe, BarChart3, Check } from "lucide-react";
 import Auth from "./Auth";
+import logoPreta from "@assets/preta_1766452084601.png";
+import logoBranca from "@assets/branca_1766452088725.png";
 
 const plans = [
   {
@@ -42,6 +45,7 @@ const plans = [
 
 export default function Landing() {
   const { t, language } = useLanguage();
+  const { theme } = useTheme();
   const [showAuth, setShowAuth] = useState(false);
 
   const features = [
@@ -83,11 +87,12 @@ export default function Landing() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <LinkIcon className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold text-lg">Cloaker</span>
+          <div className="flex items-center">
+            <img 
+              src={theme === "dark" ? logoBranca : logoPreta} 
+              alt="Clerion" 
+              className="h-8 w-auto"
+            />
           </div>
           <div className="flex items-center gap-2">
             <LanguageToggle />
@@ -233,7 +238,7 @@ export default function Landing() {
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 text-center text-muted-foreground text-sm">
           <p>
-            &copy; {new Date().getFullYear()} Cloaker.{" "}
+            &copy; {new Date().getFullYear()} Clerion.{" "}
             {language === "pt-BR" ? "Todos os direitos reservados." : "All rights reserved."}
           </p>
         </div>

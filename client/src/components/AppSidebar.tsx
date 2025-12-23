@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard,
   Link as LinkIcon,
@@ -28,6 +29,8 @@ import {
   Cog,
   BarChart3,
 } from "lucide-react";
+import logoPreta from "@assets/preta_1766452084601.png";
+import logoBranca from "@assets/branca_1766452088725.png";
 
 const userNavItems = [
   { key: "dashboard", path: "/", icon: LayoutDashboard, label: "nav.dashboard" },
@@ -52,6 +55,7 @@ interface AppSidebarProps {
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const { t } = useLanguage();
   const { user } = useAuth();
+  const { theme } = useTheme();
   const [location] = useLocation();
 
   const navItems = isAdmin ? adminNavItems : userNavItems;
@@ -80,11 +84,12 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-            <LinkIcon className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="font-semibold text-lg">Cloaker</span>
+        <div className="flex items-center">
+          <img 
+            src={theme === "dark" ? logoBranca : logoPreta} 
+            alt="Clerion" 
+            className="h-8 w-auto"
+          />
         </div>
       </SidebarHeader>
 
