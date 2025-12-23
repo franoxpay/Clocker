@@ -971,7 +971,25 @@ export async function registerRoutes(
 
   app.post("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { subdomain } = req.body;
+      let { subdomain } = req.body;
+      
+      if (!subdomain || typeof subdomain !== "string") {
+        return res.status(400).json({ message: "Subdomain is required" });
+      }
+      
+      // Normalize subdomain: remove protocol, trailing slashes, lowercase
+      subdomain = subdomain
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "")
+        .replace(/^www\./, "")
+        .trim();
+      
+      // Validate subdomain format (must be a valid domain)
+      const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+      if (!domainRegex.test(subdomain)) {
+        return res.status(400).json({ message: "Invalid domain format. Use format: subdomain.domain.com" });
+      }
       
       // Check if domain already exists in regular domains or shared domains
       const existingDomain = await storage.getDomainBySubdomain(subdomain);
@@ -996,6 +1014,8 @@ export async function registerRoutes(
           domain = await storage.updateSharedDomain(domain.id, {
             easypanelDomainId: result.domainId
           }) || domain;
+        } else {
+          console.warn(`[SharedDomains] Failed to sync with EasyPanel for ${subdomain}: ${result.error}`);
         }
       }
       
