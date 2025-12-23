@@ -1280,7 +1280,27 @@ export async function registerRoutes(
       const duration = Date.now() - startTime;
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
 
-      return res.redirect(302, targetUrl);
+      // Build final redirect URL with all query params for black page
+      let finalUrl = targetUrl;
+      if (shouldRedirectToBlack && Object.keys(req.query).length > 0) {
+        try {
+          const url = new URL(targetUrl);
+          for (const [key, value] of Object.entries(req.query)) {
+            if (typeof value === "string") {
+              url.searchParams.set(key, value);
+            } else if (Array.isArray(value)) {
+              value.forEach(v => {
+                if (typeof v === "string") url.searchParams.append(key, v);
+              });
+            }
+          }
+          finalUrl = url.toString();
+        } catch (e) {
+          console.error("[Cloak] Error building URL with params:", e);
+        }
+      }
+
+      return res.redirect(302, finalUrl);
     } catch (error) {
       console.error("[Cloak] Error:", error);
       return res.status(500).send("Internal server error");
@@ -1441,7 +1461,27 @@ export async function registerRoutes(
       const duration = Date.now() - startTime;
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
 
-      return res.redirect(302, targetUrl);
+      // Build final redirect URL with all query params for black page
+      let finalUrl = targetUrl;
+      if (shouldRedirectToBlack && Object.keys(req.query).length > 0) {
+        try {
+          const url = new URL(targetUrl);
+          for (const [key, value] of Object.entries(req.query)) {
+            if (typeof value === "string") {
+              url.searchParams.set(key, value);
+            } else if (Array.isArray(value)) {
+              value.forEach(v => {
+                if (typeof v === "string") url.searchParams.append(key, v);
+              });
+            }
+          }
+          finalUrl = url.toString();
+        } catch (e) {
+          console.error("[Cloak] Error building URL with params:", e);
+        }
+      }
+
+      return res.redirect(302, finalUrl);
     } catch (error) {
       console.error("[Cloak] Error:", error);
       return res.status(500).send("Internal server error");

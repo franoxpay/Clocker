@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -48,6 +57,7 @@ import {
   ChevronDown,
   ChevronUp,
   Link,
+  Link2,
   Settings2,
 } from "lucide-react";
 
@@ -72,6 +82,8 @@ export default function Offers() {
   const [expandedOfferId, setExpandedOfferId] = useState<number | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [countrySearch, setCountrySearch] = useState("");
+  const [mergeParamsOffer, setMergeParamsOffer] = useState<OfferWithDomain | null>(null);
+  const [additionalParams, setAdditionalParams] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -238,6 +250,25 @@ export default function Offers() {
       return `?ttclid=__CLICKID__&adid=__CID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&domain=__DOMAIN__&placement=__PLACEMENT__&xcode=${offer.xcode}`;
     }
     return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
+  };
+
+  const getMergedParams = () => {
+    if (!mergeParamsOffer) return "";
+    const baseParams = getOfferParams(mergeParamsOffer);
+    if (!additionalParams.trim()) return baseParams;
+    const cleanAdditional = additionalParams.trim().replace(/^[?&]/, "");
+    if (!cleanAdditional) return baseParams;
+    return `${baseParams}&${cleanAdditional}`;
+  };
+
+  const openMergeModal = (offer: OfferWithDomain) => {
+    setMergeParamsOffer(offer);
+    setAdditionalParams("");
+  };
+
+  const closeMergeModal = () => {
+    setMergeParamsOffer(null);
+    setAdditionalParams("");
   };
 
   const copyToClipboard = async (text: string, field: string) => {
@@ -600,9 +631,8 @@ export default function Offers() {
               </TableHeader>
               <TableBody>
                 {offers.map((offer) => (
-                  <>
+                  <Fragment key={offer.id}>
                     <TableRow 
-                      key={offer.id} 
                       className="cursor-pointer"
                       onClick={() => toggleExpand(offer.id)}
                     >
@@ -724,6 +754,16 @@ export default function Offers() {
                                 >
                                   <Link className="w-4 h-4" />
                                 </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => openMergeModal(offer)}
+                                  data-testid={`button-merge-params-${offer.id}`}
+                                  title={language === "pt-BR" ? "Mesclar Parâmetros" : "Merge Parameters"}
+                                >
+                                  <Link2 className="w-4 h-4" />
+                                </Button>
                                 <div className="flex-1 overflow-x-auto py-2 px-2">
                                   <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
                                     {getOfferParams(offer)}
@@ -735,7 +775,7 @@ export default function Offers() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
@@ -763,6 +803,87 @@ export default function Offers() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!mergeParamsOffer} onOpenChange={(open) => !open && closeMergeModal()}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="w-5 h-5" />
+              {language === "pt-BR" ? "Mesclar Parâmetros" : "Merge Parameters"}
+            </DialogTitle>
+            <DialogDescription>
+              {language === "pt-BR" 
+                ? "Adicione parâmetros extras" 
+                : "Add extra parameters"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {language === "pt-BR" ? "Parâmetros atuais do Cloaker" : "Current Cloaker Parameters"}
+              </Label>
+              <div className="p-3 bg-muted rounded-md border border-primary/30">
+                <code className="text-xs font-mono text-muted-foreground break-all">
+                  {mergeParamsOffer ? getOfferParams(mergeParamsOffer) : ""}
+                </code>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {language === "pt-BR" ? "Parâmetros adicionais para mesclar" : "Additional parameters to merge"}
+              </Label>
+              <Textarea
+                value={additionalParams}
+                onChange={(e) => setAdditionalParams(e.target.value)}
+                placeholder={language === "pt-BR" 
+                  ? "Cole aqui os parâmetros adicionais (sem o ? inicial)" 
+                  : "Paste additional parameters here (without the initial ?)"}
+                className="min-h-[80px] font-mono text-sm"
+                data-testid="textarea-additional-params"
+              />
+              <p className="text-xs text-muted-foreground">
+                {language === "pt-BR" 
+                  ? "Cole aqui os parâmetros adicionais (sem o ? inicial)" 
+                  : "Paste additional parameters here (without the initial ?)"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium">
+                  {language === "pt-BR" ? "Parâmetros mesclados" : "Merged Parameters"}
+                </Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => copyToClipboard(getMergedParams(), "merged-params")}
+                  data-testid="button-copy-merged"
+                >
+                  {copiedField === "merged-params" ? (
+                    <Check className="w-4 h-4 mr-2 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4 mr-2" />
+                  )}
+                  {language === "pt-BR" ? "Copiar" : "Copy"}
+                </Button>
+              </div>
+              <div className="p-3 bg-muted rounded-md border border-primary/30">
+                <code className="text-xs font-mono text-primary break-all">
+                  {getMergedParams()}
+                </code>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
+              {language === "pt-BR" ? "Fechar" : "Close"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
