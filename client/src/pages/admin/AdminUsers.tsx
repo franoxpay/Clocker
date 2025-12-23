@@ -47,6 +47,7 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Key,
 } from "lucide-react";
 
 interface UsersResponse {
@@ -62,9 +63,10 @@ export default function AdminUsers() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [actionType, setActionType] = useState<"changePlan" | "addDays" | null>(null);
+  const [actionType, setActionType] = useState<"changePlan" | "addDays" | "changePassword" | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [daysToAdd, setDaysToAdd] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   const { data, isLoading } = useQuery<UsersResponse>({
     queryKey: ["/api/admin/users", page, search],
@@ -161,6 +163,28 @@ export default function AdminUsers() {
       toast({
         title: t("common.success"),
         description: language === "pt-BR" ? "Dias adicionados" : "Days added",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+      await apiRequest("POST", `/api/admin/users/${userId}/change-password`, { password });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setActionType(null);
+      setSelectedUser(null);
+      setNewPassword("");
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Senha alterada" : "Password changed",
       });
     },
     onError: () => {
@@ -288,6 +312,16 @@ export default function AdminUsers() {
                             >
                               <Calendar className="w-4 h-4 mr-2" />
                               {t("admin.users.addDays")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setNewPassword("");
+                                setActionType("changePassword");
+                              }}
+                            >
+                              <Key className="w-4 h-4 mr-2" />
+                              {language === "pt-BR" ? "Alterar Senha" : "Change Password"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => forcePaymentMutation.mutate(user.id)}
@@ -421,6 +455,48 @@ export default function AdminUsers() {
                 disabled={!daysToAdd || addDaysMutation.isPending}
               >
                 {addDaysMutation.isPending ? t("common.loading") : t("common.save")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={actionType === "changePassword"} onOpenChange={(open) => !open && setActionType(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{language === "pt-BR" ? "Alterar Senha" : "Change Password"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {language === "pt-BR" 
+                ? `Alterando senha para: ${selectedUser?.email}` 
+                : `Changing password for: ${selectedUser?.email}`}
+            </div>
+            <div className="space-y-2">
+              <Label>{language === "pt-BR" ? "Nova Senha" : "New Password"}</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder={language === "pt-BR" ? "Mínimo 6 caracteres" : "Minimum 6 characters"}
+                data-testid="input-new-password"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setActionType(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                onClick={() =>
+                  selectedUser &&
+                  changePasswordMutation.mutate({
+                    userId: selectedUser.id,
+                    password: newPassword,
+                  })
+                }
+                disabled={newPassword.length < 6 || changePasswordMutation.isPending}
+              >
+                {changePasswordMutation.isPending ? t("common.loading") : t("common.save")}
               </Button>
             </div>
           </div>

@@ -874,6 +874,25 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/users/:id/change-password", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const { password } = req.body;
+      
+      if (!password || password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+      
+      const bcrypt = await import("bcryptjs");
+      const hashedPassword = await bcrypt.hash(password, 12);
+      await storage.updateUser(userId, { password: hashedPassword });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/impersonate/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const adminId = (req.user as any).id;
