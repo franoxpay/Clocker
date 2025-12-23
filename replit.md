@@ -44,7 +44,7 @@ Key entities defined in `shared/schema.ts`:
 - **Plans**: Subscription tiers with limits (offers, domains, clicks)
 - **Domains**: User-owned subdomains for campaign routing
 - **Offers**: Campaign configurations with targeting rules (countries, devices, platforms)
-- **ClickLogs**: Traffic analytics with redirect type tracking (black/white)
+- **ClickLogs**: Traffic analytics with redirect type tracking (black/white), response time (ms), and error tracking
 - **DailyClickMetrics**: Aggregated analytics for dashboard
 - **Notifications**: In-app notification system with bilingual content
 - **AdminSettings**: Platform-wide configuration
