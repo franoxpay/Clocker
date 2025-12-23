@@ -1266,8 +1266,23 @@ export async function registerRoutes(
         }
       }
 
-      // Validate required parameters based on platform
-      const { ttclid, cname, fbcl, xcode } = req.query as Record<string, string>;
+      // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)
+      // This happens when URLs are constructed incorrectly with ??param=value
+      const rawQuery = req.query as Record<string, string>;
+      const fixedQuery: Record<string, string> = {};
+      
+      for (const [key, value] of Object.entries(rawQuery)) {
+        // Remove leading ? from parameter names (URL encoding issue)
+        const fixedKey = key.startsWith('?') ? key.substring(1) : key;
+        fixedQuery[fixedKey] = value;
+      }
+      
+      // Use fixed parameters (check both raw and fixed versions)
+      const ttclid = fixedQuery.ttclid || rawQuery.ttclid;
+      const cname = fixedQuery.cname || rawQuery.cname;
+      const fbcl = fixedQuery.fbcl || rawQuery.fbcl;
+      const xcode = fixedQuery.xcode || rawQuery.xcode;
+      
       let paramsValid = false;
       let failReason = "";
 
@@ -1463,8 +1478,20 @@ export async function registerRoutes(
         }
       }
 
-      // Validate required parameters based on platform
-      const { ttclid, cname, fbcl, xcode } = req.query as Record<string, string>;
+      // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)
+      const rawQuery2 = req.query as Record<string, string>;
+      const fixedQuery2: Record<string, string> = {};
+      
+      for (const [key, value] of Object.entries(rawQuery2)) {
+        const fixedKey = key.startsWith('?') ? key.substring(1) : key;
+        fixedQuery2[fixedKey] = value;
+      }
+      
+      const ttclid = fixedQuery2.ttclid || rawQuery2.ttclid;
+      const cname = fixedQuery2.cname || rawQuery2.cname;
+      const fbcl = fixedQuery2.fbcl || rawQuery2.fbcl;
+      const xcode = fixedQuery2.xcode || rawQuery2.xcode;
+      
       let paramsValid = false;
       let failReason = "";
 
