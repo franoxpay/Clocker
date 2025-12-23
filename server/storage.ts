@@ -94,6 +94,30 @@ export interface IStorage {
   createAdminImpersonation(adminId: string, targetUserId: string, sessionToken: string, expiresAt: Date): Promise<void>;
   getAdminImpersonation(sessionToken: string): Promise<{ adminId: string; targetUserId: string } | undefined>;
   deleteAdminImpersonation(sessionToken: string): Promise<void>;
+
+  getSystemMetrics72h(): Promise<{
+    totalClicks: number;
+    successfulClicks: number;
+    failedClicks: number;
+    avgResponseTimeMs: number;
+    minResponseTimeMs: number;
+    maxResponseTimeMs: number;
+    clicksByHour: Array<{
+      hour: string;
+      total: number;
+      successful: number;
+      failed: number;
+      avgResponseTime: number;
+    }>;
+    slowestRequests: Array<{
+      id: number;
+      responseTimeMs: number;
+      country: string | null;
+      device: string | null;
+      createdAt: Date;
+      hasError: boolean | null;
+    }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -510,6 +534,99 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAdminImpersonation(sessionToken: string): Promise<void> {
     await db.delete(adminImpersonations).where(eq(adminImpersonations.sessionToken, sessionToken));
+  }
+
+  async getSystemMetrics72h(): Promise<{
+    totalClicks: number;
+    successfulClicks: number;
+    failedClicks: number;
+    avgResponseTimeMs: number;
+    minResponseTimeMs: number;
+    maxResponseTimeMs: number;
+    clicksByHour: Array<{
+      hour: string;
+      total: number;
+      successful: number;
+      failed: number;
+      avgResponseTime: number;
+    }>;
+    slowestRequests: Array<{
+      id: number;
+      responseTimeMs: number;
+      country: string | null;
+      device: string | null;
+      createdAt: Date;
+      hasError: boolean | null;
+    }>;
+  }> {
+    const hours72Ago = new Date();
+    hours72Ago.setHours(hours72Ago.getHours() - 72);
+
+    // Get overall stats
+    const [overallStats] = await db
+      .select({
+        totalClicks: sql<number>`COUNT(*)`,
+        successfulClicks: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = false OR ${clickLogs.hasError} IS NULL THEN 1 ELSE 0 END)`,
+        failedClicks: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
+        avgResponseTimeMs: sql<number>`COALESCE(AVG(${clickLogs.responseTimeMs}), 0)`,
+        minResponseTimeMs: sql<number>`COALESCE(MIN(${clickLogs.responseTimeMs}), 0)`,
+        maxResponseTimeMs: sql<number>`COALESCE(MAX(${clickLogs.responseTimeMs}), 0)`,
+      })
+      .from(clickLogs)
+      .where(gte(clickLogs.createdAt, hours72Ago));
+
+    // Get hourly breakdown
+    const hourlyStats = await db
+      .select({
+        hour: sql<string>`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`,
+        total: sql<number>`COUNT(*)`,
+        successful: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = false OR ${clickLogs.hasError} IS NULL THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
+        avgResponseTime: sql<number>`COALESCE(AVG(${clickLogs.responseTimeMs}), 0)`,
+      })
+      .from(clickLogs)
+      .where(gte(clickLogs.createdAt, hours72Ago))
+      .groupBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`)
+      .orderBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`);
+
+    // Get slowest requests
+    const slowestRequests = await db
+      .select({
+        id: clickLogs.id,
+        responseTimeMs: clickLogs.responseTimeMs,
+        country: clickLogs.country,
+        device: clickLogs.device,
+        createdAt: clickLogs.createdAt,
+        hasError: clickLogs.hasError,
+      })
+      .from(clickLogs)
+      .where(gte(clickLogs.createdAt, hours72Ago))
+      .orderBy(sql`${clickLogs.responseTimeMs} DESC NULLS LAST`)
+      .limit(20);
+
+    return {
+      totalClicks: Number(overallStats?.totalClicks || 0),
+      successfulClicks: Number(overallStats?.successfulClicks || 0),
+      failedClicks: Number(overallStats?.failedClicks || 0),
+      avgResponseTimeMs: Math.round(Number(overallStats?.avgResponseTimeMs || 0)),
+      minResponseTimeMs: Number(overallStats?.minResponseTimeMs || 0),
+      maxResponseTimeMs: Number(overallStats?.maxResponseTimeMs || 0),
+      clicksByHour: hourlyStats.map(row => ({
+        hour: row.hour,
+        total: Number(row.total),
+        successful: Number(row.successful),
+        failed: Number(row.failed),
+        avgResponseTime: Math.round(Number(row.avgResponseTime)),
+      })),
+      slowestRequests: slowestRequests.map(row => ({
+        id: row.id,
+        responseTimeMs: row.responseTimeMs ?? 0,
+        country: row.country,
+        device: row.device,
+        createdAt: row.createdAt,
+        hasError: row.hasError,
+      })),
+    };
   }
 }
 

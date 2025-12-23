@@ -982,6 +982,17 @@ export async function registerRoutes(
     }
   });
 
+  // System monitoring metrics - last 72 hours
+  app.get("/api/admin/system-metrics", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const metrics = await storage.getSystemMetrics72h();
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching system metrics:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/plans", isAdmin, async (req: Request, res: Response) => {
     try {
       const plan = await storage.createPlan(req.body);
