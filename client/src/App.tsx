@@ -27,6 +27,7 @@ import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminSharedDomains from "@/pages/admin/AdminSharedDomains";
 import AdminMonitoring from "@/pages/admin/AdminMonitoring";
 import AdminBotBans from "@/pages/admin/AdminBotBans";
+import AdminHoneypots from "@/pages/admin/AdminHoneypots";
 import NotFound from "@/pages/not-found";
 
 function UserRoutes() {
@@ -51,6 +52,7 @@ function AdminRoutes() {
       <Route path="/confg-admin/plans" component={AdminPlans} />
       <Route path="/confg-admin/shared-domains" component={AdminSharedDomains} />
       <Route path="/confg-admin/bot-bans" component={AdminBotBans} />
+      <Route path="/confg-admin/honeypots" component={AdminHoneypots} />
       <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
       <Route path="/confg-admin/settings" component={AdminSettings} />
       <Route component={NotFound} />

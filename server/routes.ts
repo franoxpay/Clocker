@@ -1252,6 +1252,128 @@ export async function registerRoutes(
     }
   });
 
+  // Admin honeypot routes
+  app.get("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const honeypots = await storage.getAdminHoneypots();
+      res.json(honeypots);
+    } catch (error) {
+      console.error("Error fetching honeypots:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { name, platform, blackPageUrl, whitePageUrl } = req.body;
+      
+      if (!name || !platform || !blackPageUrl || !whitePageUrl) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+      
+      const slug = `hp-${Date.now().toString(36)}`;
+      const xcode = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      
+      const honeypot = await storage.createAdminHoneypot({
+        name,
+        slug,
+        xcode,
+        platform,
+        blackPageUrl,
+        whitePageUrl,
+      });
+      
+      res.status(201).json(honeypot);
+    } catch (error) {
+      console.error("Error creating honeypot:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/honeypots/:id/stats", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const honeypotId = parseInt(req.params.id);
+      const stats = await storage.getHoneypotPatternStats(honeypotId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching honeypot stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/honeypots/:id/logs", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const honeypotId = parseInt(req.params.id);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const { logs, total } = await storage.getHoneypotClickLogs(honeypotId, page, limit);
+      res.json({ logs, total, page, limit, totalPages: Math.ceil(total / limit) });
+    } catch (error) {
+      console.error("Error fetching honeypot logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/honeypots/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const honeypotId = parseInt(req.params.id);
+      const { isActive } = req.body;
+      
+      const updated = await storage.updateOffer(honeypotId, { isActive });
+      if (!updated) {
+        return res.status(404).json({ message: "Honeypot not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating honeypot:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/admin/honeypots/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const honeypotId = parseInt(req.params.id);
+      await storage.deleteOffer(honeypotId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting honeypot:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/honeypots/:id/promote-bans", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { patterns } = req.body;
+      
+      if (!patterns || !Array.isArray(patterns)) {
+        return res.status(400).json({ message: "Invalid patterns array" });
+      }
+      
+      const created = [];
+      for (const pattern of patterns) {
+        const { type, value, platform } = pattern;
+        
+        const exists = await storage.checkIfBotBanExists(type, value, platform || undefined);
+        if (!exists) {
+          const ban = await storage.createBotBan({
+            type: type as "user_agent" | "ip" | "ip_range",
+            value,
+            description: `Auto-detected from honeypot`,
+            platform: platform || "all",
+            isActive: true,
+          });
+          created.push(ban);
+        }
+      }
+      
+      res.json({ message: `Created ${created.length} new bans`, bans: created });
+    } catch (error) {
+      console.error("Error promoting patterns to bans:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Shared domains - User route (get available shared domains)
   app.get("/api/shared-domains", isAuthenticated, async (req: Request, res: Response) => {
     try {

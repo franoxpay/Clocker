@@ -130,6 +130,17 @@ export interface IStorage {
   deleteBotBan(id: number): Promise<void>;
   incrementBotBanHitCount(id: number): Promise<void>;
   checkIfBotBanned(ip: string, userAgent: string, platform?: string): Promise<{ banned: boolean; banId?: number; reason?: string }>;
+  checkIfBotBanExists(type: string, value: string, platform?: string): Promise<boolean>;
+
+  // Admin honeypot methods
+  getAdminHoneypots(): Promise<Offer[]>;
+  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string }): Promise<Offer>;
+  getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }>;
+  getHoneypotPatternStats(offerId: number): Promise<{
+    topUserAgents: Array<{ userAgent: string; count: number }>;
+    topIps: Array<{ ip: string; count: number }>;
+    topCountries: Array<{ country: string; count: number }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -749,6 +760,99 @@ export class DatabaseStorage implements IStorage {
     } catch {
       return false;
     }
+  }
+
+  // Admin honeypot methods
+  async getAdminHoneypots(): Promise<Offer[]> {
+    return await db
+      .select()
+      .from(offers)
+      .where(eq(offers.isHoneypot, true))
+      .orderBy(desc(offers.createdAt));
+  }
+
+  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string }): Promise<Offer> {
+    const [created] = await db
+      .insert(offers)
+      .values({
+        userId: "SYSTEM_ADMIN",
+        name: data.name,
+        slug: data.slug,
+        xcode: data.xcode,
+        platform: data.platform,
+        blackPageUrl: data.blackPageUrl,
+        whitePageUrl: data.whitePageUrl,
+        allowedCountries: [],
+        allowedDevices: [],
+        isActive: true,
+        isHoneypot: true,
+      })
+      .returning();
+    return created;
+  }
+
+  async getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }> {
+    const offset = (page - 1) * limit;
+    
+    const logs = await db
+      .select()
+      .from(clickLogs)
+      .where(eq(clickLogs.offerId, offerId))
+      .orderBy(desc(clickLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(clickLogs)
+      .where(eq(clickLogs.offerId, offerId));
+    
+    return { logs, total: Number(count) };
+  }
+
+  async getHoneypotPatternStats(offerId: number): Promise<{
+    topUserAgents: Array<{ userAgent: string; count: number }>;
+    topIps: Array<{ ip: string; count: number }>;
+    topCountries: Array<{ country: string; count: number }>;
+  }> {
+    const topUserAgents = await db
+      .select({
+        userAgent: clickLogs.userAgent,
+        count: sql<number>`count(*)`,
+      })
+      .from(clickLogs)
+      .where(eq(clickLogs.offerId, offerId))
+      .groupBy(clickLogs.userAgent)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20);
+
+    const topIps = await db
+      .select({
+        ip: clickLogs.ipAddress,
+        count: sql<number>`count(*)`,
+      })
+      .from(clickLogs)
+      .where(eq(clickLogs.offerId, offerId))
+      .groupBy(clickLogs.ipAddress)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20);
+
+    const topCountries = await db
+      .select({
+        country: clickLogs.country,
+        count: sql<number>`count(*)`,
+      })
+      .from(clickLogs)
+      .where(eq(clickLogs.offerId, offerId))
+      .groupBy(clickLogs.country)
+      .orderBy(desc(sql`count(*)`))
+      .limit(20);
+
+    return {
+      topUserAgents: topUserAgents.map(r => ({ userAgent: r.userAgent || "Unknown", count: Number(r.count) })),
+      topIps: topIps.map(r => ({ ip: r.ip || "Unknown", count: Number(r.count) })),
+      topCountries: topCountries.map(r => ({ country: r.country || "Unknown", count: Number(r.count) })),
+    };
   }
 }
 
