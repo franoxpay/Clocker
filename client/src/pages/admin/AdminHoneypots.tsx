@@ -15,7 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, Eye, Trash2, ShieldBan, Copy, Check, ChevronDown, ChevronUp, Link, Settings2 } from "lucide-react";
-import type { Offer } from "@shared/schema";
+import type { Offer, SharedDomain } from "@shared/schema";
 
 interface PatternStats {
   topUserAgents: Array<{ userAgent: string; count: number }>;
@@ -38,10 +38,17 @@ export default function AdminHoneypots() {
     platform: "facebook",
     blackPageUrl: "",
     whitePageUrl: "",
+    sharedDomainId: "platform",
   });
+
+  const platformDomain = typeof window !== "undefined" ? window.location.host : "";
 
   const { data: honeypots, isLoading } = useQuery<Offer[]>({
     queryKey: ["/api/admin/honeypots"],
+  });
+
+  const { data: sharedDomains = [] } = useQuery<SharedDomain[]>({
+    queryKey: ["/api/admin/shared-domains"],
   });
 
   const { data: stats, isLoading: statsLoading } = useQuery<PatternStats>({
@@ -51,12 +58,16 @@ export default function AdminHoneypots() {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return apiRequest("POST", "/api/admin/honeypots", data);
+      const submitData = {
+        ...data,
+        sharedDomainId: data.sharedDomainId === "platform" ? null : parseInt(data.sharedDomainId),
+      };
+      return apiRequest("POST", "/api/admin/honeypots", submitData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/honeypots"] });
       setCreateOpen(false);
-      setFormData({ name: "", platform: "facebook", blackPageUrl: "", whitePageUrl: "" });
+      setFormData({ name: "", platform: "facebook", blackPageUrl: "", whitePageUrl: "", sharedDomainId: "platform" });
       toast({ title: "Honeypot criado com sucesso" });
     },
     onError: () => {
@@ -120,9 +131,16 @@ export default function AdminHoneypots() {
     return selectedPatterns.some(p => p.type === type && p.value === value);
   };
 
+  const getHoneypotDomain = (hp: Offer) => {
+    if (hp.sharedDomainId) {
+      const sharedDomain = sharedDomains.find(d => d.id === hp.sharedDomainId);
+      if (sharedDomain) return sharedDomain.subdomain;
+    }
+    return platformDomain;
+  };
+
   const getHoneypotUrl = (hp: Offer) => {
-    const domain = window.location.host;
-    return `https://${domain}/${hp.slug}`;
+    return `https://${getHoneypotDomain(hp)}/${hp.slug}`;
   };
 
   const getHoneypotParams = (hp: Offer) => {
@@ -189,6 +207,24 @@ export default function AdminHoneypots() {
                   <SelectContent>
                     <SelectItem value="facebook">Facebook</SelectItem>
                     <SelectItem value="tiktok">TikTok</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Domínio</Label>
+                <Select value={formData.sharedDomainId} onValueChange={v => setFormData({ ...formData, sharedDomainId: v })}>
+                  <SelectTrigger data-testid="select-honeypot-domain">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="platform">
+                      {platformDomain} (Plataforma)
+                    </SelectItem>
+                    {sharedDomains.filter(d => d.isActive).map(domain => (
+                      <SelectItem key={domain.id} value={String(domain.id)}>
+                        {domain.subdomain}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -320,7 +356,7 @@ export default function AdminHoneypots() {
                                 </Button>
                                 <div className="flex items-center flex-1 overflow-hidden">
                                   <span className="text-muted-foreground text-sm px-2 py-2 bg-muted rounded-l shrink-0">
-                                    https://{window.location.host}/
+                                    https://{getHoneypotDomain(hp)}/
                                   </span>
                                   <span className="text-sm font-medium px-2 py-2">
                                     {hp.slug}

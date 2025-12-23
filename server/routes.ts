@@ -1265,7 +1265,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { name, platform, blackPageUrl, whitePageUrl } = req.body;
+      const { name, platform, blackPageUrl, whitePageUrl, sharedDomainId } = req.body;
       
       if (!name || !platform || !blackPageUrl || !whitePageUrl) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -1281,6 +1281,7 @@ export async function registerRoutes(
         platform,
         blackPageUrl,
         whitePageUrl,
+        sharedDomainId: sharedDomainId || null,
       });
       
       res.status(201).json(honeypot);

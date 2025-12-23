@@ -134,7 +134,7 @@ export interface IStorage {
 
   // Admin honeypot methods
   getAdminHoneypots(): Promise<Offer[]>;
-  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string }): Promise<Offer>;
+  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null }): Promise<Offer>;
   getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }>;
   getHoneypotPatternStats(offerId: number): Promise<{
     topUserAgents: Array<{ userAgent: string; count: number }>;
@@ -771,7 +771,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(offers.createdAt));
   }
 
-  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string }): Promise<Offer> {
+  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null }): Promise<Offer> {
     const [created] = await db
       .insert(offers)
       .values({
@@ -782,6 +782,7 @@ export class DatabaseStorage implements IStorage {
         platform: data.platform,
         blackPageUrl: data.blackPageUrl,
         whitePageUrl: data.whitePageUrl,
+        sharedDomainId: data.sharedDomainId || null,
         allowedCountries: [],
         allowedDevices: [],
         isActive: true,
