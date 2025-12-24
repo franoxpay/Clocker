@@ -81,22 +81,48 @@ function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   return "desktop";
 }
 
+// In-memory cache for IP geolocation (5 minute TTL)
+const geoCache = new Map<string, { country: string; expires: number }>();
+const GEO_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
 async function getCountryFromIP(ip: string): Promise<string> {
   try {
     const cleanIp = ip.replace(/^::ffff:/, "");
     if (cleanIp === "127.0.0.1" || cleanIp === "::1" || cleanIp.startsWith("192.168.") || cleanIp.startsWith("10.")) {
       return "BR";
     }
-    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode`);
+    
+    // Check cache first
+    const cached = geoCache.get(cleanIp);
+    if (cached && cached.expires > Date.now()) {
+      return cached.country;
+    }
+    
+    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode`, {
+      signal: AbortSignal.timeout(2000), // 2 second timeout
+    });
     if (response.ok) {
       const data = await response.json();
-      return data.countryCode || "XX";
+      const country = data.countryCode || "XX";
+      // Cache the result
+      geoCache.set(cleanIp, { country, expires: Date.now() + GEO_CACHE_TTL_MS });
+      return country;
     }
     return "XX";
   } catch {
     return "XX";
   }
 }
+
+// Cleanup expired cache entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of geoCache.entries()) {
+    if (data.expires < now) {
+      geoCache.delete(ip);
+    }
+  }
+}, 60 * 1000); // Every minute
 
 export async function registerRoutes(
   httpServer: Server,
