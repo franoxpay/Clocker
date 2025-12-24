@@ -1485,113 +1485,79 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      // Check if this is a honeypot offer (auto-ban visitors)
-      if (offer.isHoneypot) {
-        console.log(`[Cloak] Honeypot offer triggered: ${slug}, IP: ${ip}, UA: ${userAgent}`);
-        
-        // Auto-ban the IP
-        const existingIpBan = await storage.checkIfBotBanned(ip, "", offer.platform);
-        if (!existingIpBan.banned) {
-          await storage.createBotBan({
-            type: "ip",
-            value: ip,
-            description: `Auto-banned from honeypot offer: ${offer.name}`,
-            platform: offer.platform,
-            isActive: true,
-          });
-          console.log(`[Cloak] Auto-banned IP from honeypot: ${ip}`);
-        }
-        
-        // Auto-ban the User-Agent if it looks like a bot
-        if (userAgent.toLowerCase().includes("bot") || 
-            userAgent.toLowerCase().includes("crawler") ||
-            userAgent.toLowerCase().includes("facebookexternalhit") ||
-            userAgent.toLowerCase().includes("tiktok")) {
-          const existingUaBan = await storage.checkIfBotBanned("", userAgent, offer.platform);
-          if (!existingUaBan.banned) {
-            await storage.createBotBan({
-              type: "user_agent",
-              value: userAgent.substring(0, 255),
-              description: `Auto-banned from honeypot offer: ${offer.name}`,
-              platform: offer.platform,
-              isActive: true,
-            });
-            console.log(`[Cloak] Auto-banned User-Agent from honeypot: ${userAgent.substring(0, 100)}...`);
-          }
-        }
-        
-        // Always redirect to white page for honeypot
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      // Check if visitor is a banned bot
-      const botCheck = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
-      if (botCheck.banned) {
-        console.log(`[Cloak] Banned bot detected: ${botCheck.reason}, redirecting to white`);
-        
-        // Increment hit count for the ban
-        if (botCheck.banId) {
-          await storage.incrementBotBanHitCount(botCheck.banId);
-        }
-        
-        // Log the click as white redirect with ban reason
-        const duration = Date.now() - startTime;
-        const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-        const country = await getCountryFromIP(ip);
-        const deviceType = parseUserAgent(userAgent);
-        
-        await storage.createClickLog({
-          offerId: offer.id,
-          userId: offer.userId,
-          ipAddress: ip,
-          userAgent,
-          country,
-          device: deviceType,
-          redirectedTo: "white",
-          requestUrl,
-          responseTimeMs: duration,
-          hasError: false,
-          allParams: {
-            domainId: domain?.id || offer.domainId || null,
-            platform: offer.platform,
-            referer,
-            failReason: `bot_banned:${botCheck.reason}`,
-          },
-        });
-        
-        await storage.incrementOfferClicks(offer.id, false);
-        
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      const owner = await storage.getUser(offer.userId);
-      if (!owner) {
-        return res.status(404).send("Not found");
-      }
-
-      const isSuspended = owner.suspendedAt !== null;
-      if (isSuspended) {
-        console.log(`[Cloak] User suspended: ${offer.userId}`);
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      // Check click limits
-      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-      if (plan && !plan.isUnlimited) {
-        const userOffers = await storage.getOffersByUserId(offer.userId);
-        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
-        
-        // If over limit (after 3-day grace period), redirect to white
-        if (totalClicks >= plan.maxClicks) {
-          const gracePeriodEnd = owner.subscriptionEndDate 
-            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-            : null;
+      // Skip bot ban checks and owner checks for honeypots - they need to collect all traffic data
+      if (!offer.isHoneypot) {
+        // Check if visitor is a banned bot
+        const botCheck = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
+        if (botCheck.banned) {
+          console.log(`[Cloak] Banned bot detected: ${botCheck.reason}, redirecting to white`);
           
-          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-            return res.redirect(302, offer.whitePageUrl);
+          // Increment hit count for the ban
+          if (botCheck.banId) {
+            await storage.incrementBotBanHitCount(botCheck.banId);
+          }
+          
+          // Log the click as white redirect with ban reason
+          const duration = Date.now() - startTime;
+          const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+          const country = await getCountryFromIP(ip);
+          const deviceType = parseUserAgent(userAgent);
+          
+          await storage.createClickLog({
+            offerId: offer.id,
+            userId: offer.userId,
+            ipAddress: ip,
+            userAgent,
+            country,
+            device: deviceType,
+            redirectedTo: "white",
+            requestUrl,
+            responseTimeMs: duration,
+            hasError: false,
+            allParams: {
+              domainId: domain?.id || offer.domainId || null,
+              platform: offer.platform,
+              referer,
+              failReason: `bot_banned:${botCheck.reason}`,
+            },
+          });
+          
+          await storage.incrementOfferClicks(offer.id, false);
+          
+          return res.redirect(302, offer.whitePageUrl);
+        }
+
+        const owner = await storage.getUser(offer.userId);
+        if (!owner) {
+          return res.status(404).send("Not found");
+        }
+
+        const isSuspended = owner.suspendedAt !== null;
+        if (isSuspended) {
+          console.log(`[Cloak] User suspended: ${offer.userId}`);
+          return res.redirect(302, offer.whitePageUrl);
+        }
+
+        // Check click limits
+        const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+        if (plan && !plan.isUnlimited) {
+          const userOffers = await storage.getOffersByUserId(offer.userId);
+          const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+          
+          // If over limit (after 3-day grace period), redirect to white
+          if (totalClicks >= plan.maxClicks) {
+            const gracePeriodEnd = owner.subscriptionEndDate 
+              ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+              : null;
+            
+            if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+              console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+              return res.redirect(302, offer.whitePageUrl);
+            }
           }
         }
+      } else {
+        console.log(`[Cloak] Honeypot offer detected: ${slug}, collecting traffic data`);
       }
 
       // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)
@@ -1777,105 +1743,76 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      // Check if this is a honeypot offer (auto-ban visitors)
-      if (offer.isHoneypot) {
-        console.log(`[Cloak] Honeypot offer triggered: ${slug}, IP: ${ip}, UA: ${userAgent}`);
-        
-        const existingIpBan = await storage.checkIfBotBanned(ip, "", offer.platform);
-        if (!existingIpBan.banned) {
-          await storage.createBotBan({
-            type: "ip",
-            value: ip,
-            description: `Auto-banned from honeypot offer: ${offer.name}`,
-            platform: offer.platform,
-            isActive: true,
-          });
-        }
-        
-        if (userAgent.toLowerCase().includes("bot") || 
-            userAgent.toLowerCase().includes("crawler") ||
-            userAgent.toLowerCase().includes("facebookexternalhit") ||
-            userAgent.toLowerCase().includes("tiktok")) {
-          const existingUaBan = await storage.checkIfBotBanned("", userAgent, offer.platform);
-          if (!existingUaBan.banned) {
-            await storage.createBotBan({
-              type: "user_agent",
-              value: userAgent.substring(0, 255),
-              description: `Auto-banned from honeypot offer: ${offer.name}`,
-              platform: offer.platform,
-              isActive: true,
-            });
-          }
-        }
-        
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      // Check if visitor is a banned bot
-      const botCheck2 = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
-      if (botCheck2.banned) {
-        console.log(`[Cloak] Banned bot detected: ${botCheck2.reason}, redirecting to white`);
-        
-        if (botCheck2.banId) {
-          await storage.incrementBotBanHitCount(botCheck2.banId);
-        }
-        
-        const duration = Date.now() - startTime;
-        const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-        const country = await getCountryFromIP(ip);
-        const deviceType = parseUserAgent(userAgent);
-        
-        await storage.createClickLog({
-          offerId: offer.id,
-          userId: offer.userId,
-          ipAddress: ip,
-          userAgent,
-          country,
-          device: deviceType,
-          redirectedTo: "white",
-          requestUrl,
-          responseTimeMs: duration,
-          hasError: false,
-          allParams: {
-            domainId: domain?.id || offer.domainId || null,
-            platform: offer.platform,
-            referer,
-            failReason: `bot_banned:${botCheck2.reason}`,
-          },
-        });
-        
-        await storage.incrementOfferClicks(offer.id, false);
-        
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      const owner = await storage.getUser(offer.userId);
-      if (!owner) {
-        return res.status(404).send("Not found");
-      }
-
-      const isSuspended = owner.suspendedAt !== null;
-      if (isSuspended) {
-        console.log(`[Cloak] User suspended: ${offer.userId}`);
-        return res.redirect(302, offer.whitePageUrl);
-      }
-
-      // Check click limits
-      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-      if (plan && !plan.isUnlimited) {
-        const userOffers = await storage.getOffersByUserId(offer.userId);
-        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
-        
-        if (totalClicks >= plan.maxClicks) {
-          const gracePeriodEnd = owner.subscriptionEndDate 
-            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-            : null;
+      // Skip bot ban checks and owner checks for honeypots - they need to collect all traffic data
+      if (!offer.isHoneypot) {
+        // Check if visitor is a banned bot
+        const botCheck2 = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
+        if (botCheck2.banned) {
+          console.log(`[Cloak] Banned bot detected: ${botCheck2.reason}, redirecting to white`);
           
-          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-            return res.redirect(302, offer.whitePageUrl);
+          if (botCheck2.banId) {
+            await storage.incrementBotBanHitCount(botCheck2.banId);
+          }
+          
+          const duration = Date.now() - startTime;
+          const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+          const country = await getCountryFromIP(ip);
+          const deviceType = parseUserAgent(userAgent);
+          
+          await storage.createClickLog({
+            offerId: offer.id,
+            userId: offer.userId,
+            ipAddress: ip,
+            userAgent,
+            country,
+            device: deviceType,
+            redirectedTo: "white",
+            requestUrl,
+            responseTimeMs: duration,
+            hasError: false,
+            allParams: {
+              domainId: domain?.id || offer.domainId || null,
+              platform: offer.platform,
+              referer,
+              failReason: `bot_banned:${botCheck2.reason}`,
+            },
+          });
+          
+          await storage.incrementOfferClicks(offer.id, false);
+          
+          return res.redirect(302, offer.whitePageUrl);
+        }
+
+        const owner = await storage.getUser(offer.userId);
+        if (!owner) {
+          return res.status(404).send("Not found");
+        }
+
+        const isSuspended = owner.suspendedAt !== null;
+        if (isSuspended) {
+          console.log(`[Cloak] User suspended: ${offer.userId}`);
+          return res.redirect(302, offer.whitePageUrl);
+        }
+
+        // Check click limits
+        const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+        if (plan && !plan.isUnlimited) {
+          const userOffers = await storage.getOffersByUserId(offer.userId);
+          const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+          
+          if (totalClicks >= plan.maxClicks) {
+            const gracePeriodEnd = owner.subscriptionEndDate 
+              ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+              : null;
+            
+            if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+              console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+              return res.redirect(302, offer.whitePageUrl);
+            }
           }
         }
+      } else {
+        console.log(`[Cloak] Honeypot offer detected: ${slug}, collecting traffic data`);
       }
 
       // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)
