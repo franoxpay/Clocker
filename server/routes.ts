@@ -81,48 +81,22 @@ function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   return "desktop";
 }
 
-// In-memory cache for IP geolocation (5 minute TTL)
-const geoCache = new Map<string, { country: string; expires: number }>();
-const GEO_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
 async function getCountryFromIP(ip: string): Promise<string> {
   try {
     const cleanIp = ip.replace(/^::ffff:/, "");
     if (cleanIp === "127.0.0.1" || cleanIp === "::1" || cleanIp.startsWith("192.168.") || cleanIp.startsWith("10.")) {
       return "BR";
     }
-    
-    // Check cache first
-    const cached = geoCache.get(cleanIp);
-    if (cached && cached.expires > Date.now()) {
-      return cached.country;
-    }
-    
-    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode`, {
-      signal: AbortSignal.timeout(2000), // 2 second timeout
-    });
+    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode`);
     if (response.ok) {
       const data = await response.json();
-      const country = data.countryCode || "XX";
-      // Cache the result
-      geoCache.set(cleanIp, { country, expires: Date.now() + GEO_CACHE_TTL_MS });
-      return country;
+      return data.countryCode || "XX";
     }
     return "XX";
   } catch {
     return "XX";
   }
 }
-
-// Cleanup expired cache entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, data] of geoCache.entries()) {
-    if (data.expires < now) {
-      geoCache.delete(ip);
-    }
-  }
-}, 60 * 1000); // Every minute
 
 export async function registerRoutes(
   httpServer: Server,
@@ -1051,16 +1025,6 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/all-domains", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const userDomains = await storage.getAllDomains();
-      res.json(userDomains);
-    } catch (error) {
-      console.error("Error fetching all domains:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
   app.post("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
     try {
       let { subdomain } = req.body;
@@ -1173,245 +1137,6 @@ export async function registerRoutes(
     }
   });
 
-  // Bot bans - Admin routes
-  app.get("/api/admin/bot-bans", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const bans = await storage.getAllBotBans();
-      res.json(bans);
-    } catch (error) {
-      console.error("Error fetching bot bans:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.post("/api/admin/bot-bans", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { type, value, description, platform, isActive } = req.body;
-      
-      if (!type || !value) {
-        return res.status(400).json({ message: "Type and value are required" });
-      }
-      
-      if (!["user_agent", "ip", "ip_range"].includes(type)) {
-        return res.status(400).json({ message: "Invalid ban type" });
-      }
-      
-      const ban = await storage.createBotBan({
-        type,
-        value,
-        description: description || null,
-        platform: platform || null,
-        isActive: isActive !== false,
-      });
-      
-      res.json(ban);
-    } catch (error) {
-      console.error("Error creating bot ban:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.put("/api/admin/bot-bans/:id", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const banId = parseInt(req.params.id);
-      const { type, value, description, platform, isActive } = req.body;
-      
-      const updated = await storage.updateBotBan(banId, {
-        type,
-        value,
-        description,
-        platform,
-        isActive,
-      });
-      
-      if (!updated) {
-        return res.status(404).json({ message: "Ban not found" });
-      }
-      
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating bot ban:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.delete("/api/admin/bot-bans/:id", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const banId = parseInt(req.params.id);
-      await storage.deleteBotBan(banId);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting bot ban:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // Add common bot patterns as presets
-  app.post("/api/admin/bot-bans/add-presets", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const presets = [
-        // Facebook bots
-        { type: "user_agent", value: "facebookexternalhit", description: "Facebook link preview bot", platform: "facebook" },
-        { type: "ip_range", value: "69.63.0.0/16", description: "Facebook IP range", platform: "facebook" },
-        { type: "ip_range", value: "66.220.0.0/16", description: "Facebook IP range 2", platform: "facebook" },
-        { type: "ip_range", value: "173.252.0.0/16", description: "Facebook IP range 3", platform: "facebook" },
-        // TikTok bots
-        { type: "user_agent", value: "TikTok", description: "TikTok bot user agent", platform: "tiktok" },
-        { type: "user_agent", value: "Bytespider", description: "ByteDance/TikTok crawler", platform: "tiktok" },
-        // Generic bots
-        { type: "user_agent", value: "Googlebot", description: "Google crawler", platform: null },
-        { type: "user_agent", value: "bingbot", description: "Bing crawler", platform: null },
-        { type: "user_agent", value: "Slurp", description: "Yahoo crawler", platform: null },
-        { type: "user_agent", value: "DuckDuckBot", description: "DuckDuckGo crawler", platform: null },
-      ];
-      
-      const created = [];
-      for (const preset of presets) {
-        // Check if already exists by type/value/platform combination
-        const exists = await storage.checkIfBotBanExists(preset.type, preset.value, preset.platform || undefined);
-        if (!exists) {
-          const ban = await storage.createBotBan({
-            type: preset.type as "user_agent" | "ip" | "ip_range",
-            value: preset.value,
-            description: preset.description,
-            platform: preset.platform,
-            isActive: true,
-          });
-          created.push(ban);
-        }
-      }
-      
-      res.json({ message: `Added ${created.length} preset bans`, bans: created });
-    } catch (error) {
-      console.error("Error adding preset bans:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // Admin honeypot routes
-  app.get("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const honeypots = await storage.getAdminHoneypots();
-      res.json(honeypots);
-    } catch (error) {
-      console.error("Error fetching honeypots:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.post("/api/admin/honeypots", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { name, slug: customSlug, platform, blackPageUrl, whitePageUrl, sharedDomainId, domainId } = req.body;
-      
-      if (!name || !platform || !blackPageUrl || !whitePageUrl) {
-        return res.status(400).json({ message: "Missing required fields" });
-      }
-      
-      const slug = customSlug && customSlug.trim() ? customSlug.trim() : `hp-${Date.now().toString(36)}`;
-      const xcode = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-      
-      const honeypot = await storage.createAdminHoneypot({
-        name,
-        slug,
-        xcode,
-        platform,
-        blackPageUrl,
-        whitePageUrl,
-        sharedDomainId: sharedDomainId || null,
-        domainId: domainId || null,
-      });
-      
-      res.status(201).json(honeypot);
-    } catch (error) {
-      console.error("Error creating honeypot:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/admin/honeypots/:id/stats", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const honeypotId = parseInt(req.params.id);
-      const stats = await storage.getHoneypotPatternStats(honeypotId);
-      res.json(stats);
-    } catch (error) {
-      console.error("Error fetching honeypot stats:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.get("/api/admin/honeypots/:id/logs", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const honeypotId = parseInt(req.params.id);
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 50;
-      
-      const { logs, total } = await storage.getHoneypotClickLogs(honeypotId, page, limit);
-      res.json({ logs, total, page, limit, totalPages: Math.ceil(total / limit) });
-    } catch (error) {
-      console.error("Error fetching honeypot logs:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.patch("/api/admin/honeypots/:id", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const honeypotId = parseInt(req.params.id);
-      const { isActive } = req.body;
-      
-      const updated = await storage.updateOffer(honeypotId, { isActive });
-      if (!updated) {
-        return res.status(404).json({ message: "Honeypot not found" });
-      }
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating honeypot:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.delete("/api/admin/honeypots/:id", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const honeypotId = parseInt(req.params.id);
-      await storage.deleteOffer(honeypotId);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error deleting honeypot:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  app.post("/api/admin/honeypots/:id/promote-bans", isAdmin, async (req: Request, res: Response) => {
-    try {
-      const { patterns } = req.body;
-      
-      if (!patterns || !Array.isArray(patterns)) {
-        return res.status(400).json({ message: "Invalid patterns array" });
-      }
-      
-      const created = [];
-      for (const pattern of patterns) {
-        const { type, value, platform } = pattern;
-        
-        const exists = await storage.checkIfBotBanExists(type, value, platform || undefined);
-        if (!exists) {
-          const ban = await storage.createBotBan({
-            type: type as "user_agent" | "ip" | "ip_range",
-            value,
-            description: `Auto-detected from honeypot`,
-            platform: platform || "all",
-            isActive: true,
-          });
-          created.push(ban);
-        }
-      }
-      
-      res.json({ message: `Created ${created.length} new bans`, bans: created });
-    } catch (error) {
-      console.error("Error promoting patterns to bans:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
   // Shared domains - User route (get available shared domains)
   app.get("/api/shared-domains", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -1511,79 +1236,34 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      // Skip bot ban checks and owner checks for honeypots - they need to collect all traffic data
-      if (!offer.isHoneypot) {
-        // Check if visitor is a banned bot
-        const botCheck = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
-        if (botCheck.banned) {
-          console.log(`[Cloak] Banned bot detected: ${botCheck.reason}, redirecting to white`);
-          
-          // Increment hit count for the ban
-          if (botCheck.banId) {
-            await storage.incrementBotBanHitCount(botCheck.banId);
-          }
-          
-          // Log the click as white redirect with ban reason
-          const duration = Date.now() - startTime;
-          const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-          const country = await getCountryFromIP(ip);
-          const deviceType = parseUserAgent(userAgent);
-          
-          await storage.createClickLog({
-            offerId: offer.id,
-            userId: offer.userId,
-            ipAddress: ip,
-            userAgent,
-            country,
-            device: deviceType,
-            redirectedTo: "white",
-            requestUrl,
-            responseTimeMs: duration,
-            hasError: false,
-            allParams: {
-              domainId: domain?.id || offer.domainId || null,
-              platform: offer.platform,
-              referer,
-              failReason: `bot_banned:${botCheck.reason}`,
-            },
-          });
-          
-          await storage.incrementOfferClicks(offer.id, false);
-          
-          return res.redirect(302, offer.whitePageUrl);
-        }
+      const owner = await storage.getUser(offer.userId);
+      if (!owner) {
+        return res.status(404).send("Not found");
+      }
 
-        const owner = await storage.getUser(offer.userId);
-        if (!owner) {
-          return res.status(404).send("Not found");
-        }
+      const isSuspended = owner.suspendedAt !== null;
+      if (isSuspended) {
+        console.log(`[Cloak] User suspended: ${offer.userId}`);
+        return res.redirect(302, offer.whitePageUrl);
+      }
 
-        const isSuspended = owner.suspendedAt !== null;
-        if (isSuspended) {
-          console.log(`[Cloak] User suspended: ${offer.userId}`);
-          return res.redirect(302, offer.whitePageUrl);
-        }
-
-        // Check click limits
-        const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-        if (plan && !plan.isUnlimited) {
-          const userOffers = await storage.getOffersByUserId(offer.userId);
-          const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+      // Check click limits
+      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+      if (plan && !plan.isUnlimited) {
+        const userOffers = await storage.getOffersByUserId(offer.userId);
+        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+        
+        // If over limit (after 3-day grace period), redirect to white
+        if (totalClicks >= plan.maxClicks) {
+          const gracePeriodEnd = owner.subscriptionEndDate 
+            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+            : null;
           
-          // If over limit (after 3-day grace period), redirect to white
-          if (totalClicks >= plan.maxClicks) {
-            const gracePeriodEnd = owner.subscriptionEndDate 
-              ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-              : null;
-            
-            if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-              console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-              return res.redirect(302, offer.whitePageUrl);
-            }
+          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+            return res.redirect(302, offer.whitePageUrl);
           }
         }
-      } else {
-        console.log(`[Cloak] Honeypot offer detected: ${slug}, collecting traffic data`);
       }
 
       // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)
@@ -1769,76 +1449,33 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      // Skip bot ban checks and owner checks for honeypots - they need to collect all traffic data
-      if (!offer.isHoneypot) {
-        // Check if visitor is a banned bot
-        const botCheck2 = await storage.checkIfBotBanned(ip, userAgent, offer.platform);
-        if (botCheck2.banned) {
-          console.log(`[Cloak] Banned bot detected: ${botCheck2.reason}, redirecting to white`);
-          
-          if (botCheck2.banId) {
-            await storage.incrementBotBanHitCount(botCheck2.banId);
-          }
-          
-          const duration = Date.now() - startTime;
-          const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-          const country = await getCountryFromIP(ip);
-          const deviceType = parseUserAgent(userAgent);
-          
-          await storage.createClickLog({
-            offerId: offer.id,
-            userId: offer.userId,
-            ipAddress: ip,
-            userAgent,
-            country,
-            device: deviceType,
-            redirectedTo: "white",
-            requestUrl,
-            responseTimeMs: duration,
-            hasError: false,
-            allParams: {
-              domainId: domain?.id || offer.domainId || null,
-              platform: offer.platform,
-              referer,
-              failReason: `bot_banned:${botCheck2.reason}`,
-            },
-          });
-          
-          await storage.incrementOfferClicks(offer.id, false);
-          
-          return res.redirect(302, offer.whitePageUrl);
-        }
+      const owner = await storage.getUser(offer.userId);
+      if (!owner) {
+        return res.status(404).send("Not found");
+      }
 
-        const owner = await storage.getUser(offer.userId);
-        if (!owner) {
-          return res.status(404).send("Not found");
-        }
+      const isSuspended = owner.suspendedAt !== null;
+      if (isSuspended) {
+        console.log(`[Cloak] User suspended: ${offer.userId}`);
+        return res.redirect(302, offer.whitePageUrl);
+      }
 
-        const isSuspended = owner.suspendedAt !== null;
-        if (isSuspended) {
-          console.log(`[Cloak] User suspended: ${offer.userId}`);
-          return res.redirect(302, offer.whitePageUrl);
-        }
-
-        // Check click limits
-        const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-        if (plan && !plan.isUnlimited) {
-          const userOffers = await storage.getOffersByUserId(offer.userId);
-          const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+      // Check click limits
+      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
+      if (plan && !plan.isUnlimited) {
+        const userOffers = await storage.getOffersByUserId(offer.userId);
+        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+        
+        if (totalClicks >= plan.maxClicks) {
+          const gracePeriodEnd = owner.subscriptionEndDate 
+            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
+            : null;
           
-          if (totalClicks >= plan.maxClicks) {
-            const gracePeriodEnd = owner.subscriptionEndDate 
-              ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-              : null;
-            
-            if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-              console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-              return res.redirect(302, offer.whitePageUrl);
-            }
+          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
+            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+            return res.redirect(302, offer.whitePageUrl);
           }
         }
-      } else {
-        console.log(`[Cloak] Honeypot offer detected: ${slug}, collecting traffic data`);
       }
 
       // Fix malformed query parameters (e.g., ?fbcl instead of fbcl due to double ??)

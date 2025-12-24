@@ -12,7 +12,6 @@ import {
   adminSettings,
   passwordResetTokens,
   adminImpersonations,
-  botBans,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -29,8 +28,6 @@ import {
   type Notification,
   type InsertNotification,
   type AdminSettings,
-  type BotBan,
-  type InsertBotBan,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -51,7 +48,6 @@ export interface IStorage {
   getDomain(id: number): Promise<Domain | undefined>;
   getDomainBySubdomain(subdomain: string): Promise<Domain | undefined>;
   getDomainsByUserId(userId: string): Promise<Domain[]>;
-  getAllDomains(): Promise<Domain[]>;
   createDomain(domain: InsertDomain): Promise<Domain>;
   updateDomain(id: number, data: Partial<InsertDomain>): Promise<Domain | undefined>;
   deleteDomain(id: number): Promise<void>;
@@ -121,26 +117,6 @@ export interface IStorage {
       createdAt: Date;
       hasError: boolean | null;
     }>;
-  }>;
-
-  // Bot bans methods
-  getAllBotBans(): Promise<BotBan[]>;
-  getActiveBotBans(): Promise<BotBan[]>;
-  createBotBan(ban: InsertBotBan): Promise<BotBan>;
-  updateBotBan(id: number, data: Partial<InsertBotBan>): Promise<BotBan | undefined>;
-  deleteBotBan(id: number): Promise<void>;
-  incrementBotBanHitCount(id: number): Promise<void>;
-  checkIfBotBanned(ip: string, userAgent: string, platform?: string): Promise<{ banned: boolean; banId?: number; reason?: string }>;
-  checkIfBotBanExists(type: string, value: string, platform?: string): Promise<boolean>;
-
-  // Admin honeypot methods
-  getAdminHoneypots(): Promise<Offer[]>;
-  createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null; domainId?: number | null }): Promise<Offer>;
-  getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }>;
-  getHoneypotPatternStats(offerId: number): Promise<{
-    topUserAgents: Array<{ userAgent: string; count: number }>;
-    topIps: Array<{ ip: string; count: number }>;
-    topCountries: Array<{ country: string; count: number }>;
   }>;
 }
 
@@ -267,10 +243,6 @@ export class DatabaseStorage implements IStorage {
 
   async getDomainsByUserId(userId: string): Promise<Domain[]> {
     return db.select().from(domains).where(eq(domains.userId, userId)).orderBy(desc(domains.createdAt));
-  }
-
-  async getAllDomains(): Promise<Domain[]> {
-    return db.select().from(domains).orderBy(desc(domains.createdAt));
   }
 
   async createDomain(domain: InsertDomain): Promise<Domain> {
@@ -654,211 +626,6 @@ export class DatabaseStorage implements IStorage {
         createdAt: row.createdAt,
         hasError: row.hasError,
       })),
-    };
-  }
-
-  // Bot bans methods
-  async getAllBotBans(): Promise<BotBan[]> {
-    return db.select().from(botBans).orderBy(desc(botBans.createdAt));
-  }
-
-  async getActiveBotBans(): Promise<BotBan[]> {
-    return db.select().from(botBans).where(eq(botBans.isActive, true));
-  }
-
-  async createBotBan(ban: InsertBotBan): Promise<BotBan> {
-    const [created] = await db.insert(botBans).values(ban).returning();
-    return created;
-  }
-
-  async updateBotBan(id: number, data: Partial<InsertBotBan>): Promise<BotBan | undefined> {
-    const [updated] = await db
-      .update(botBans)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(botBans.id, id))
-      .returning();
-    return updated;
-  }
-
-  async deleteBotBan(id: number): Promise<void> {
-    await db.delete(botBans).where(eq(botBans.id, id));
-  }
-
-  async incrementBotBanHitCount(id: number): Promise<void> {
-    await db
-      .update(botBans)
-      .set({
-        hitCount: sql`${botBans.hitCount} + 1`,
-        lastHitAt: new Date(),
-      })
-      .where(eq(botBans.id, id));
-  }
-
-  async checkIfBotBanned(ip: string, userAgent: string, platform?: string): Promise<{ banned: boolean; banId?: number; reason?: string }> {
-    const activeBans = await this.getActiveBotBans();
-    
-    for (const ban of activeBans) {
-      // Check platform filter - skip platform-specific bans if:
-      // 1. The ban targets a specific platform (not "all")
-      // 2. AND either request platform is undefined OR doesn't match the ban's platform
-      if (ban.platform && ban.platform !== "all") {
-        if (!platform || ban.platform !== platform) {
-          continue;
-        }
-      }
-
-      if (ban.type === "user_agent") {
-        // Check if user-agent contains the banned string (case-insensitive)
-        if (userAgent.toLowerCase().includes(ban.value.toLowerCase())) {
-          return { banned: true, banId: ban.id, reason: `user_agent:${ban.value}` };
-        }
-      } else if (ban.type === "ip") {
-        // Exact IP match
-        if (ip === ban.value) {
-          return { banned: true, banId: ban.id, reason: `ip:${ban.value}` };
-        }
-      } else if (ban.type === "ip_range") {
-        // Check if IP is in CIDR range
-        if (this.isIpInRange(ip, ban.value)) {
-          return { banned: true, banId: ban.id, reason: `ip_range:${ban.value}` };
-        }
-      }
-    }
-
-    return { banned: false };
-  }
-
-  async checkIfBotBanExists(type: string, value: string, platform?: string): Promise<boolean> {
-    const conditions = [
-      eq(botBans.type, type as "user_agent" | "ip" | "ip_range"),
-      eq(botBans.value, value),
-    ];
-    
-    if (platform) {
-      conditions.push(eq(botBans.platform, platform as "all" | "facebook" | "tiktok"));
-    }
-    
-    const existing = await db.select({ id: botBans.id })
-      .from(botBans)
-      .where(and(...conditions))
-      .limit(1);
-    
-    return existing.length > 0;
-  }
-
-  // Helper function to check if IP is in CIDR range
-  private isIpInRange(ip: string, cidr: string): boolean {
-    try {
-      const [range, bits] = cidr.split("/");
-      const mask = bits ? parseInt(bits, 10) : 32;
-      
-      const ipParts = ip.split(".").map(Number);
-      const rangeParts = range.split(".").map(Number);
-      
-      if (ipParts.length !== 4 || rangeParts.length !== 4) return false;
-      
-      const ipNum = (ipParts[0] << 24) + (ipParts[1] << 16) + (ipParts[2] << 8) + ipParts[3];
-      const rangeNum = (rangeParts[0] << 24) + (rangeParts[1] << 16) + (rangeParts[2] << 8) + rangeParts[3];
-      const maskNum = ~((1 << (32 - mask)) - 1);
-      
-      return (ipNum & maskNum) === (rangeNum & maskNum);
-    } catch {
-      return false;
-    }
-  }
-
-  // Admin honeypot methods
-  async getAdminHoneypots(): Promise<Offer[]> {
-    return await db
-      .select()
-      .from(offers)
-      .where(eq(offers.isHoneypot, true))
-      .orderBy(desc(offers.createdAt));
-  }
-
-  async createAdminHoneypot(data: { name: string; slug: string; xcode: string; platform: string; blackPageUrl: string; whitePageUrl: string; sharedDomainId?: number | null; domainId?: number | null }): Promise<Offer> {
-    const [created] = await db
-      .insert(offers)
-      .values({
-        userId: "SYSTEM_ADMIN",
-        name: data.name,
-        slug: data.slug,
-        xcode: data.xcode,
-        platform: data.platform,
-        blackPageUrl: data.blackPageUrl,
-        whitePageUrl: data.whitePageUrl,
-        sharedDomainId: data.sharedDomainId || null,
-        domainId: data.domainId || null,
-        allowedCountries: [],
-        allowedDevices: [],
-        isActive: true,
-        isHoneypot: true,
-      })
-      .returning();
-    return created;
-  }
-
-  async getHoneypotClickLogs(offerId: number, page: number, limit: number): Promise<{ logs: ClickLog[]; total: number }> {
-    const offset = (page - 1) * limit;
-    
-    const logs = await db
-      .select()
-      .from(clickLogs)
-      .where(eq(clickLogs.offerId, offerId))
-      .orderBy(desc(clickLogs.createdAt))
-      .limit(limit)
-      .offset(offset);
-    
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(clickLogs)
-      .where(eq(clickLogs.offerId, offerId));
-    
-    return { logs, total: Number(count) };
-  }
-
-  async getHoneypotPatternStats(offerId: number): Promise<{
-    topUserAgents: Array<{ userAgent: string; count: number }>;
-    topIps: Array<{ ip: string; count: number }>;
-    topCountries: Array<{ country: string; count: number }>;
-  }> {
-    const topUserAgents = await db
-      .select({
-        userAgent: clickLogs.userAgent,
-        count: sql<number>`count(*)`,
-      })
-      .from(clickLogs)
-      .where(eq(clickLogs.offerId, offerId))
-      .groupBy(clickLogs.userAgent)
-      .orderBy(desc(sql`count(*)`))
-      .limit(20);
-
-    const topIps = await db
-      .select({
-        ip: clickLogs.ipAddress,
-        count: sql<number>`count(*)`,
-      })
-      .from(clickLogs)
-      .where(eq(clickLogs.offerId, offerId))
-      .groupBy(clickLogs.ipAddress)
-      .orderBy(desc(sql`count(*)`))
-      .limit(20);
-
-    const topCountries = await db
-      .select({
-        country: clickLogs.country,
-        count: sql<number>`count(*)`,
-      })
-      .from(clickLogs)
-      .where(eq(clickLogs.offerId, offerId))
-      .groupBy(clickLogs.country)
-      .orderBy(desc(sql`count(*)`))
-      .limit(20);
-
-    return {
-      topUserAgents: topUserAgents.map(r => ({ userAgent: r.userAgent || "Unknown", count: Number(r.count) })),
-      topIps: topIps.map(r => ({ ip: r.ip || "Unknown", count: Number(r.count) })),
-      topCountries: topCountries.map(r => ({ country: r.country || "Unknown", count: Number(r.count) })),
     };
   }
 }
