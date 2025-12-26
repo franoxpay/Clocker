@@ -45,7 +45,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { countries } from "@/lib/countries";
-import type { Offer, Domain } from "@shared/schema";
+import type { Offer, Domain, SharedDomain } from "@shared/schema";
 import { 
   Plus, 
   Pencil, 
@@ -63,6 +63,7 @@ import {
 
 interface OfferWithDomain extends Offer {
   domain?: Domain;
+  sharedDomain?: SharedDomain;
 }
 
 const devices = [
@@ -105,6 +106,10 @@ export default function Offers() {
 
   const { data: domains = [] } = useQuery<Domain[]>({
     queryKey: ["/api/domains"],
+  });
+
+  const { data: sharedDomains = [] } = useQuery<SharedDomain[]>({
+    queryKey: ["/api/shared-domains"],
   });
 
   const createMutation = useMutation({
@@ -203,11 +208,17 @@ export default function Offers() {
 
   const openEditMode = (offer: OfferWithDomain) => {
     setEditingOffer(offer);
+    let domainIdValue = "platform";
+    if (offer.sharedDomainId) {
+      domainIdValue = `shared_${offer.sharedDomainId}`;
+    } else if (offer.domainId) {
+      domainIdValue = String(offer.domainId);
+    }
     setFormData({
       name: offer.name,
       slug: offer.slug,
       platform: offer.platform,
-      domainId: offer.domainId === null ? "platform" : String(offer.domainId),
+      domainId: domainIdValue,
       blackPageUrl: offer.blackPageUrl,
       whitePageUrl: offer.whitePageUrl,
       allowedCountries: offer.allowedCountries,
@@ -233,6 +244,9 @@ export default function Offers() {
   };
 
   const getOfferDomain = (offer: OfferWithDomain) => {
+    if (offer.sharedDomainId) {
+      return offer.sharedDomain?.subdomain || sharedDomains.find(d => d.id === offer.sharedDomainId)?.subdomain || "";
+    }
     if (offer.domainId === null || offer.domainId === 0) {
       return platformDomain;
     }
@@ -403,11 +417,30 @@ export default function Offers() {
                       <SelectItem value="platform">
                         {platformDomain} ({language === "pt-BR" ? "Plataforma" : "Platform"})
                       </SelectItem>
-                      {domains.filter(d => d.isVerified).map((domain) => (
-                        <SelectItem key={domain.id} value={String(domain.id)}>
-                          {domain.subdomain}
-                        </SelectItem>
-                      ))}
+                      {sharedDomains.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            {language === "pt-BR" ? "Domínios Compartilhados" : "Shared Domains"}
+                          </div>
+                          {sharedDomains.map((domain) => (
+                            <SelectItem key={`shared_${domain.id}`} value={`shared_${domain.id}`}>
+                              {domain.subdomain}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+                      {domains.filter(d => d.isVerified).length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            {language === "pt-BR" ? "Meus Domínios" : "My Domains"}
+                          </div>
+                          {domains.filter(d => d.isVerified).map((domain) => (
+                            <SelectItem key={domain.id} value={String(domain.id)}>
+                              {domain.subdomain}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -655,9 +688,11 @@ export default function Offers() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {offer.domainId === null || offer.domainId === 0
-                          ? `${platformDomain} (${language === "pt-BR" ? "Plataforma" : "Platform"})` 
-                          : (offer.domain?.subdomain || "-")}
+                        {offer.sharedDomainId
+                          ? (offer.sharedDomain?.subdomain || sharedDomains.find(d => d.id === offer.sharedDomainId)?.subdomain || "-")
+                          : offer.domainId === null || offer.domainId === 0
+                            ? `${platformDomain} (${language === "pt-BR" ? "Plataforma" : "Platform"})` 
+                            : (offer.domain?.subdomain || "-")}
                       </TableCell>
                       <TableCell>
                         <Badge variant={offer.isActive ? "default" : "secondary"}>

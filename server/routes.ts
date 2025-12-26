@@ -419,11 +419,27 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const parsedDomainId = domainId === "platform" || domainId === "0" || domainId === "" || domainId === null ? null : parseInt(domainId);
+      let parsedDomainId: number | null = null;
+      let parsedSharedDomainId: number | null = null;
 
-      const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
-      if (existingOffer) {
-        return res.status(400).json({ message: "Slug already exists on this domain" });
+      if (domainId && domainId !== "platform" && domainId !== "0" && domainId !== "") {
+        if (String(domainId).startsWith("shared_")) {
+          parsedSharedDomainId = parseInt(String(domainId).replace("shared_", ""));
+        } else {
+          parsedDomainId = parseInt(domainId);
+        }
+      }
+
+      if (parsedSharedDomainId) {
+        const existingOffer = await storage.getOfferBySlugAndSharedDomain(slug, parsedSharedDomainId);
+        if (existingOffer) {
+          return res.status(400).json({ message: "Slug already exists on this shared domain" });
+        }
+      } else {
+        const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
+        if (existingOffer) {
+          return res.status(400).json({ message: "Slug already exists on this domain" });
+        }
       }
 
       const xcode = generateXcode();
@@ -433,6 +449,7 @@ export async function registerRoutes(
         slug,
         platform,
         domainId: parsedDomainId,
+        sharedDomainId: parsedSharedDomainId,
         blackPageUrl,
         whitePageUrl,
         allowedCountries: allowedCountries || ["BR"],
@@ -460,12 +477,30 @@ export async function registerRoutes(
 
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      const parsedDomainId = domainId === "platform" || domainId === "0" ? null : parseInt(domainId);
+      let parsedDomainId: number | null = null;
+      let parsedSharedDomainId: number | null = null;
 
-      if (slug !== offer.slug || parsedDomainId !== offer.domainId) {
-        const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
-        if (existingOffer && existingOffer.id !== offerId) {
-          return res.status(400).json({ message: "Slug already exists on this domain" });
+      if (domainId && domainId !== "platform" && domainId !== "0" && domainId !== "") {
+        if (String(domainId).startsWith("shared_")) {
+          parsedSharedDomainId = parseInt(String(domainId).replace("shared_", ""));
+        } else {
+          parsedDomainId = parseInt(domainId);
+        }
+      }
+
+      const domainChanged = slug !== offer.slug || parsedDomainId !== offer.domainId || parsedSharedDomainId !== offer.sharedDomainId;
+      
+      if (domainChanged) {
+        if (parsedSharedDomainId) {
+          const existingOffer = await storage.getOfferBySlugAndSharedDomain(slug, parsedSharedDomainId);
+          if (existingOffer && existingOffer.id !== offerId) {
+            return res.status(400).json({ message: "Slug already exists on this shared domain" });
+          }
+        } else {
+          const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
+          if (existingOffer && existingOffer.id !== offerId) {
+            return res.status(400).json({ message: "Slug already exists on this domain" });
+          }
         }
       }
 
@@ -474,6 +509,7 @@ export async function registerRoutes(
         slug,
         platform,
         domainId: parsedDomainId,
+        sharedDomainId: parsedSharedDomainId,
         blackPageUrl,
         whitePageUrl,
         allowedCountries,

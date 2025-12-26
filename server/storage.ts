@@ -338,15 +338,18 @@ export class DatabaseStorage implements IStorage {
       .select({
         offer: offers,
         domain: domains,
+        sharedDomain: sharedDomains,
       })
       .from(offers)
       .leftJoin(domains, eq(offers.domainId, domains.id))
+      .leftJoin(sharedDomains, eq(offers.sharedDomainId, sharedDomains.id))
       .where(eq(offers.userId, userId))
       .orderBy(desc(offers.createdAt))
       .then((rows) =>
         rows.map((row) => ({
           ...row.offer,
           domain: row.domain,
+          sharedDomain: row.sharedDomain,
         }))
       ) as any;
   }
