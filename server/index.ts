@@ -170,18 +170,29 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
   if (slug && !slug.includes(".")) {
     // Check if this domain has an offer with this slug
     const hostClean = host.split(":")[0];
-    const domain = await storage.getDomainBySubdomain(hostClean);
     
+    // First check user-owned domains
+    const domain = await storage.getDomainBySubdomain(hostClean);
     if (domain && domain.isActive && domain.isVerified) {
       const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
       if (offer && offer.isActive) {
-        // Valid offer, let the cloaking route handle it
+        console.log(`[DOMAIN GUARD] Valid user domain offer: ${slug} on ${hostClean}`);
         return next();
       }
     }
     
-    // Not a valid offer slug on this domain
-    console.log(`[DOMAIN GUARD] Invalid slug "${slug}" on custom domain: ${host}`);
+    // Then check shared domains
+    const sharedDomain = await storage.getSharedDomainBySubdomain(hostClean);
+    if (sharedDomain && sharedDomain.isActive && sharedDomain.isVerified) {
+      const offer = await storage.getOfferBySlugAndSharedDomain(slug, sharedDomain.id);
+      if (offer && offer.isActive) {
+        console.log(`[DOMAIN GUARD] Valid shared domain offer: ${slug} on ${hostClean}`);
+        return next();
+      }
+    }
+    
+    // Not a valid offer slug on this domain (checked both user and shared)
+    console.log(`[DOMAIN GUARD] Invalid slug "${slug}" on domain: ${host}`);
     return res.status(404).send(`
       <!DOCTYPE html>
       <html>
