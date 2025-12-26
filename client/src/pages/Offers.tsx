@@ -59,7 +59,6 @@ import {
   Link,
   Link2,
   Settings2,
-  Eye,
 } from "lucide-react";
 
 interface OfferWithDomain extends Offer {
@@ -81,7 +80,6 @@ export default function Offers() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [editingOffer, setEditingOffer] = useState<OfferWithDomain | null>(null);
   const [deleteOffer, setDeleteOffer] = useState<OfferWithDomain | null>(null);
-  const [previewOffer, setPreviewOffer] = useState<OfferWithDomain | null>(null);
   const [expandedOfferId, setExpandedOfferId] = useState<number | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [countrySearch, setCountrySearch] = useState("");
@@ -717,14 +715,6 @@ export default function Offers() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setPreviewOffer(offer)}
-                            data-testid={`button-preview-offer-${offer.id}`}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
                             onClick={() => openEditMode(offer)}
                             data-testid={`button-edit-offer-${offer.id}`}
                           >
@@ -935,80 +925,6 @@ export default function Offers() {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
-              {language === "pt-BR" ? "Fechar" : "Close"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!previewOffer} onOpenChange={(open) => !open && setPreviewOffer(null)}>
-        <DialogContent className="max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5" />
-              {language === "pt-BR" ? "Preview da Oferta" : "Offer Preview"}: {previewOffer?.name}
-            </DialogTitle>
-            <DialogDescription>
-              {language === "pt-BR" 
-                ? "Abra as páginas Black e White em novas abas para visualizar" 
-                : "Open the Black and White pages in new tabs to preview"}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="flex flex-col gap-3 p-4 border rounded-md bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Badge variant="default" className="bg-black text-white shrink-0">
-                  {language === "pt-BR" ? "Página Black" : "Black Page"}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground break-all">
-                {previewOffer?.blackPageUrl || (language === "pt-BR" ? "Não configurada" : "Not configured")}
-              </p>
-              {previewOffer?.blackPageUrl && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => window.open(previewOffer.blackPageUrl, '_blank')}
-                  data-testid="button-open-black-page"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  {language === "pt-BR" ? "Abrir Página Black" : "Open Black Page"}
-                </Button>
-              )}
-            </div>
-            
-            <div className="flex flex-col gap-3 p-4 border rounded-md bg-muted/30">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-white text-black border-2 shrink-0">
-                  {language === "pt-BR" ? "Página White" : "White Page"}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground break-all">
-                {previewOffer?.whitePageUrl || (language === "pt-BR" ? "Não configurada" : "Not configured")}
-              </p>
-              {previewOffer?.whitePageUrl && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => window.open(previewOffer.whitePageUrl, '_blank')}
-                  data-testid="button-open-white-page"
-                >
-                  <Eye className="w-4 h-4 mr-2" />
-                  {language === "pt-BR" ? "Abrir Página White" : "Open White Page"}
-                </Button>
-              )}
-            </div>
-
-            <p className="text-xs text-muted-foreground text-center">
-              {language === "pt-BR" 
-                ? "As páginas são abertas em novas abas porque sites externos geralmente bloqueiam visualização em iframe por segurança." 
-                : "Pages open in new tabs because external sites usually block iframe embedding for security."}
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewOffer(null)} data-testid="button-close-preview">
               {language === "pt-BR" ? "Fechar" : "Close"}
             </Button>
           </DialogFooter>
