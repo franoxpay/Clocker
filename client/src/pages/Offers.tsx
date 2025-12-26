@@ -999,10 +999,10 @@ export default function Offers() {
               <div className="border rounded-md overflow-hidden bg-muted" style={{ height: "60vh" }}>
                 {previewOffer?.blackPageUrl ? (
                   <iframe
-                    src={previewOffer.blackPageUrl}
+                    src={`/api/offers/${previewOffer.id}/preview?variant=black`}
                     className="w-full h-full border-0"
                     title="Black Page Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts allow-popups allow-forms"
                     data-testid="iframe-black-page"
                   />
                 ) : (
@@ -1034,10 +1034,10 @@ export default function Offers() {
               <div className="border rounded-md overflow-hidden bg-muted" style={{ height: "60vh" }}>
                 {previewOffer?.whitePageUrl ? (
                   <iframe
-                    src={previewOffer.whitePageUrl}
+                    src={`/api/offers/${previewOffer.id}/preview?variant=white`}
                     className="w-full h-full border-0"
                     title="White Page Preview"
-                    sandbox="allow-scripts allow-same-origin"
+                    sandbox="allow-scripts allow-popups allow-forms"
                     data-testid="iframe-white-page"
                   />
                 ) : (

@@ -546,6 +546,124 @@ export async function registerRoutes(
     }
   });
 
+  // Preview proxy routes - fetch external pages and strip frame-blocking headers
+  app.get("/api/offers/:id/preview", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = parseInt(req.params.id);
+      const variant = req.query.variant as string; // 'black' or 'white'
+
+      if (!variant || !['black', 'white'].includes(variant)) {
+        return res.status(400).json({ message: "Invalid variant. Use 'black' or 'white'" });
+      }
+
+      const offer = await storage.getOffer(offerId);
+      if (!offer || offer.userId !== userId) {
+        return res.status(404).json({ message: "Offer not found" });
+      }
+
+      const targetUrl = variant === 'black' ? offer.blackPageUrl : offer.whitePageUrl;
+      if (!targetUrl) {
+        return res.status(400).json({ message: `No ${variant} page URL configured` });
+      }
+
+      console.log(`[Preview Proxy] Fetching ${variant} page: ${targetUrl}`);
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      try {
+        const response = await fetch(targetUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+          },
+          redirect: 'follow',
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          return res.status(response.status).json({ message: `Target page returned ${response.status}` });
+        }
+
+        const contentType = response.headers.get('content-type') || 'text/html';
+        
+        if (!contentType.includes('text/html')) {
+          return res.status(400).json({ message: "Target URL is not an HTML page" });
+        }
+
+        let html = await response.text();
+        const baseUrl = new URL(targetUrl);
+        // Use the full URL as base for proper relative path resolution
+        // Handle cases: https://example.com, https://example.com/, https://example.com/page, https://example.com/path/page
+        let baseHref: string;
+        const pathPart = baseUrl.pathname;
+        if (pathPart === '/' || pathPart === '') {
+          baseHref = baseUrl.origin + '/';
+        } else if (targetUrl.endsWith('/')) {
+          baseHref = targetUrl;
+        } else {
+          // Get directory of the current page
+          const lastSlashIndex = targetUrl.lastIndexOf('/');
+          baseHref = lastSlashIndex > targetUrl.indexOf('://') + 2 
+            ? targetUrl.substring(0, lastSlashIndex + 1) 
+            : baseUrl.origin + '/';
+        }
+
+        // Rewrite relative URLs to absolute
+        html = html.replace(/(href|src|action)=["'](?!http|\/\/|data:|javascript:|#|mailto:)([^"']+)["']/gi, (match, attr, path) => {
+          try {
+            // For absolute paths starting with /, use origin
+            if (path.startsWith('/')) {
+              return `${attr}="${baseUrl.origin}${path}"`;
+            }
+            // For relative paths, use the directory of the current page
+            const absoluteUrl = new URL(path, baseHref).href;
+            return `${attr}="${absoluteUrl}"`;
+          } catch {
+            return match;
+          }
+        });
+
+        // Fix protocol-relative URLs
+        html = html.replace(/(href|src|action)=["']\/\/([^"']+)["']/gi, (match, attr, path) => {
+          return `${attr}="https://${path}"`;
+        });
+
+        // Remove frame-busting scripts
+        html = html.replace(/<script[^>]*>[\s\S]*?(top\.location|parent\.location|self\.location\s*=\s*top)[\s\S]*?<\/script>/gi, '');
+        html = html.replace(/if\s*\(\s*top\s*!==?\s*self\s*\)[\s\S]*?(top\.location|break|return)/gi, '');
+        html = html.replace(/if\s*\(\s*window\s*!==?\s*window\.top\s*\)[\s\S]*?(location|break|return)/gi, '');
+
+        // Add base tag if not present (use baseHref for proper relative path resolution)
+        if (!/<base\s/i.test(html)) {
+          html = html.replace(/<head([^>]*)>/i, `<head$1><base href="${baseHref}" target="_self">`);
+        }
+
+        // Set headers that allow embedding
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        
+        res.send(html);
+      } catch (fetchError: any) {
+        clearTimeout(timeout);
+        if (fetchError.name === 'AbortError') {
+          return res.status(504).json({ message: "Request timeout - page took too long to load" });
+        }
+        console.error(`[Preview Proxy] Fetch error:`, fetchError);
+        return res.status(502).json({ message: `Failed to fetch page: ${fetchError.message}` });
+      }
+    } catch (error) {
+      console.error("Error in preview proxy:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/domains", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
