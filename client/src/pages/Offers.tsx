@@ -942,7 +942,7 @@ export default function Offers() {
       </Dialog>
 
       <Dialog open={!!previewOffer} onOpenChange={(open) => !open && setPreviewOffer(null)}>
-        <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] flex flex-col">
+        <DialogContent className="max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="w-5 h-5" />
@@ -950,58 +950,64 @@ export default function Offers() {
             </DialogTitle>
             <DialogDescription>
               {language === "pt-BR" 
-                ? "Visualize as páginas Black e White da sua oferta" 
-                : "Preview the Black and White pages of your offer"}
+                ? "Abra as páginas Black e White em novas abas para visualizar" 
+                : "Open the Black and White pages in new tabs to preview"}
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0 overflow-hidden">
-            <div className="flex flex-col min-h-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge variant="default" className="bg-black text-white">
+          <div className="space-y-4 py-4">
+            <div className="flex flex-col gap-3 p-4 border rounded-md bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="bg-black text-white shrink-0">
                   {language === "pt-BR" ? "Página Black" : "Black Page"}
                 </Badge>
-                <span className="text-xs text-muted-foreground truncate flex-1">
-                  {previewOffer?.blackPageUrl}
-                </span>
               </div>
-              <div className="flex-1 border rounded-md overflow-hidden bg-white">
-                {previewOffer?.blackPageUrl && (
-                  <iframe
-                    src={previewOffer.blackPageUrl}
-                    className="w-full h-full"
-                    title="Black Page Preview"
-                    sandbox="allow-scripts allow-same-origin"
-                    data-testid="iframe-black-page"
-                  />
-                )}
-              </div>
+              <p className="text-sm text-muted-foreground break-all">
+                {previewOffer?.blackPageUrl || (language === "pt-BR" ? "Não configurada" : "Not configured")}
+              </p>
+              {previewOffer?.blackPageUrl && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open(previewOffer.blackPageUrl, '_blank')}
+                  data-testid="button-open-black-page"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  {language === "pt-BR" ? "Abrir Página Black" : "Open Black Page"}
+                </Button>
+              )}
             </div>
             
-            <div className="flex flex-col min-h-0">
-              <div className="flex items-center gap-2 mb-2">
-                <Badge variant="outline" className="bg-white text-black border-2">
+            <div className="flex flex-col gap-3 p-4 border rounded-md bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-white text-black border-2 shrink-0">
                   {language === "pt-BR" ? "Página White" : "White Page"}
                 </Badge>
-                <span className="text-xs text-muted-foreground truncate flex-1">
-                  {previewOffer?.whitePageUrl}
-                </span>
               </div>
-              <div className="flex-1 border rounded-md overflow-hidden bg-white">
-                {previewOffer?.whitePageUrl && (
-                  <iframe
-                    src={previewOffer.whitePageUrl}
-                    className="w-full h-full"
-                    title="White Page Preview"
-                    sandbox="allow-scripts allow-same-origin"
-                    data-testid="iframe-white-page"
-                  />
-                )}
-              </div>
+              <p className="text-sm text-muted-foreground break-all">
+                {previewOffer?.whitePageUrl || (language === "pt-BR" ? "Não configurada" : "Not configured")}
+              </p>
+              {previewOffer?.whitePageUrl && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open(previewOffer.whitePageUrl, '_blank')}
+                  data-testid="button-open-white-page"
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  {language === "pt-BR" ? "Abrir Página White" : "Open White Page"}
+                </Button>
+              )}
             </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              {language === "pt-BR" 
+                ? "As páginas são abertas em novas abas porque sites externos geralmente bloqueiam visualização em iframe por segurança." 
+                : "Pages open in new tabs because external sites usually block iframe embedding for security."}
+            </p>
           </div>
 
-          <DialogFooter className="mt-4">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOffer(null)} data-testid="button-close-preview">
               {language === "pt-BR" ? "Fechar" : "Close"}
             </Button>
