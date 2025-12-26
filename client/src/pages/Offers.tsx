@@ -113,6 +113,10 @@ export default function Offers() {
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const res = await apiRequest("POST", "/api/offers", data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Error creating offer");
+      }
       return res.json();
     },
     onSuccess: (newOffer: OfferWithDomain) => {
@@ -125,10 +129,18 @@ export default function Offers() {
         description: language === "pt-BR" ? "Oferta criada com sucesso" : "Offer created successfully",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      let errorMessage = language === "pt-BR" ? "Erro ao criar oferta" : "Error creating offer";
+      
+      if (error.message.includes("Slug already exists")) {
+        errorMessage = language === "pt-BR" 
+          ? "Este slug já existe neste domínio. Escolha outro slug." 
+          : "This slug already exists on this domain. Choose a different slug.";
+      }
+      
       toast({
         title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao criar oferta" : "Error creating offer",
+        description: errorMessage,
         variant: "destructive",
       });
     },
@@ -137,6 +149,10 @@ export default function Offers() {
   const updateMutation = useMutation({
     mutationFn: async (data: typeof formData & { id: number }) => {
       const res = await apiRequest("PUT", `/api/offers/${data.id}`, data);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Error updating offer");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -148,10 +164,18 @@ export default function Offers() {
         description: language === "pt-BR" ? "Oferta atualizada com sucesso" : "Offer updated successfully",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      let errorMessage = language === "pt-BR" ? "Erro ao atualizar oferta" : "Error updating offer";
+      
+      if (error.message.includes("Slug already exists")) {
+        errorMessage = language === "pt-BR" 
+          ? "Este slug já existe neste domínio. Escolha outro slug." 
+          : "This slug already exists on this domain. Choose a different slug.";
+      }
+      
       toast({
         title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao atualizar oferta" : "Error updating offer",
+        description: errorMessage,
         variant: "destructive",
       });
     },

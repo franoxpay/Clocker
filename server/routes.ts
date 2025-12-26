@@ -1423,7 +1423,7 @@ export async function registerRoutes(
   });
 
   // Alternative cloaking route without /r/ prefix - for cleaner URLs
-  // This catches /:slug patterns on custom domains only
+  // This catches /:slug patterns on custom domains and shared domains
   app.get("/:slug", async (req: Request, res: Response, next: NextFunction) => {
     const { slug } = req.params;
     
@@ -1449,25 +1449,36 @@ export async function registerRoutes(
       "forwarded": req.get("forwarded"),
     })}`);
     
-    // Only handle if it's a registered custom domain (not the main app domain)
-    const domain = await storage.getDomainBySubdomain(domainToCheck);
-    console.log(`[CLOAK /:slug] Domain lookup result:`, domain ? { id: domain.id, subdomain: domain.subdomain, isActive: domain.isActive, isVerified: domain.isVerified } : null);
+    let offer: Offer | undefined;
+    let isSharedDomain = false;
     
-    if (!domain || !domain.isActive || !domain.isVerified) {
-      console.log(`[CLOAK /:slug] Domain not found/inactive/unverified - passing to next()`);
-      return next(); // Let other routes handle it
+    // First, check if it's a user-owned domain
+    const domain = await storage.getDomainBySubdomain(domainToCheck);
+    console.log(`[CLOAK /:slug] User domain lookup result:`, domain ? { id: domain.id, subdomain: domain.subdomain, isActive: domain.isActive, isVerified: domain.isVerified } : null);
+    
+    if (domain && domain.isActive && domain.isVerified) {
+      // Found valid user domain, get offer by slug and domain
+      offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
+      console.log(`[CLOAK /:slug] User domain offer lookup result:`, offer ? { id: offer.id, slug: offer.slug, domainId: offer.domainId } : null);
+    } else {
+      // Check if it's a shared domain
+      const sharedDomain = await storage.getSharedDomainBySubdomain(domainToCheck);
+      console.log(`[CLOAK /:slug] Shared domain lookup result:`, sharedDomain ? { id: sharedDomain.id, subdomain: sharedDomain.subdomain, isActive: sharedDomain.isActive, isVerified: sharedDomain.isVerified } : null);
+      
+      if (sharedDomain && sharedDomain.isActive && sharedDomain.isVerified) {
+        // Found valid shared domain, get offer by slug and sharedDomainId
+        offer = await storage.getOfferBySlugAndSharedDomain(slug, sharedDomain.id);
+        isSharedDomain = true;
+        console.log(`[CLOAK /:slug] Shared domain offer lookup result:`, offer ? { id: offer.id, slug: offer.slug, sharedDomainId: offer.sharedDomainId } : null);
+      }
     }
     
-    // Check if offer exists for this slug
-    const offer = await storage.getOfferBySlugAndDomain(slug, domain.id);
-    console.log(`[CLOAK /:slug] Offer lookup result:`, offer ? { id: offer.id, slug: offer.slug, domainId: offer.domainId } : null);
-    
     if (!offer) {
-      console.log(`[CLOAK /:slug] Offer not found for slug ${slug} on domain ${domain.id} - passing to next()`);
+      console.log(`[CLOAK /:slug] Offer not found for slug ${slug} on domain ${domainToCheck} - passing to next()`);
       return next(); // Not a valid offer slug
     }
     
-    console.log(`[CLOAK /:slug] Processing cloaking for offer: ${offer.slug}`);
+    console.log(`[CLOAK /:slug] Processing cloaking for offer: ${offer.slug} (isSharedDomain: ${isSharedDomain})`);
     
     // Forward to the main cloaking handler by rewriting the URL
     req.url = `/r/${slug}`;
