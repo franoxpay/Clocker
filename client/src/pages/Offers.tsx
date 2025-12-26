@@ -59,6 +59,7 @@ import {
   Link,
   Link2,
   Settings2,
+  Eye,
 } from "lucide-react";
 
 interface OfferWithDomain extends Offer {
@@ -85,6 +86,7 @@ export default function Offers() {
   const [countrySearch, setCountrySearch] = useState("");
   const [mergeParamsOffer, setMergeParamsOffer] = useState<OfferWithDomain | null>(null);
   const [additionalParams, setAdditionalParams] = useState("");
+  const [previewOffer, setPreviewOffer] = useState<OfferWithDomain | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -739,6 +741,15 @@ export default function Offers() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => setPreviewOffer(offer)}
+                            title={language === "pt-BR" ? "Visualizar páginas" : "Preview pages"}
+                            data-testid={`button-preview-offer-${offer.id}`}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => openEditMode(offer)}
                             data-testid={`button-edit-offer-${offer.id}`}
                           >
@@ -949,6 +960,100 @@ export default function Offers() {
 
           <DialogFooter>
             <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
+              {language === "pt-BR" ? "Fechar" : "Close"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!previewOffer} onOpenChange={(open) => !open && setPreviewOffer(null)}>
+        <DialogContent className="sm:max-w-[95vw] max-h-[95vh] w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-5 h-5" />
+              {language === "pt-BR" ? "Visualizar Páginas" : "Preview Pages"} - {previewOffer?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {language === "pt-BR" 
+                ? "Visualize as páginas Black (oferta real) e White (página segura) da sua campanha" 
+                : "Preview the Black (real offer) and White (safe page) pages of your campaign"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-foreground" />
+                  {language === "pt-BR" ? "Página Black (Oferta Real)" : "Black Page (Real Offer)"}
+                </Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => previewOffer?.blackPageUrl && window.open(previewOffer.blackPageUrl, "_blank")}
+                  data-testid="button-open-black-page"
+                >
+                  {language === "pt-BR" ? "Abrir" : "Open"}
+                </Button>
+              </div>
+              <div className="border rounded-md overflow-hidden bg-muted" style={{ height: "60vh" }}>
+                {previewOffer?.blackPageUrl ? (
+                  <iframe
+                    src={previewOffer.blackPageUrl}
+                    className="w-full h-full border-0"
+                    title="Black Page Preview"
+                    sandbox="allow-scripts allow-same-origin"
+                    data-testid="iframe-black-page"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    {language === "pt-BR" ? "URL não configurada" : "URL not configured"}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {previewOffer?.blackPageUrl || "-"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-muted-foreground border" />
+                  {language === "pt-BR" ? "Página White (Página Segura)" : "White Page (Safe Page)"}
+                </Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => previewOffer?.whitePageUrl && window.open(previewOffer.whitePageUrl, "_blank")}
+                  data-testid="button-open-white-page"
+                >
+                  {language === "pt-BR" ? "Abrir" : "Open"}
+                </Button>
+              </div>
+              <div className="border rounded-md overflow-hidden bg-muted" style={{ height: "60vh" }}>
+                {previewOffer?.whitePageUrl ? (
+                  <iframe
+                    src={previewOffer.whitePageUrl}
+                    className="w-full h-full border-0"
+                    title="White Page Preview"
+                    sandbox="allow-scripts allow-same-origin"
+                    data-testid="iframe-white-page"
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    {language === "pt-BR" ? "URL não configurada" : "URL not configured"}
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground truncate">
+                {previewOffer?.whitePageUrl || "-"}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewOffer(null)} data-testid="button-close-preview">
               {language === "pt-BR" ? "Fechar" : "Close"}
             </Button>
           </DialogFooter>
