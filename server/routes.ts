@@ -419,14 +419,18 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
+      console.log("[Offer Create] Received domainId:", domainId, "type:", typeof domainId);
+
       let parsedDomainId: number | null = null;
       let parsedSharedDomainId: number | null = null;
 
       if (domainId && domainId !== "platform" && domainId !== "0" && domainId !== "") {
         if (String(domainId).startsWith("shared_")) {
           parsedSharedDomainId = parseInt(String(domainId).replace("shared_", ""));
+          console.log("[Offer Create] Parsed as SHARED domain:", parsedSharedDomainId);
         } else {
           parsedDomainId = parseInt(domainId);
+          console.log("[Offer Create] Parsed as USER domain:", parsedDomainId);
         }
       }
 
