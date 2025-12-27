@@ -296,6 +296,9 @@ export default function Offers() {
     if (offer.platform === "tiktok") {
       return `?ttclid=__CLICKID__&adid=__CID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&domain=__DOMAIN__&placement=__PLACEMENT__&xcode=${offer.xcode}`;
     }
+    if (offer.platform === "tiktok2") {
+      return `?ttclid=__CLICKID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
+    }
     return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
   };
 
