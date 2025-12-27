@@ -2,11 +2,248 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 import { getStripeClient, getStripePublishableKey, isStripeConfigured } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { promises as dns } from "dns";
+
+// ==========================================
+// ANTI-BOT CHALLENGE SYSTEM
+// ==========================================
+
+interface ChallengeData {
+  offerId: number;
+  slug: string;
+  targetUrl: string;
+  redirectType: 'black' | 'white';
+  ip: string;
+  userAgent: string;
+  createdAt: number;
+  queryParams: Record<string, any>;
+  honeypotTriggered: boolean;
+  // Server-side verification data
+  verifiedAt: number | null;
+  verifiedScore: number | null;
+  verificationNonce: string | null;
+}
+
+// Store challenge tokens (in production, use Redis for distributed systems)
+const challengeTokens = new Map<string, ChallengeData>();
+const CHALLENGE_EXPIRY_MS = 30000; // 30 seconds to complete challenge
+const MIN_HUMAN_TIME_MS = 800; // Minimum 800ms for human interaction
+
+// Clean up expired tokens periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of challengeTokens.entries()) {
+    if (now - data.createdAt > CHALLENGE_EXPIRY_MS * 2) {
+      challengeTokens.delete(token);
+    }
+  }
+}, 60000);
+
+function generateChallengeToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+function generateChallengeHTML(token: string, honeypotId: string): string {
+  // Generate random variable names to avoid detection
+  const varNames = {
+    checks: `_${randomBytes(4).toString('hex')}`,
+    score: `_${randomBytes(4).toString('hex')}`,
+    start: `_${randomBytes(4).toString('hex')}`,
+    result: `_${randomBytes(4).toString('hex')}`,
+  };
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificando...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      text-align: center;
+      max-width: 400px;
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    h2 { color: #333; margin-bottom: 10px; }
+    p { color: #666; font-size: 14px; }
+    /* Honeypot - invisible to users, visible to bots */
+    .${honeypotId} {
+      position: absolute;
+      left: -9999px;
+      top: -9999px;
+      opacity: 0;
+      pointer-events: none;
+      height: 0;
+      width: 0;
+      z-index: -1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h2>Verificando seu acesso...</h2>
+    <p>Aguarde um momento</p>
+  </div>
+  
+  <!-- Honeypot links - bots will find and potentially access these -->
+  <a href="/api/honeypot/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">admin</a>
+  <a href="/api/trap/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">login</a>
+  <form action="/api/submit/${token}" class="${honeypotId}">
+    <input type="text" name="email" class="${honeypotId}">
+    <input type="password" name="password" class="${honeypotId}">
+  </form>
+  
+  <script>
+    (function() {
+      var ${varNames.start} = Date.now();
+      var ${varNames.checks} = {};
+      var ${varNames.score} = 0;
+      
+      // 1. Check if running in a real browser environment
+      ${varNames.checks}.hasWindow = typeof window !== 'undefined';
+      ${varNames.checks}.hasDocument = typeof document !== 'undefined';
+      ${varNames.checks}.hasNavigator = typeof navigator !== 'undefined';
+      
+      // 2. Check for headless browser signatures
+      ${varNames.checks}.webdriver = navigator.webdriver === true;
+      ${varNames.checks}.headless = /HeadlessChrome|PhantomJS|Puppeteer|Playwright/i.test(navigator.userAgent);
+      ${varNames.checks}.phantom = window.callPhantom || window._phantom;
+      ${varNames.checks}.nightmare = window.__nightmare;
+      ${varNames.checks}.selenium = window.document.documentElement.getAttribute('webdriver') !== null;
+      ${varNames.checks}.seleniumIDE = window._Selenium_IDE_Recorder;
+      ${varNames.checks}.webdriverIO = window.wdioElectron;
+      ${varNames.checks}.domAutomation = window.domAutomation || window.domAutomationController;
+      ${varNames.checks}.cdc = window.cdc_adoQpoasnfa76pfcZLmcfl_Array || window.cdc_adoQpoasnfa76pfcZLmcfl_Promise;
+      
+      // 3. Check for automation properties
+      ${varNames.checks}.automationProp = navigator.plugins === undefined || navigator.plugins.length === 0;
+      ${varNames.checks}.languages = !navigator.languages || navigator.languages.length === 0;
+      
+      // 4. Check for browser features that bots often lack
+      ${varNames.checks}.hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      ${varNames.checks}.hasNotification = 'Notification' in window;
+      ${varNames.checks}.hasPerformance = 'performance' in window && 'timing' in window.performance;
+      
+      // 5. Check screen properties (bots often have weird values)
+      ${varNames.checks}.screenOk = window.screen.width > 0 && window.screen.height > 0;
+      ${varNames.checks}.outerOk = window.outerWidth > 0 && window.outerHeight > 0;
+      
+      // 6. Check for Chrome DevTools protocol
+      ${varNames.checks}.devtoolsOpen = window.devtools && window.devtools.open;
+      
+      // 7. Canvas fingerprint check (bots often fail or have identical outputs)
+      try {
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillText('Bot check', 2, 2);
+        ${varNames.checks}.canvas = canvas.toDataURL().length > 1000;
+      } catch(e) {
+        ${varNames.checks}.canvas = false;
+      }
+      
+      // 8. WebGL check
+      try {
+        var canvas2 = document.createElement('canvas');
+        var gl = canvas2.getContext('webgl') || canvas2.getContext('experimental-webgl');
+        ${varNames.checks}.webgl = gl !== null;
+        if (gl) {
+          var debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+          if (debugInfo) {
+            var renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            ${varNames.checks}.swiftShader = /SwiftShader|llvmpipe|softpipe/i.test(renderer);
+          }
+        }
+      } catch(e) {
+        ${varNames.checks}.webgl = false;
+      }
+      
+      // 9. Audio fingerprint check
+      try {
+        var audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        ${varNames.checks}.audio = audioContext !== null;
+        audioContext.close();
+      } catch(e) {
+        ${varNames.checks}.audio = false;
+      }
+      
+      // Calculate score
+      if (${varNames.checks}.hasWindow && ${varNames.checks}.hasDocument && ${varNames.checks}.hasNavigator) ${varNames.score} += 10;
+      if (!${varNames.checks}.webdriver) ${varNames.score} += 15;
+      if (!${varNames.checks}.headless) ${varNames.score} += 15;
+      if (!${varNames.checks}.phantom && !${varNames.checks}.nightmare) ${varNames.score} += 10;
+      if (!${varNames.checks}.selenium && !${varNames.checks}.seleniumIDE) ${varNames.score} += 10;
+      if (!${varNames.checks}.domAutomation && !${varNames.checks}.cdc) ${varNames.score} += 10;
+      if (${varNames.checks}.canvas) ${varNames.score} += 10;
+      if (${varNames.checks}.webgl && !${varNames.checks}.swiftShader) ${varNames.score} += 10;
+      if (${varNames.checks}.audio) ${varNames.score} += 5;
+      if (${varNames.checks}.screenOk && ${varNames.checks}.outerOk) ${varNames.score} += 5;
+      
+      // Wait for minimum human time then submit
+      function submitResult() {
+        var elapsed = Date.now() - ${varNames.start};
+        var ${varNames.result} = {
+          t: '${token}',
+          s: ${varNames.score},
+          e: elapsed,
+          c: ${varNames.checks},
+          r: Math.random().toString(36).substr(2, 9)
+        };
+        
+        // Use image request for stealth (harder to detect than fetch)
+        var img = new Image();
+        img.onload = function() {
+          // Success - redirect will happen server-side via meta refresh
+          setTimeout(function() {
+            window.location.href = '/api/challenge/complete/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
+          }, 100);
+        };
+        img.onerror = function() {
+          // Fallback to direct navigation
+          window.location.href = '/api/challenge/complete/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
+        };
+        img.src = '/api/challenge/verify/' + '${token}' + '?s=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e + '&r=' + ${varNames.result}.r;
+      }
+      
+      // Add some randomness to timing (800-1500ms)
+      var delay = 800 + Math.floor(Math.random() * 700);
+      setTimeout(submitResult, delay);
+    })();
+  </script>
+</body>
+</html>`;
+}
 
 async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
   console.log(`[DNS] Verifying domain: ${subdomain}`);
@@ -103,6 +340,194 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   await setupAuth(app);
+
+  // ==========================================
+  // ANTI-BOT CHALLENGE ROUTES
+  // ==========================================
+  
+  // Honeypot routes - if a bot accesses these, mark the token as compromised
+  app.get("/api/honeypot/:token", (req: Request, res: Response) => {
+    const { token } = req.params;
+    const challenge = challengeTokens.get(token);
+    if (challenge) {
+      challenge.honeypotTriggered = true;
+      console.log(`[AntiBot] HONEYPOT TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
+    }
+    // Return a fake success to not alert the bot
+    res.status(200).send('OK');
+  });
+  
+  app.get("/api/trap/:token", (req: Request, res: Response) => {
+    const { token } = req.params;
+    const challenge = challengeTokens.get(token);
+    if (challenge) {
+      challenge.honeypotTriggered = true;
+      console.log(`[AntiBot] TRAP TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
+    }
+    res.status(200).send('OK');
+  });
+  
+  app.all("/api/submit/:token", (req: Request, res: Response) => {
+    const { token } = req.params;
+    const challenge = challengeTokens.get(token);
+    if (challenge) {
+      challenge.honeypotTriggered = true;
+      console.log(`[AntiBot] FORM SUBMIT TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
+    }
+    res.status(200).send('OK');
+  });
+  
+  // Challenge verification route (called by JavaScript)
+  // This stores the verification data server-side so it can't be faked
+  app.get("/api/challenge/verify/:token", (req: Request, res: Response) => {
+    const { token } = req.params;
+    const score = parseInt(req.query.s as string) || 0;
+    const nonce = req.query.r as string || '';
+    
+    const challenge = challengeTokens.get(token);
+    if (!challenge) {
+      console.log(`[AntiBot] Verify - Invalid/expired token: ${token.substring(0, 16)}...`);
+      const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+      res.set('Content-Type', 'image/gif');
+      return res.send(gif);
+    }
+    
+    // SERVER-SIDE: Store verification data (can only be set once)
+    if (challenge.verifiedAt === null) {
+      challenge.verifiedAt = Date.now();
+      challenge.verifiedScore = score;
+      challenge.verificationNonce = nonce;
+      console.log(`[AntiBot] Verify - Token: ${token.substring(0, 16)}... Score: ${score}, Nonce: ${nonce}, Honeypot: ${challenge.honeypotTriggered}`);
+    } else {
+      // Token already verified - potential replay attack
+      console.log(`[AntiBot] Verify - DUPLICATE attempt for token: ${token.substring(0, 16)}...`);
+    }
+    
+    // Return 1x1 transparent GIF
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set('Content-Type', 'image/gif');
+    res.send(gif);
+  });
+  
+  // Challenge completion route - validate and redirect
+  // Uses SERVER-SIDE stored verification data, not client parameters
+  app.get("/api/challenge/complete/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    
+    const challenge = challengeTokens.get(token);
+    if (!challenge) {
+      console.log(`[AntiBot] Complete - Invalid/expired token: ${token.substring(0, 16)}...`);
+      return res.status(400).send('Challenge expired. Please try again.');
+    }
+    
+    const now = Date.now();
+    const tokenAge = now - challenge.createdAt;
+    
+    // Use SERVER-SIDE verification data (not client-supplied params)
+    const score = challenge.verifiedScore ?? 0;
+    const verifiedAt = challenge.verifiedAt;
+    const elapsed = verifiedAt ? (verifiedAt - challenge.createdAt) : 0;
+    
+    // Validate the challenge
+    let isBot = false;
+    let botReason = '';
+    
+    // 1. Check if verification route was never called (JavaScript didn't run)
+    if (!verifiedAt) {
+      isBot = true;
+      botReason = 'no_js_verification';
+      console.log(`[AntiBot] BOT - No JavaScript verification (direct access to complete route)`);
+    }
+    
+    // 2. Check if honeypot was triggered
+    if (!isBot && challenge.honeypotTriggered) {
+      isBot = true;
+      botReason = 'honeypot_triggered';
+      console.log(`[AntiBot] BOT - Honeypot was triggered`);
+    }
+    
+    // 3. Check if response was too fast (bots don't run JavaScript properly)
+    // Using SERVER-MEASURED elapsed time
+    if (!isBot && elapsed < MIN_HUMAN_TIME_MS) {
+      isBot = true;
+      botReason = `too_fast:${elapsed}ms`;
+      console.log(`[AntiBot] BOT - Response too fast: ${elapsed}ms (min: ${MIN_HUMAN_TIME_MS}ms)`);
+    }
+    
+    // 4. Check if token is too old
+    if (!isBot && tokenAge > CHALLENGE_EXPIRY_MS) {
+      isBot = true;
+      botReason = `token_expired:${tokenAge}ms`;
+      console.log(`[AntiBot] BOT - Token expired: ${tokenAge}ms (max: ${CHALLENGE_EXPIRY_MS}ms)`);
+    }
+    
+    // 5. Check browser verification score (from SERVER-STORED data)
+    const MIN_SCORE = 50; // Minimum score to be considered human
+    if (!isBot && score < MIN_SCORE) {
+      isBot = true;
+      botReason = `low_score:${score}`;
+      console.log(`[AntiBot] BOT - Score too low: ${score} (min: ${MIN_SCORE})`);
+    }
+    
+    // Clean up the token
+    challengeTokens.delete(token);
+    
+    // Log the result
+    console.log(`[AntiBot] Challenge result - Token: ${token.substring(0, 16)}... IsBot: ${isBot} Reason: ${botReason || 'passed'} Score: ${score} Elapsed: ${elapsed}ms`);
+    
+    // Determine redirect URL
+    let targetUrl: string;
+    if (isBot) {
+      // Bot detected - always go to white page
+      // Need to get the offer's white page URL
+      const offer = await storage.getOffer(challenge.offerId);
+      if (!offer) {
+        return res.status(404).send('Not found');
+      }
+      targetUrl = offer.whitePageUrl;
+      
+      // Log the bot detection
+      await storage.createClickLog({
+        offerId: challenge.offerId,
+        userId: offer.userId,
+        ipAddress: challenge.ip,
+        userAgent: challenge.userAgent,
+        country: 'XX',
+        device: parseUserAgent(challenge.userAgent),
+        redirectedTo: 'white',
+        requestUrl: `challenge:${token.substring(0, 16)}`,
+        responseTimeMs: elapsed,
+        hasError: false,
+        allParams: {
+          challengeFailed: true,
+          botReason,
+          score,
+          elapsed,
+          honeypotTriggered: challenge.honeypotTriggered,
+        },
+      });
+    } else {
+      // Human verified - go to intended destination
+      targetUrl = challenge.targetUrl;
+      
+      // Add query params if going to black page
+      if (challenge.redirectType === 'black' && Object.keys(challenge.queryParams).length > 0) {
+        try {
+          const url = new URL(targetUrl);
+          for (const [key, value] of Object.entries(challenge.queryParams)) {
+            if (typeof value === 'string') {
+              url.searchParams.set(key, value);
+            }
+          }
+          targetUrl = url.toString();
+        } catch (e) {
+          console.error('[AntiBot] Error building URL with params:', e);
+        }
+      }
+    }
+    
+    return res.redirect(302, targetUrl);
+  });
 
   app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
     try {
@@ -1690,27 +2115,42 @@ export async function registerRoutes(
 
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${paramsValid ? "ok" : failReason}`);
 
-      // Build final redirect URL with all query params for black page
-      let finalUrl = targetUrl;
-      if (shouldRedirectToBlack && Object.keys(req.query).length > 0) {
-        try {
-          const url = new URL(targetUrl);
-          for (const [key, value] of Object.entries(req.query)) {
-            if (typeof value === "string") {
-              url.searchParams.set(key, value);
-            } else if (Array.isArray(value)) {
-              value.forEach(v => {
-                if (typeof v === "string") url.searchParams.append(key, v);
-              });
-            }
-          }
-          finalUrl = url.toString();
-        } catch (e) {
-          console.error("[Cloak] Error building URL with params:", e);
-        }
+      // If going to WHITE page - redirect directly (no challenge needed for bots)
+      if (!shouldRedirectToBlack) {
+        return res.redirect(302, targetUrl);
       }
 
-      return res.redirect(302, finalUrl);
+      // ==========================================
+      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
+      // ==========================================
+      // Instead of redirecting directly to black page, serve a challenge page
+      // that verifies the visitor is a real human with a real browser
+      
+      // Generate challenge token and store challenge data
+      const challengeToken = generateChallengeToken();
+      const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
+      
+      challengeTokens.set(challengeToken, {
+        offerId: offer.id,
+        slug,
+        targetUrl,
+        redirectType: 'black',
+        ip,
+        userAgent,
+        createdAt: Date.now(),
+        queryParams: req.query as Record<string, any>,
+        honeypotTriggered: false,
+        verifiedAt: null,
+        verifiedScore: null,
+        verificationNonce: null,
+      });
+      
+      console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
+      
+      // Serve the challenge HTML page
+      res.set('Content-Type', 'text/html');
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.send(generateChallengeHTML(challengeToken, honeypotId));
     } catch (error) {
       console.error("[Cloak] Error:", error);
       return res.status(500).send("Internal server error");
@@ -1902,27 +2342,37 @@ export async function registerRoutes(
 
       console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
 
-      // Build final redirect URL with all query params for black page
-      let finalUrl = targetUrl;
-      if (shouldRedirectToBlack && Object.keys(req.query).length > 0) {
-        try {
-          const url = new URL(targetUrl);
-          for (const [key, value] of Object.entries(req.query)) {
-            if (typeof value === "string") {
-              url.searchParams.set(key, value);
-            } else if (Array.isArray(value)) {
-              value.forEach(v => {
-                if (typeof v === "string") url.searchParams.append(key, v);
-              });
-            }
-          }
-          finalUrl = url.toString();
-        } catch (e) {
-          console.error("[Cloak] Error building URL with params:", e);
-        }
+      // If going to WHITE page - redirect directly (no challenge needed for bots)
+      if (!shouldRedirectToBlack) {
+        return res.redirect(302, targetUrl);
       }
 
-      return res.redirect(302, finalUrl);
+      // ==========================================
+      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
+      // ==========================================
+      const challengeToken = generateChallengeToken();
+      const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
+      
+      challengeTokens.set(challengeToken, {
+        offerId: offer.id,
+        slug,
+        targetUrl,
+        redirectType: 'black',
+        ip,
+        userAgent,
+        createdAt: Date.now(),
+        queryParams: req.query as Record<string, any>,
+        honeypotTriggered: false,
+        verifiedAt: null,
+        verifiedScore: null,
+        verificationNonce: null,
+      });
+      
+      console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
+      
+      res.set('Content-Type', 'text/html');
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+      return res.send(generateChallengeHTML(challengeToken, honeypotId));
     } catch (error) {
       console.error("[Cloak] Error:", error);
       return res.status(500).send("Internal server error");
