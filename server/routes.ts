@@ -26,6 +26,16 @@ interface ChallengeData {
   verifiedAt: number | null;
   verifiedScore: number | null;
   verificationNonce: string | null;
+  // Additional data for logging after challenge
+  userId: string;
+  country: string;
+  device: 'smartphone' | 'tablet' | 'desktop';
+  requestUrl: string;
+  platform: string;
+  referer: string;
+  ttclid: string | null;
+  fbcl: string | null;
+  cname: string | null;
 }
 
 // Store challenge tokens (in production, use Redis for distributed systems)
@@ -475,43 +485,23 @@ export async function registerRoutes(
     // Log the result
     console.log(`[AntiBot] Challenge result - Token: ${token.substring(0, 16)}... IsBot: ${isBot} Reason: ${botReason || 'passed'} Score: ${score} Elapsed: ${elapsed}ms`);
     
-    // Determine redirect URL
+    // Determine redirect URL and log the click
     let targetUrl: string;
+    const redirectedTo = isBot ? 'white' : 'black';
+    
     if (isBot) {
       // Bot detected - always go to white page
-      // Need to get the offer's white page URL
       const offer = await storage.getOffer(challenge.offerId);
       if (!offer) {
         return res.status(404).send('Not found');
       }
       targetUrl = offer.whitePageUrl;
-      
-      // Log the bot detection
-      await storage.createClickLog({
-        offerId: challenge.offerId,
-        userId: offer.userId,
-        ipAddress: challenge.ip,
-        userAgent: challenge.userAgent,
-        country: 'XX',
-        device: parseUserAgent(challenge.userAgent),
-        redirectedTo: 'white',
-        requestUrl: `challenge:${token.substring(0, 16)}`,
-        responseTimeMs: elapsed,
-        hasError: false,
-        allParams: {
-          challengeFailed: true,
-          botReason,
-          score,
-          elapsed,
-          honeypotTriggered: challenge.honeypotTriggered,
-        },
-      });
     } else {
-      // Human verified - go to intended destination
+      // Human verified - go to black page
       targetUrl = challenge.targetUrl;
       
       // Add query params if going to black page
-      if (challenge.redirectType === 'black' && Object.keys(challenge.queryParams).length > 0) {
+      if (Object.keys(challenge.queryParams).length > 0) {
         try {
           const url = new URL(targetUrl);
           for (const [key, value] of Object.entries(challenge.queryParams)) {
@@ -525,6 +515,37 @@ export async function registerRoutes(
         }
       }
     }
+    
+    // LOG THE CLICK AFTER CHALLENGE RESULT (this is the only place clicks to black are logged)
+    await storage.createClickLog({
+      offerId: challenge.offerId,
+      userId: challenge.userId,
+      ipAddress: challenge.ip,
+      userAgent: challenge.userAgent,
+      country: challenge.country,
+      device: challenge.device,
+      redirectedTo: redirectedTo,
+      requestUrl: challenge.requestUrl,
+      responseTimeMs: elapsed,
+      hasError: false,
+      allParams: {
+        platform: challenge.platform,
+        referer: challenge.referer,
+        ttclid: challenge.ttclid,
+        fbcl: challenge.fbcl,
+        campaignName: challenge.cname,
+        challengeResult: isBot ? 'failed' : 'passed',
+        botReason: isBot ? botReason : null,
+        challengeScore: score,
+        challengeElapsed: elapsed,
+        honeypotTriggered: challenge.honeypotTriggered,
+      },
+    });
+    
+    // Increment click counters
+    await storage.incrementOfferClicks(challenge.offerId, !isBot);
+    
+    console.log(`[AntiBot] ${redirectedTo.toUpperCase()} redirect after challenge - Score: ${score}, Elapsed: ${elapsed}ms, Bot: ${isBot}`);
     
     return res.redirect(302, targetUrl);
   });
@@ -2085,40 +2106,42 @@ export async function registerRoutes(
       // Build full request URL for logging
       const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-      // Log the click with response time
-      await storage.createClickLog({
-        offerId: offer.id,
-        userId: offer.userId,
-        ipAddress: ip,
-        userAgent,
-        country,
-        device: deviceType,
-        redirectedTo: redirectType,
-        requestUrl,
-        responseTimeMs: duration,
-        hasError: false,
-        allParams: {
-          domainId: domain?.id || offer.domainId || null,
-          platform: offer.platform,
-          referer,
-          ttclid: ttclid || null,
-          fbcl: fbcl || null,
-          campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
-          campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-          failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
-          isBotDetected,
-        },
-      });
-
-      // Increment click counters
-      await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
-
-      console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${paramsValid ? "ok" : failReason}`);
-
-      // If going to WHITE page - redirect directly (no challenge needed for bots)
+      // If going to WHITE page - log and redirect directly (no challenge needed)
       if (!shouldRedirectToBlack) {
+        // Log the click with response time
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'white',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            ttclid: ttclid || null,
+            fbcl: fbcl || null,
+            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+            campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+            failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+            isBotDetected,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, false);
+        console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${failReason}`);
         return res.redirect(302, targetUrl);
       }
+
+      // For BLACK page candidates - DO NOT LOG YET
+      // The click will be logged AFTER the JavaScript challenge is completed
+      // This ensures bots that fail the challenge are logged as WHITE, not BLACK
+      console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
 
       // ==========================================
       // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
@@ -2143,6 +2166,16 @@ export async function registerRoutes(
         verifiedAt: null,
         verifiedScore: null,
         verificationNonce: null,
+        // Data for logging after challenge
+        userId: offer.userId,
+        country,
+        device: deviceType,
+        requestUrl,
+        platform: offer.platform,
+        referer,
+        ttclid: ttclid || null,
+        fbcl: fbcl || null,
+        cname: cname || null,
       });
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
@@ -2315,37 +2348,39 @@ export async function registerRoutes(
       // Build full request URL for logging
       const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-      await storage.createClickLog({
-        offerId: offer.id,
-        userId: offer.userId,
-        ipAddress: ip,
-        userAgent,
-        country,
-        device: deviceType,
-        redirectedTo: redirectType,
-        requestUrl,
-        responseTimeMs: duration,
-        hasError: false,
-        allParams: {
-          domainId: domain?.id || offer.domainId || null,
-          platform: offer.platform,
-          referer,
-          ttclid: ttclid || null,
-          fbcl: fbcl || null,
-          campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
-          campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-          failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
-        },
-      });
-
-      await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
-
-      console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
-
-      // If going to WHITE page - redirect directly (no challenge needed for bots)
+      // If going to WHITE page - log and redirect directly (no challenge needed)
       if (!shouldRedirectToBlack) {
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'white',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            ttclid: ttclid || null,
+            fbcl: fbcl || null,
+            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+            campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+            failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, false);
+        console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${failReason}`);
         return res.redirect(302, targetUrl);
       }
+
+      // For BLACK page candidates - DO NOT LOG YET
+      // The click will be logged AFTER the JavaScript challenge is completed
+      console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
 
       // ==========================================
       // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
@@ -2366,6 +2401,16 @@ export async function registerRoutes(
         verifiedAt: null,
         verifiedScore: null,
         verificationNonce: null,
+        // Data for logging after challenge
+        userId: offer.userId,
+        country,
+        device: deviceType,
+        requestUrl,
+        platform: offer.platform,
+        referer,
+        ttclid: ttclid || null,
+        fbcl: fbcl || null,
+        cname: cname || null,
       });
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
