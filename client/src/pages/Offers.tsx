@@ -432,6 +432,7 @@ export default function Offers() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="tiktok">TikTok</SelectItem>
+                      <SelectItem value="tiktok2">TikTok 2</SelectItem>
                       <SelectItem value="facebook">Facebook</SelectItem>
                     </SelectContent>
                   </Select>
@@ -721,7 +722,7 @@ export default function Offers() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {offer.platform === "tiktok" ? "TikTok" : "Facebook"}
+                          {offer.platform === "tiktok" ? "TikTok" : offer.platform === "tiktok2" ? "TikTok 2" : "Facebook"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">

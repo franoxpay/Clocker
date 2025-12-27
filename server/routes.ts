@@ -2117,6 +2117,59 @@ export async function registerRoutes(
         } else {
           paramsValid = true;
         }
+      } else if (offer.platform === "tiktok2") {
+        // ==========================================
+        // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
+        // ==========================================
+        // Required params: ttclid, adname, adset, cname, xcode
+        // No advanced bot detection, no JS challenge - direct redirect
+        // Only validates: params + country + device filters
+        
+        const adname = fixedQuery.adname || rawQuery.adname;
+        const adset = fixedQuery.adset || rawQuery.adset;
+        
+        // Check for unresolved macros (basic bot detection)
+        const tiktok2Macros = ['__CLICKID__', '__AID_NAME__', '__AID__', '__CAMPAIGN_NAME__'];
+        let hasUnresolvedMacro = false;
+        let failedParam = "";
+        
+        for (const macro of tiktok2Macros) {
+          if ((ttclid && ttclid.includes(macro)) ||
+              (adname && adname.includes(macro)) ||
+              (adset && adset.includes(macro)) ||
+              (cname && cname.includes(macro))) {
+            hasUnresolvedMacro = true;
+            failedParam = `macro:${macro}`;
+            break;
+          }
+        }
+        
+        if (hasUnresolvedMacro) {
+          failReason = `unresolved_${failedParam}`;
+          paramsValid = false;
+        } else if (!ttclid) {
+          failReason = "missing_ttclid";
+          paramsValid = false;
+        } else if (!adname) {
+          failReason = "missing_adname";
+          paramsValid = false;
+        } else if (!adset) {
+          failReason = "missing_adset";
+          paramsValid = false;
+        } else if (!cname) {
+          failReason = "missing_cname";
+          paramsValid = false;
+        } else if (!xcode) {
+          failReason = "missing_xcode";
+          paramsValid = false;
+        } else if (xcode !== offer.xcode) {
+          failReason = "invalid_xcode";
+          paramsValid = false;
+        } else {
+          paramsValid = true;
+        }
+        
+        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, adname=${!!adname}, adset=${!!adset}, cname=${!!cname}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook") {
         // Facebook requires: fbcl (campaign.name|campaign.id), xcode
         if (!fbcl || !xcode) {
@@ -2172,8 +2225,10 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: (offer.platform === "tiktok" || offer.platform === "tiktok2") ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+            adname: offer.platform === "tiktok2" ? (fixedQuery.adname || rawQuery.adname || null) : null,
+            adset: offer.platform === "tiktok2" ? (fixedQuery.adset || rawQuery.adset || null) : null,
             failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
             isBotDetected,
           },
@@ -2184,7 +2239,41 @@ export async function registerRoutes(
         return res.redirect(302, targetUrl);
       }
 
-      // For BLACK page candidates - DO NOT LOG YET
+      // ==========================================
+      // TIKTOK 2 - DIRECT REDIRECT (NO JS CHALLENGE)
+      // ==========================================
+      if (offer.platform === "tiktok2") {
+        // TikTok 2 bypasses JS challenge completely - direct redirect to BLACK page
+        // Log the click and redirect immediately
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'black',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            ttclid: ttclid || null,
+            adname: fixedQuery.adname || rawQuery.adname || null,
+            adset: fixedQuery.adset || rawQuery.adset || null,
+            campaignName: cname || null,
+            xcode: xcode || null,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, true);
+        console.log(`[TikTok2] BLACK redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country} - DIRECT (no challenge)`);
+        return res.redirect(302, targetUrl);
+      }
+
+      // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
       // The click will be logged AFTER the JavaScript challenge is completed
       // This ensures bots that fail the challenge are logged as WHITE, not BLACK
       console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
@@ -2422,6 +2511,47 @@ export async function registerRoutes(
         } else {
           paramsValid = true;
         }
+      } else if (offer.platform === "tiktok2") {
+        // ==========================================
+        // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
+        // ==========================================
+        const adname2 = fixedQuery2.adname || rawQuery2.adname;
+        const adset2 = fixedQuery2.adset || rawQuery2.adset;
+        
+        const tiktok2Macros = ['__CLICKID__', '__AID_NAME__', '__AID__', '__CAMPAIGN_NAME__'];
+        let hasUnresolvedMacro = false;
+        let failedParam = "";
+        
+        for (const macro of tiktok2Macros) {
+          if ((ttclid && ttclid.includes(macro)) ||
+              (adname2 && adname2.includes(macro)) ||
+              (adset2 && adset2.includes(macro)) ||
+              (cname && cname.includes(macro))) {
+            hasUnresolvedMacro = true;
+            failedParam = `macro:${macro}`;
+            break;
+          }
+        }
+        
+        if (hasUnresolvedMacro) {
+          failReason = `unresolved_${failedParam}`;
+        } else if (!ttclid) {
+          failReason = "missing_ttclid";
+        } else if (!adname2) {
+          failReason = "missing_adname";
+        } else if (!adset2) {
+          failReason = "missing_adset";
+        } else if (!cname) {
+          failReason = "missing_cname";
+        } else if (!xcode) {
+          failReason = "missing_xcode";
+        } else if (xcode !== offer.xcode) {
+          failReason = "invalid_xcode";
+        } else {
+          paramsValid = true;
+        }
+        
+        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, adname=${!!adname2}, adset=${!!adset2}, cname=${!!cname}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook") {
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";
@@ -2471,8 +2601,10 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: (offer.platform === "tiktok" || offer.platform === "tiktok2") ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
+            adname: offer.platform === "tiktok2" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
+            adset: offer.platform === "tiktok2" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
             failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
           },
         });
@@ -2482,7 +2614,42 @@ export async function registerRoutes(
         return res.redirect(302, targetUrl);
       }
 
-      // For BLACK page candidates - DO NOT LOG YET
+      // ==========================================
+      // TIKTOK 2 - DIRECT REDIRECT (NO JS CHALLENGE)
+      // ==========================================
+      if (offer.platform === "tiktok2") {
+        const adname2 = fixedQuery2.adname || rawQuery2.adname;
+        const adset2 = fixedQuery2.adset || rawQuery2.adset;
+        
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'black',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            ttclid: ttclid || null,
+            adname: adname2 || null,
+            adset: adset2 || null,
+            campaignName: cname || null,
+            xcode: xcode || null,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, true);
+        console.log(`[TikTok2] BLACK redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country} - DIRECT (no challenge)`);
+        return res.redirect(302, targetUrl);
+      }
+
+      // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
       // The click will be logged AFTER the JavaScript challenge is completed
       console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
 
