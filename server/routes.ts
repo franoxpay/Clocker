@@ -1567,6 +1567,27 @@ export async function registerRoutes(
         }
       }
       
+      // 3b. Detect fake Chrome versions (bots use future versions that don't exist)
+      // Current stable Chrome is around 131-132, anything above 135 is suspicious
+      if (!isBotDetected) {
+        const chromeVersionMatch = userAgent.match(/Chrome\/(\d+)\./);
+        if (chromeVersionMatch) {
+          const chromeVersion = parseInt(chromeVersionMatch[1], 10);
+          if (chromeVersion > 135) {
+            isBotDetected = true;
+            failReason = `fake_chrome_version:${chromeVersion}`;
+            console.log(`[Cloak] BOT DETECTED - Fake Chrome version: ${chromeVersion} (versions above 135 don't exist yet)`);
+          }
+        }
+      }
+      
+      // 3c. Detect User-Agent typos (bots often have "Bulid" instead of "Build")
+      if (!isBotDetected && userAgent.includes('Bulid')) {
+        isBotDetected = true;
+        failReason = 'ua_typo:Bulid';
+        console.log(`[Cloak] BOT DETECTED - User-Agent typo: "Bulid" instead of "Build"`);
+      }
+      
       // 4. Check TikTok app signature - real traffic must have app identifiers
       // Real TikTok traffic comes from the TikTok app webview
       if (!isBotDetected && offer.platform === "tiktok") {
