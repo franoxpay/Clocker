@@ -328,19 +328,59 @@ function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   return "desktop";
 }
 
+// Cache for IP geolocation to avoid rate limiting (ip-api.com allows 45 req/min)
+const ipCountryCache = new Map<string, { country: string; timestamp: number }>();
+const IP_CACHE_TTL = 3600000; // 1 hour cache
+const IP_CACHE_MAX_SIZE = 10000;
+
 async function getCountryFromIP(ip: string): Promise<string> {
   try {
     const cleanIp = ip.replace(/^::ffff:/, "");
+    
+    // Local IPs default to BR
     if (cleanIp === "127.0.0.1" || cleanIp === "::1" || cleanIp.startsWith("192.168.") || cleanIp.startsWith("10.")) {
       return "BR";
     }
-    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode`);
+    
+    // Check cache first
+    const cached = ipCountryCache.get(cleanIp);
+    if (cached && Date.now() - cached.timestamp < IP_CACHE_TTL) {
+      return cached.country;
+    }
+    
+    // Clean old cache entries if too large
+    if (ipCountryCache.size > IP_CACHE_MAX_SIZE) {
+      const now = Date.now();
+      for (const [key, value] of ipCountryCache.entries()) {
+        if (now - value.timestamp > IP_CACHE_TTL) {
+          ipCountryCache.delete(key);
+        }
+      }
+    }
+    
+    const response = await fetch(`http://ip-api.com/json/${cleanIp}?fields=countryCode,status,message`);
     if (response.ok) {
       const data = await response.json();
-      return data.countryCode || "XX";
+      
+      // Check if API returned rate limit error
+      if (data.status === 'fail') {
+        console.log(`[GeoIP] API error for ${cleanIp}: ${data.message}`);
+        // If rate limited, return cached value or XX
+        return cached?.country || "XX";
+      }
+      
+      const country = data.countryCode || "XX";
+      
+      // Cache the result
+      ipCountryCache.set(cleanIp, { country, timestamp: Date.now() });
+      
+      return country;
     }
-    return "XX";
-  } catch {
+    
+    // If response not ok, return cached value or XX
+    return cached?.country || "XX";
+  } catch (error) {
+    console.log(`[GeoIP] Error for IP: ${error}`);
     return "XX";
   }
 }
