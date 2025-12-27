@@ -1306,6 +1306,47 @@ export async function registerRoutes(
     }
   });
 
+  // Rate limiting for bot detection - track clicks per IP
+  const ipClickTracker = new Map<string, { count: number; firstClick: number; lastClick: number }>();
+  const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
+  const RATE_LIMIT_MAX_CLICKS = 5; // Max 5 clicks per IP per minute (real users click once)
+  const RATE_LIMIT_CLEANUP_INTERVAL = 300000; // Clean up every 5 minutes
+
+  // Clean up old entries periodically
+  setInterval(() => {
+    const now = Date.now();
+    for (const [ip, data] of ipClickTracker.entries()) {
+      if (now - data.lastClick > RATE_LIMIT_WINDOW_MS * 2) {
+        ipClickTracker.delete(ip);
+      }
+    }
+  }, RATE_LIMIT_CLEANUP_INTERVAL);
+
+  function checkIPRateLimit(ip: string): { isRateLimited: boolean; clickCount: number } {
+    const now = Date.now();
+    const tracker = ipClickTracker.get(ip);
+    
+    if (!tracker) {
+      ipClickTracker.set(ip, { count: 1, firstClick: now, lastClick: now });
+      return { isRateLimited: false, clickCount: 1 };
+    }
+    
+    // Reset if window has passed
+    if (now - tracker.firstClick > RATE_LIMIT_WINDOW_MS) {
+      ipClickTracker.set(ip, { count: 1, firstClick: now, lastClick: now });
+      return { isRateLimited: false, clickCount: 1 };
+    }
+    
+    // Increment and check
+    tracker.count++;
+    tracker.lastClick = now;
+    
+    return { 
+      isRateLimited: tracker.count > RATE_LIMIT_MAX_CLICKS, 
+      clickCount: tracker.count 
+    };
+  }
+
   // Helper function to extract domain from request headers
   // Checks multiple headers that reverse proxies like EasyPanel, Nginx, Traefik may use
   function extractDomainFromRequest(req: Request): string {
@@ -1448,6 +1489,15 @@ export async function registerRoutes(
       // ==========================================
       // ADVANCED BOT DETECTION FOR TIKTOK
       // ==========================================
+      
+      // 0. Rate limiting - block IPs with too many clicks in a short time
+      // This catches bot floods like 55 clicks in 1 minute
+      const rateLimitResult = checkIPRateLimit(ip);
+      if (rateLimitResult.isRateLimited) {
+        isBotDetected = true;
+        failReason = `rate_limited:${rateLimitResult.clickCount}_clicks_per_minute`;
+        console.log(`[Cloak] BOT DETECTED - Rate limited: ${ip} - ${rateLimitResult.clickCount} clicks in 1 minute`);
+      }
       
       // 1. Detect TikTok page verification bots by User-Agent
       const tiktokBotPatterns = [
