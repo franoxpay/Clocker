@@ -1869,6 +1869,7 @@ export async function registerRoutes(
     const userAgent = req.get("user-agent") || "";
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
     const referer = req.get("referer") || "";
+    const requestUrlR = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
     console.log(`[Cloak] Incoming request - Host: ${rawHost}, Slug: ${slug}, IP: ${ip}`);
     console.log(`[Cloak] All relevant headers: ${JSON.stringify({
@@ -1881,15 +1882,20 @@ export async function registerRoutes(
       "x-forwarded-proto": req.get("x-forwarded-proto"),
     })}`);
 
+    // Declare variables outside try block for error logging
+    let domain: any = undefined;
+    let sharedDomain: any = undefined;
+    let offer: any = undefined;
+
     try {
       // Extract domain using the helper function that checks multiple headers
       const domainToCheck = extractDomainFromRequest(req);
       
       console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
       
-      let domain = await storage.getDomainBySubdomain(domainToCheck);
-      let sharedDomain = null;
-      let offer = null;
+      domain = await storage.getDomainBySubdomain(domainToCheck);
+      sharedDomain = undefined;
+      offer = undefined;
       
       if (domain && domain.isActive && domain.isVerified) {
         // Found valid user domain, get offer by slug and domain
@@ -2224,8 +2230,36 @@ export async function registerRoutes(
       res.set('Content-Type', 'text/html');
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.send(generateChallengeHTML(challengeToken, honeypotId));
-    } catch (error) {
+    } catch (error: any) {
       console.error("[Cloak] Error:", error);
+      // Try to log the error click if we have offer info
+      try {
+        if (offer) {
+          const duration = Date.now() - startTime;
+          await storage.createClickLog({
+            offerId: offer.id,
+            userId: offer.userId,
+            ipAddress: ip,
+            userAgent,
+            country: 'XX',
+            device: parseUserAgent(userAgent),
+            redirectedTo: 'error',
+            requestUrl: requestUrlR,
+            responseTimeMs: duration,
+            hasError: true,
+            allParams: {
+              domainId: domain?.id || sharedDomain?.id || null,
+              platform: offer.platform,
+              referer,
+              failReason: `error:${error?.message || String(error)}`,
+              errorDetails: error?.message || String(error),
+            },
+          });
+          console.log(`[Cloak] ERROR logged for ${slug}: ${error?.message}`);
+        }
+      } catch (logError) {
+        console.error(`[Cloak] CRITICAL: Failed to log error click:`, logError);
+      }
       return res.status(500).send("Internal server error");
     }
   });
@@ -2257,7 +2291,7 @@ export async function registerRoutes(
       "forwarded": req.get("forwarded"),
     })}`);
     
-    let offer: Offer | undefined;
+    let offer: any = undefined;
     let isSharedDomain = false;
     
     // First, check if it's a user-owned domain
@@ -2297,6 +2331,36 @@ export async function registerRoutes(
     const userAgent = req.get("user-agent") || "";
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
     const referer = req.get("referer") || "";
+    const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+
+    // Helper to log error clicks - ensures NO click is ever lost
+    const logErrorClick = async (errorMsg: string) => {
+      try {
+        const duration = Date.now() - startTime;
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country: 'XX',
+          device: parseUserAgent(userAgent),
+          redirectedTo: 'error',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: true,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            failReason: `error:${errorMsg}`,
+            errorDetails: errorMsg,
+          },
+        });
+        console.log(`[Cloak] ERROR logged for ${slug}: ${errorMsg}`);
+      } catch (logError) {
+        console.error(`[Cloak] CRITICAL: Failed to log error click:`, logError);
+      }
+    };
 
     try {
       if (!offer.isActive) {
@@ -2458,8 +2522,10 @@ export async function registerRoutes(
       res.set('Content-Type', 'text/html');
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.send(generateChallengeHTML(challengeToken, honeypotId));
-    } catch (error) {
+    } catch (error: any) {
       console.error("[Cloak] Error:", error);
+      // Log the click with error status - NO CLICKS LOST
+      await logErrorClick(error?.message || String(error));
       return res.status(500).send("Internal server error");
     }
   });
