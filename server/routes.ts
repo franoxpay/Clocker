@@ -621,6 +621,10 @@ export async function registerRoutes(
   // ==========================================
   app.get("/api/tt2-verify", async (req: Request, res: Response) => {
     const token = req.query.t as string;
+    const host = req.get("host") || "";
+    const xForwardedHost = req.get("x-forwarded-host") || "";
+    
+    console.log(`[TikTok2] Verify endpoint hit - Host: ${host}, X-Forwarded-Host: ${xForwardedHost}, Token: ${token?.substring(0, 16) || 'MISSING'}...`);
     
     if (!token) {
       console.log(`[TikTok2] Verify - Missing token`);
@@ -629,7 +633,7 @@ export async function registerRoutes(
     
     const baitData = tiktok2BaitTokens.get(token);
     if (!baitData) {
-      console.log(`[TikTok2] Verify - Invalid/expired token: ${token.substring(0, 16)}...`);
+      console.log(`[TikTok2] Verify - Invalid/expired token: ${token.substring(0, 16)}... (Active tokens: ${tiktok2BaitTokens.size})`);
       return res.status(400).send('Session expired. Please try again.');
     }
     
