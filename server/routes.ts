@@ -745,11 +745,30 @@ export async function registerRoutes(
   // TIKTOK2 TELEMETRY ENDPOINT - Collects behavioral data
   // ==========================================
   app.post("/tt2/telemetry", async (req: Request, res: Response) => {
+    console.log('[TikTok2 Telemetry] Received request, Content-Type:', req.headers['content-type']);
+    
     try {
-      const data = req.body;
+      // Handle both application/json and text/plain (sendBeacon sometimes sends as text/plain)
+      let data = req.body;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch (e) {
+          console.log('[TikTok2 Telemetry] Failed to parse string body');
+          return res.status(200).send('ok');
+        }
+      }
+      
+      // If body is empty (text/plain not parsed), try to read raw
+      if (!data || Object.keys(data).length === 0) {
+        console.log('[TikTok2 Telemetry] Empty body received');
+        return res.status(200).send('ok');
+      }
+      
       const token = data.tk;
       
       if (!token) {
+        console.log('[TikTok2 Telemetry] No token in data');
         return res.status(200).send('ok');
       }
       

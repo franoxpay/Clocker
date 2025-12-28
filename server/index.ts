@@ -58,6 +58,9 @@ app.use(
   }),
 );
 
+// Support text/plain for sendBeacon (telemetry)
+app.use(express.text({ type: 'text/plain' }));
+
 app.use(express.urlencoded({ extended: false }));
 
 const apiLimiter = rateLimit({
