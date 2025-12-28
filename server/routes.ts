@@ -2553,7 +2553,7 @@ export async function registerRoutes(
         // Bots that interact or don't run JS are sent to WHITE
         
         const baitToken = generateChallengeToken();
-        const whiteUrl = offer.whitePage.startsWith('http') ? offer.whitePage : `https://${offer.whitePage}`;
+        const whiteUrl = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
         
         tiktok2BaitTokens.set(baitToken, {
           offerId: offer.id,
@@ -2935,7 +2935,7 @@ export async function registerRoutes(
         const adset2 = fixedQuery2.adset || rawQuery2.adset;
         
         const baitToken = generateChallengeToken();
-        const whiteUrl = offer.whitePage.startsWith('http') ? offer.whitePage : `https://${offer.whitePage}`;
+        const whiteUrl = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
         
         tiktok2BaitTokens.set(baitToken, {
           offerId: offer.id,
