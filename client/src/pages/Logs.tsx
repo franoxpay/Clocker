@@ -243,20 +243,26 @@ export default function Logs() {
                           {log.requestUrl ? (
                             <div 
                               className="text-xs font-mono text-muted-foreground truncate"
-                              title={language === "pt-BR" ? "URL oculta por seguranca" : "URL hidden for security"}
+                              title={language === "pt-BR" ? "Parametros parcialmente ocultos" : "Parameters partially hidden"}
                             >
                               {(() => {
                                 try {
                                   const url = new URL(log.requestUrl);
                                   const path = url.pathname;
-                                  const search = url.search;
-                                  const fullPath = path + search;
-                                  if (fullPath.length <= 8) return fullPath;
-                                  return fullPath.substring(0, 4) + "***";
+                                  const params = new URLSearchParams(url.search);
+                                  const maskedParams: string[] = [];
+                                  params.forEach((value, key) => {
+                                    if (key.toLowerCase() === "xcode") {
+                                      maskedParams.push(`${key}=${value}`);
+                                    } else if (value.length <= 4) {
+                                      maskedParams.push(`${key}=${value}***`);
+                                    } else {
+                                      maskedParams.push(`${key}=${value.substring(0, 4)}****`);
+                                    }
+                                  });
+                                  return path + (maskedParams.length > 0 ? "?" + maskedParams.join("&") : "");
                                 } catch {
-                                  const val = log.requestUrl || "";
-                                  if (val.length <= 8) return val;
-                                  return val.substring(0, 4) + "***";
+                                  return log.requestUrl || "-";
                                 }
                               })()}
                             </div>
