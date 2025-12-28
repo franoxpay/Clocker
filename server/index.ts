@@ -127,6 +127,7 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
   
   // For custom domains, only allow specific paths
   // Allow: /r/:slug, /:slug (if slug is valid offer), favicon.ico, robots.txt
+  // Also allow TikTok2 verification routes: /go/:token, /track/:token, /v/:token, /b/:token
   const allowedPaths = ["/favicon.ico", "/robots.txt", "/favicon.png"];
   
   if (allowedPaths.includes(path)) {
@@ -135,6 +136,13 @@ app.use(async (req: Request, res: Response, next: NextFunction) => {
   
   // If path starts with /r/, let the cloaking route handle it
   if (path.startsWith("/r/")) {
+    return next();
+  }
+  
+  // Allow TikTok2 verification and bot tracking routes on custom domains
+  // These are essential for the bait page redirect system
+  if (path.startsWith("/go/") || path.startsWith("/track/") || path.startsWith("/v/") || path.startsWith("/b/")) {
+    console.log(`[DOMAIN GUARD] Allowing TikTok2 verification route: ${path} on ${host}`);
     return next();
   }
   
