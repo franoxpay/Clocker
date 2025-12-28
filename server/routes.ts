@@ -57,6 +57,123 @@ function generateChallengeToken(): string {
   return randomBytes(32).toString('hex');
 }
 
+// ==========================================
+// TIKTOK 2 BAIT PAGE SYSTEM
+// ==========================================
+
+interface TikTok2BaitData {
+  offerId: number;
+  slug: string;
+  blackUrl: string;
+  whiteUrl: string;
+  ip: string;
+  userAgent: string;
+  createdAt: number;
+  queryParams: Record<string, any>;
+  userId: string;
+  country: string;
+  device: 'smartphone' | 'tablet' | 'desktop';
+  requestUrl: string;
+  referer: string;
+  ttclid: string | null;
+  adname: string | null;
+  adset: string | null;
+  cname: string | null;
+  xcode: string | null;
+}
+
+const tiktok2BaitTokens = new Map<string, TikTok2BaitData>();
+const TIKTOK2_BAIT_EXPIRY_MS = 15000; // 15 seconds to complete
+
+// Clean up expired TikTok2 bait tokens
+setInterval(() => {
+  const now = Date.now();
+  for (const [token, data] of tiktok2BaitTokens.entries()) {
+    if (now - data.createdAt > TIKTOK2_BAIT_EXPIRY_MS * 2) {
+      tiktok2BaitTokens.delete(token);
+    }
+  }
+}, 60000);
+
+function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
+  const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
+  const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
+  const delay = 350 + Math.floor(Math.random() * 150); // 350-500ms with jitter
+  
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="5;url=${whiteUrl}">
+  <title>Carregando...</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center}
+    .c{text-align:center}
+    .s{width:40px;height:40px;border:3px solid #e0e0e0;border-top:3px solid #333;border-radius:50%;animation:r 1s linear infinite;margin:0 auto 16px}
+    @keyframes r{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+    .t{color:#333;font-size:16px}
+    .h{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:auto}
+    .tl{position:absolute;left:-9999px;font-size:1px;color:transparent}
+  </style>
+</head>
+<body>
+  <div class="c">
+    <div class="s"></div>
+    <p class="t">Carregando...</p>
+  </div>
+  
+  <!-- Honeypot traps for bots -->
+  <input type="text" id="${honeypotId}" class="h" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <a href="${whiteUrl}" id="${trapLinkId}" class="tl">Clique aqui para continuar</a>
+  <button class="h" onclick="window.location='${whiteUrl}'">Submit</button>
+  
+  <script>
+    (function(){
+      var w='${whiteUrl}',b='/api/tt2-verify?t=${token}',d=${delay},bot=false;
+      
+      // Bot detection checks
+      var wd=navigator.webdriver||window.callPhantom||window._phantom||window.__nightmare||window.domAutomation||window.selenium;
+      if(wd){bot=true}
+      
+      // Check for automation frameworks
+      var ua=navigator.userAgent.toLowerCase();
+      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){bot=true}
+      
+      // Check for missing browser features
+      if(!window.chrome&&ua.indexOf('chrome')>-1){bot=true}
+      if(typeof navigator.languages==='undefined'||navigator.languages.length===0){bot=true}
+      
+      // Honeypot listeners - any interaction = bot
+      var hp=document.getElementById('${honeypotId}');
+      var tl=document.getElementById('${trapLinkId}');
+      if(hp){hp.addEventListener('focus',function(){bot=true;window.location=w})}
+      if(tl){tl.addEventListener('click',function(e){e.preventDefault();bot=true;window.location=w})}
+      
+      // Impossible mouse movement detection
+      var lastX=0,lastY=0,teleport=0;
+      document.addEventListener('mousemove',function(e){
+        if(lastX!==0&&lastY!==0){
+          var dx=Math.abs(e.clientX-lastX),dy=Math.abs(e.clientY-lastY);
+          if(dx>300||dy>300){teleport++}
+          if(teleport>2){bot=true;window.location=w}
+        }
+        lastX=e.clientX;lastY=e.clientY;
+      });
+      
+      // Redirect logic
+      if(bot){window.location=w;return}
+      
+      setTimeout(function(){
+        if(!bot){window.location=b}
+      },d);
+    })();
+  </script>
+</body>
+</html>`;
+}
+
 function generateChallengeHTML(token: string, honeypotId: string): string {
   // Generate random variable names to avoid detection
   const varNames = {
@@ -425,6 +542,96 @@ export async function registerRoutes(
       console.log(`[AntiBot] FORM SUBMIT TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
     }
     res.status(200).send('OK');
+  });
+  
+  // ==========================================
+  // TIKTOK 2 BAIT PAGE VERIFICATION
+  // ==========================================
+  app.get("/api/tt2-verify", async (req: Request, res: Response) => {
+    const token = req.query.t as string;
+    
+    if (!token) {
+      console.log(`[TikTok2] Verify - Missing token`);
+      return res.status(400).send('Invalid request');
+    }
+    
+    const baitData = tiktok2BaitTokens.get(token);
+    if (!baitData) {
+      console.log(`[TikTok2] Verify - Invalid/expired token: ${token.substring(0, 16)}...`);
+      return res.status(400).send('Session expired. Please try again.');
+    }
+    
+    const now = Date.now();
+    const elapsed = now - baitData.createdAt;
+    
+    // Validate timing - too fast is suspicious, too slow means expired
+    if (elapsed < 200) {
+      console.log(`[TikTok2] BOT DETECTED - Too fast (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
+      // Still redirect to white, but log as bot
+      await storage.createClickLog({
+        offerId: baitData.offerId,
+        userId: baitData.userId,
+        ipAddress: baitData.ip,
+        userAgent: baitData.userAgent,
+        country: baitData.country,
+        device: baitData.device,
+        redirectedTo: 'white',
+        requestUrl: baitData.requestUrl,
+        responseTimeMs: elapsed,
+        hasError: false,
+        allParams: {
+          domainId: null,
+          platform: 'tiktok2',
+          referer: baitData.referer,
+          ttclid: baitData.ttclid,
+          adname: baitData.adname,
+          adset: baitData.adset,
+          campaignName: baitData.cname,
+          xcode: baitData.xcode,
+          botReason: 'too_fast',
+        },
+      });
+      await storage.incrementOfferClicks(baitData.offerId, false);
+      tiktok2BaitTokens.delete(token);
+      return res.redirect(302, baitData.whiteUrl);
+    }
+    
+    if (elapsed > TIKTOK2_BAIT_EXPIRY_MS) {
+      console.log(`[TikTok2] Token expired (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
+      tiktok2BaitTokens.delete(token);
+      return res.redirect(302, baitData.whiteUrl);
+    }
+    
+    // Valid human visitor - log as BLACK and redirect
+    console.log(`[TikTok2] HUMAN VERIFIED (${elapsed}ms) - Token: ${token.substring(0, 16)}... → BLACK`);
+    
+    await storage.createClickLog({
+      offerId: baitData.offerId,
+      userId: baitData.userId,
+      ipAddress: baitData.ip,
+      userAgent: baitData.userAgent,
+      country: baitData.country,
+      device: baitData.device,
+      redirectedTo: 'black',
+      requestUrl: baitData.requestUrl,
+      responseTimeMs: elapsed,
+      hasError: false,
+      allParams: {
+        domainId: null,
+        platform: 'tiktok2',
+        referer: baitData.referer,
+        ttclid: baitData.ttclid,
+        adname: baitData.adname,
+        adset: baitData.adset,
+        campaignName: baitData.cname,
+        xcode: baitData.xcode,
+      },
+    });
+    
+    await storage.incrementOfferClicks(baitData.offerId, true);
+    tiktok2BaitTokens.delete(token);
+    
+    return res.redirect(302, baitData.blackUrl);
   });
   
   // Challenge verification route (called by JavaScript)
