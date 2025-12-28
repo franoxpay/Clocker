@@ -338,6 +338,86 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+// TikTok2 Telemetry table - captures behavioral data from bait page
+export const tiktok2Telemetry = pgTable(
+  "tiktok2_telemetry",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    token: varchar("token").notNull(),
+    offerId: integer("offer_id").references(() => offers.id, { onDelete: "cascade" }),
+    ipAddress: varchar("ip_address"),
+    userAgent: text("user_agent"),
+    
+    // Timing data (critical for bot detection)
+    pageLoadTime: integer("page_load_time"),
+    timeToFirstInteraction: integer("time_to_first_interaction"),
+    timeToRedirect: integer("time_to_redirect"),
+    totalTimeOnPage: integer("total_time_on_page"),
+    
+    // Touch/interaction events (should be ZERO for loading page)
+    touchCount: integer("touch_count").default(0),
+    clickCount: integer("click_count").default(0),
+    scrollCount: integer("scroll_count").default(0),
+    mouseMoveCount: integer("mouse_move_count").default(0),
+    keyPressCount: integer("key_press_count").default(0),
+    
+    // Device/browser fingerprint
+    screenWidth: integer("screen_width"),
+    screenHeight: integer("screen_height"),
+    viewportWidth: integer("viewport_width"),
+    viewportHeight: integer("viewport_height"),
+    devicePixelRatio: varchar("device_pixel_ratio"),
+    colorDepth: integer("color_depth"),
+    timezone: varchar("timezone"),
+    language: varchar("language"),
+    languages: text("languages"),
+    platform: varchar("platform"),
+    hardwareConcurrency: integer("hardware_concurrency"),
+    deviceMemory: varchar("device_memory"),
+    maxTouchPoints: integer("max_touch_points"),
+    
+    // WebView/Bot indicators
+    hasWebdriver: boolean("has_webdriver").default(false),
+    hasAutomation: boolean("has_automation").default(false),
+    hasFakeChrome: boolean("has_fake_chrome").default(false),
+    hasNoLanguages: boolean("has_no_languages").default(false),
+    
+    // Navigation/performance data
+    connectionType: varchar("connection_type"),
+    domContentLoaded: integer("dom_content_loaded"),
+    loadEventEnd: integer("load_event_end"),
+    
+    // Visibility/focus tracking
+    visibilityChanges: integer("visibility_changes").default(0),
+    focusChanges: integer("focus_changes").default(0),
+    wasHidden: boolean("was_hidden").default(false),
+    
+    // Honeypot interactions (should be ZERO)
+    honeypotTriggered: boolean("honeypot_triggered").default(false),
+    trapLinkClicked: boolean("trap_link_clicked").default(false),
+    
+    // Raw event log (detailed timeline)
+    eventLog: jsonb("event_log"),
+    
+    // Outcome
+    redirectedTo: varchar("redirected_to"),
+    isBotDetected: boolean("is_bot_detected").default(false),
+    botReason: varchar("bot_reason"),
+    
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("tiktok2_telemetry_token_idx").on(table.token),
+    index("tiktok2_telemetry_offer_idx").on(table.offerId),
+    index("tiktok2_telemetry_created_idx").on(table.createdAt),
+  ]
+);
+
+export const insertTiktok2TelemetrySchema = createInsertSchema(tiktok2Telemetry).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -365,3 +445,6 @@ export type DailyClickMetric = typeof dailyClickMetrics.$inferSelect;
 export type AdminSettings = typeof adminSettings.$inferSelect;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type AdminImpersonation = typeof adminImpersonations.$inferSelect;
+
+export type Tiktok2Telemetry = typeof tiktok2Telemetry.$inferSelect;
+export type InsertTiktok2Telemetry = z.infer<typeof insertTiktok2TelemetrySchema>;
