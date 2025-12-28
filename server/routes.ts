@@ -116,7 +116,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
   const prefix = baseUrl ? baseUrl : '';
   const botLogUrl = `${prefix}/track/${token}`;
   const verifyUrl = `${prefix}/go/${token}`;
-  const telemetryUrl = `${prefix}/tt2/telemetry`;
+  const telemetryUrl = `${prefix}/tt2/t/${token}`; // GET-based telemetry pixel
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -254,30 +254,36 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         lastX=e.clientX;lastY=e.clientY;
       });
       
-      // Send telemetry before redirect - use multiple methods to ensure delivery
+      // Send telemetry before redirect - use GET pixel (most reliable through proxies)
       function sendT(dest){
         T.total=Date.now()-T.start;
         T.dest=dest;
         T.teleport=teleport;
-        // Limit events to last 50 to avoid large payloads
-        if(T.events.length>50)T.events=T.events.slice(-50);
-        var data=JSON.stringify(T);
+        // Compress data to fit in URL (key metrics only)
+        var m={
+          d:dest,
+          t:T.total,
+          tc:T.touch,
+          cl:T.click,
+          sc:T.scroll,
+          mo:T.mouse,
+          ke:T.key,
+          sw:T.screen.w,
+          sh:T.screen.h,
+          vw:T.viewport.w,
+          vh:T.viewport.h,
+          mtp:T.mtp,
+          wd:T.wd?1:0,
+          au:T.auto?1:0,
+          hp:T.hp?1:0,
+          tr:T.trap?1:0,
+          tp:T.teleport||0
+        };
         try{
-          // Method 1: fetch with keepalive (most reliable for page unload)
-          if(typeof fetch!=='undefined'){
-            fetch(tUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:data,keepalive:true}).catch(function(){});
-          }
-          // Method 2: sendBeacon as backup
-          if(navigator.sendBeacon){
-            var blob=new Blob([data],{type:'application/json'});
-            navigator.sendBeacon(tUrl,blob);
-          }
-          // Method 3: XHR sync fallback
-          else{
-            var x=new XMLHttpRequest();x.open('POST',tUrl,false);
-            x.setRequestHeader('Content-Type','application/json');x.send(data);
-          }
-        }catch(e){console.log('Telemetry error:',e)}
+          // Use pixel GET - most reliable through proxies
+          var img=new Image();
+          img.src=tUrl+'?m='+encodeURIComponent(btoa(JSON.stringify(m)));
+        }catch(e){}
       }
       
       // Bot detection
@@ -748,122 +754,75 @@ export async function registerRoutes(
   });
   
   // ==========================================
-  // TIKTOK2 TELEMETRY ENDPOINT - Collects behavioral data
+  // TIKTOK2 TELEMETRY ENDPOINT - GET-based pixel for reliability
   // ==========================================
   
-  // CORS preflight for telemetry
-  app.options("/tt2/telemetry", (req: Request, res: Response) => {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-    res.status(204).send();
-  });
-  
-  app.post("/tt2/telemetry", async (req: Request, res: Response) => {
-    // Allow CORS for telemetry from any origin
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Methods', 'POST');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
+  app.get("/tt2/t/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    const encodedMetrics = req.query.m as string;
     
-    console.log('[TikTok2 Telemetry] Received request, Content-Type:', req.headers['content-type']);
+    console.log(`[TikTok2 Telemetry] Received GET request for token: ${token?.substring(0, 16)}...`);
+    
+    // Return 1x1 transparent GIF immediately
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set('Content-Type', 'image/gif');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     
     try {
-      // Handle both application/json and text/plain (sendBeacon sometimes sends as text/plain)
-      let data = req.body;
-      if (typeof data === 'string') {
-        try {
-          data = JSON.parse(data);
-        } catch (e) {
-          console.log('[TikTok2 Telemetry] Failed to parse string body');
-          return res.status(200).send('ok');
-        }
+      if (!encodedMetrics) {
+        console.log('[TikTok2 Telemetry] No metrics data');
+        return res.send(gif);
       }
       
-      // If body is empty (text/plain not parsed), try to read raw
-      if (!data || Object.keys(data).length === 0) {
-        console.log('[TikTok2 Telemetry] Empty body received');
-        return res.status(200).send('ok');
-      }
-      
-      const token = data.tk;
-      
-      if (!token) {
-        console.log('[TikTok2 Telemetry] No token in data');
-        return res.status(200).send('ok');
-      }
+      // Decode base64 metrics
+      const decoded = Buffer.from(decodeURIComponent(encodedMetrics), 'base64').toString('utf-8');
+      const data = JSON.parse(decoded);
       
       const baitData = tiktok2BaitTokens.get(token);
       const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
       
-      console.log(`[TikTok2 Telemetry] Token: ${token.substring(0, 16)}... | Dest: ${data.dest} | Time: ${data.total}ms | Touch: ${data.touch} | Mouse: ${data.mouse} | Click: ${data.click}`);
+      console.log(`[TikTok2 Telemetry] Token: ${token.substring(0, 16)}... | Dest: ${data.d} | Time: ${data.t}ms | Touch: ${data.tc} | Mouse: ${data.mo} | Click: ${data.cl}`);
       
-      // Save telemetry to database
+      // Save telemetry to database (using compact field names from pixel)
       await db.insert(tiktok2Telemetry).values({
         token: token,
         offerId: baitData?.offerId || null,
         ipAddress: clientIp,
-        userAgent: data.ua || null,
+        userAgent: req.headers['user-agent'] || null,
         
-        // Timing
-        pageLoadTime: data.load || null,
-        timeToFirstInteraction: data.events?.[0]?.t || null,
-        timeToRedirect: data.total || null,
-        totalTimeOnPage: data.total || null,
+        // Timing (compact: t=total)
+        totalTimeOnPage: data.t || null,
+        timeToRedirect: data.t || null,
         
-        // Interactions (should be ZERO on loading page)
-        touchCount: data.touch || 0,
-        clickCount: data.click || 0,
-        scrollCount: data.scroll || 0,
-        mouseMoveCount: data.mouse || 0,
-        keyPressCount: data.key || 0,
+        // Interactions (compact: tc=touch, cl=click, sc=scroll, mo=mouse, ke=key)
+        touchCount: data.tc || 0,
+        clickCount: data.cl || 0,
+        scrollCount: data.sc || 0,
+        mouseMoveCount: data.mo || 0,
+        keyPressCount: data.ke || 0,
         
-        // Device fingerprint
-        screenWidth: data.screen?.w || null,
-        screenHeight: data.screen?.h || null,
-        viewportWidth: data.viewport?.w || null,
-        viewportHeight: data.viewport?.h || null,
-        devicePixelRatio: data.dpr?.toString() || null,
-        colorDepth: data.cd || null,
-        timezone: data.tz || null,
-        language: data.lang || null,
-        languages: data.langs || null,
-        platform: data.plat || null,
-        hardwareConcurrency: data.hw || null,
-        deviceMemory: data.mem?.toString() || null,
+        // Device fingerprint (compact: sw/sh=screen, vw/vh=viewport, mtp=maxTouchPoints)
+        screenWidth: data.sw || null,
+        screenHeight: data.sh || null,
+        viewportWidth: data.vw || null,
+        viewportHeight: data.vh || null,
         maxTouchPoints: data.mtp || null,
         
-        // Bot indicators
-        hasWebdriver: data.wd || false,
-        hasAutomation: data.auto || false,
-        hasFakeChrome: data.fakeC || false,
-        hasNoLanguages: data.noLang || false,
+        // Bot indicators (compact: wd=webdriver, au=automation, hp=honeypot, tr=trap, tp=teleport)
+        hasWebdriver: data.wd === 1,
+        hasAutomation: data.au === 1,
+        honeypotTriggered: data.hp === 1,
+        trapLinkClicked: data.tr === 1,
         
-        // Performance
-        connectionType: data.conn || null,
-        domContentLoaded: data.dcl || null,
-        loadEventEnd: data.load || null,
-        
-        // Visibility/focus
-        visibilityChanges: data.vis || 0,
-        focusChanges: data.focus || 0,
-        
-        // Honeypot
-        honeypotTriggered: data.hp || false,
-        trapLinkClicked: data.trap || false,
-        
-        // Event log (full timeline)
-        eventLog: data.events || [],
-        
-        // Outcome
-        redirectedTo: data.dest || null,
-        isBotDetected: data.bot !== null,
-        botReason: data.bot || null,
+        // Outcome (compact: d=destination)
+        redirectedTo: data.d || null,
+        isBotDetected: data.wd === 1 || data.au === 1 || data.hp === 1 || data.tr === 1,
       });
       
-      res.status(200).send('ok');
+      return res.send(gif);
     } catch (error) {
       console.error('[TikTok2 Telemetry] Error:', error);
-      res.status(200).send('ok'); // Always return 200 to not alert bots
+      return res.send(gif); // Always return GIF to complete image load
     }
   });
   
