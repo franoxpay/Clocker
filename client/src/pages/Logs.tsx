@@ -156,7 +156,7 @@ export default function Logs() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t("common.all")}</SelectItem>
-                  <SelectItem value="tiktok">TikTok</SelectItem>
+                  <SelectItem value="tiktok2">TikTok</SelectItem>
                   <SelectItem value="facebook">Facebook</SelectItem>
                 </SelectContent>
               </Select>
@@ -225,7 +225,7 @@ export default function Logs() {
                         <TableCell>
                           <div className="text-sm">{log.offer?.name || "-"}</div>
                           <Badge variant="outline" className="text-xs">
-                            {log.offer?.platform === "tiktok" ? "TikTok" : "Facebook"}
+                            {log.offer?.platform === "tiktok2" ? "TikTok" : "Facebook"}
                           </Badge>
                         </TableCell>
                         <TableCell>

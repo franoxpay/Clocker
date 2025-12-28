@@ -91,7 +91,7 @@ export default function Offers() {
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
-    platform: "tiktok",
+    platform: "facebook",
     domainId: "",
     blackPageUrl: "",
     whitePageUrl: "",
@@ -208,7 +208,7 @@ export default function Offers() {
     setFormData({
       name: "",
       slug: "",
-      platform: "tiktok",
+      platform: "facebook",
       domainId: "",
       blackPageUrl: "",
       whitePageUrl: "",
@@ -293,9 +293,6 @@ export default function Offers() {
   };
 
   const getOfferParams = (offer: OfferWithDomain) => {
-    if (offer.platform === "tiktok") {
-      return `?ttclid=__CLICKID__&adid=__CID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&domain=__DOMAIN__&placement=__PLACEMENT__&xcode=${offer.xcode}`;
-    }
     if (offer.platform === "tiktok2") {
       return `?ttclid=__CLICKID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
     }
@@ -434,8 +431,7 @@ export default function Offers() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tiktok">TikTok</SelectItem>
-                      <SelectItem value="tiktok2">TikTok 2</SelectItem>
+                      <SelectItem value="tiktok2">TikTok</SelectItem>
                       <SelectItem value="facebook">Facebook</SelectItem>
                     </SelectContent>
                   </Select>
@@ -725,7 +721,7 @@ export default function Offers() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {offer.platform === "tiktok" ? "TikTok" : offer.platform === "tiktok2" ? "TikTok 2" : "Facebook"}
+                          {offer.platform === "tiktok2" ? "TikTok" : "Facebook"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">

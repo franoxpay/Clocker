@@ -2688,16 +2688,6 @@ export async function registerRoutes(
         }
       }
       
-      // 3. Validate TikTok ttclid format
-      // Real TikTok ttclids start with "E.C.P." and are 200+ characters
-      if (!isBotDetected && ttclid && offer.platform === "tiktok") {
-        if (!ttclid.startsWith('E.C.P.') && ttclid.length < 50) {
-          isBotDetected = true;
-          failReason = 'invalid_ttclid_format';
-          console.log(`[Cloak] BOT DETECTED - Invalid ttclid format: ${ttclid.substring(0, 30)}`);
-        }
-      }
-      
       // 3b. Detect fake Chrome versions (bots use future versions that don't exist)
       // Current stable Chrome is around 131-132, anything above 135 is suspicious
       if (!isBotDetected) {
@@ -2719,44 +2709,7 @@ export async function registerRoutes(
         console.log(`[Cloak] BOT DETECTED - User-Agent typo: "Bulid" instead of "Build"`);
       }
       
-      // 4. Check TikTok app signature - real traffic must have app identifiers
-      // Real TikTok traffic comes from the TikTok app webview
-      if (!isBotDetected && offer.platform === "tiktok") {
-        const hasTikTokAppSignature = 
-          userAgent.includes('musical_ly') ||
-          userAgent.includes('BytedanceWebview') ||
-          userAgent.includes('TikTok') ||
-          userAgent.includes('bytedance') ||
-          userAgentLower.includes('tiktok');
-          
-        const hasValidReferer = referer && (
-          referer.toLowerCase().includes('tiktok') || 
-          referer.toLowerCase().includes('bytedance') ||
-          referer.toLowerCase().includes('musical.ly')
-        );
-        
-        // Bot if: no TikTok app signature AND no valid referer
-        // This catches bots like the thirdLandingPageFeInfra ones that don't have app signature
-        if (!hasTikTokAppSignature && !hasValidReferer) {
-          isBotDetected = true;
-          failReason = 'no_tiktok_app_signature';
-          console.log(`[Cloak] BOT DETECTED - No TikTok app signature and no valid referer - UA: ${userAgent.substring(0, 100)}`);
-        }
-      }
-
-      if (offer.platform === "tiktok") {
-        // Skip validation if bot was detected
-        if (isBotDetected) {
-          paramsValid = false;
-        } else if (!ttclid || !cname || !xcode) {
-          // TikTok requires: ttclid, cname, xcode
-          failReason = "missing_tiktok_params";
-        } else if (xcode !== offer.xcode) {
-          failReason = "invalid_xcode";
-        } else {
-          paramsValid = true;
-        }
-      } else if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok2") {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
@@ -2871,7 +2824,7 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: (offer.platform === "tiktok" || offer.platform === "tiktok2") ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: offer.platform === "tiktok2" ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok2" ? (fixedQuery.adname || rawQuery.adname || null) : null,
             adset: offer.platform === "tiktok2" ? (fixedQuery.adset || rawQuery.adset || null) : null,
@@ -3165,15 +3118,7 @@ export async function registerRoutes(
       let paramsValid = false;
       let failReason = "";
 
-      if (offer.platform === "tiktok") {
-        if (!ttclid || !cname || !xcode) {
-          failReason = "missing_tiktok_params";
-        } else if (xcode !== offer.xcode) {
-          failReason = "invalid_xcode";
-        } else {
-          paramsValid = true;
-        }
-      } else if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok2") {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
@@ -3271,7 +3216,7 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: (offer.platform === "tiktok" || offer.platform === "tiktok2") ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: offer.platform === "tiktok2" ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok2" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
             adset: offer.platform === "tiktok2" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
