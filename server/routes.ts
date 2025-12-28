@@ -80,6 +80,7 @@ interface TikTok2BaitData {
   adset: string | null;
   cname: string | null;
   xcode: string | null;
+  domainId: number | null;
 }
 
 const tiktok2BaitTokens = new Map<string, TikTok2BaitData>();
@@ -95,17 +96,28 @@ setInterval(() => {
   }
 }, 60000);
 
+function sanitizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url.startsWith('http') ? url : `https://${url}`);
+    return parsed.href.replace(/['"<>]/g, '');
+  } catch {
+    return url.replace(/['"<>]/g, '');
+  }
+}
+
 function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
   const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
   const delay = 350 + Math.floor(Math.random() * 150); // 350-500ms with jitter
+  const safeWhiteUrl = sanitizeUrl(whiteUrl);
+  const botLogUrl = `/api/tt2-bot?t=${token}`;
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="5;url=${whiteUrl}">
+  <meta http-equiv="refresh" content="5;url=${safeWhiteUrl}">
   <title>Carregando...</title>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
@@ -124,32 +136,43 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
     <p class="t">Carregando...</p>
   </div>
   
+  <!-- Non-JS fallback beacon - logs when meta refresh triggers -->
+  <noscript>
+    <img src="/api/tt2-bot?t=${token}&r=no_js" width="1" height="1" alt="" style="position:absolute;left:-9999px">
+  </noscript>
+  
   <!-- Honeypot traps for bots -->
   <input type="text" id="${honeypotId}" class="h" tabindex="-1" autocomplete="off" aria-hidden="true">
-  <a href="${whiteUrl}" id="${trapLinkId}" class="tl">Clique aqui para continuar</a>
-  <button class="h" onclick="window.location='${whiteUrl}'">Submit</button>
+  <a href="${safeWhiteUrl}" id="${trapLinkId}" class="tl">Clique aqui para continuar</a>
+  <button class="h" onclick="window.location='${safeWhiteUrl}'">Submit</button>
   
   <script>
     (function(){
-      var w='${whiteUrl}',b='/api/tt2-verify?t=${token}',d=${delay},bot=false;
+      var w='${safeWhiteUrl}',b='/api/tt2-verify?t=${token}',bl='${botLogUrl}',d=${delay};
+      
+      function logBot(r){
+        var img=new Image();
+        img.src=bl+'&r='+encodeURIComponent(r);
+        setTimeout(function(){window.location=w},50);
+      }
       
       // Bot detection checks
       var wd=navigator.webdriver||window.callPhantom||window._phantom||window.__nightmare||window.domAutomation||window.selenium;
-      if(wd){bot=true}
+      if(wd){logBot('webdriver');return}
       
       // Check for automation frameworks
       var ua=navigator.userAgent.toLowerCase();
-      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){bot=true}
+      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){logBot('automation');return}
       
       // Check for missing browser features
-      if(!window.chrome&&ua.indexOf('chrome')>-1){bot=true}
-      if(typeof navigator.languages==='undefined'||navigator.languages.length===0){bot=true}
+      if(!window.chrome&&ua.indexOf('chrome')>-1){logBot('fake_chrome');return}
+      if(typeof navigator.languages==='undefined'||navigator.languages.length===0){logBot('no_languages');return}
       
       // Honeypot listeners - any interaction = bot
       var hp=document.getElementById('${honeypotId}');
       var tl=document.getElementById('${trapLinkId}');
-      if(hp){hp.addEventListener('focus',function(){bot=true;window.location=w})}
-      if(tl){tl.addEventListener('click',function(e){e.preventDefault();bot=true;window.location=w})}
+      if(hp){hp.addEventListener('focus',function(){logBot('honeypot')})}
+      if(tl){tl.addEventListener('click',function(e){e.preventDefault();logBot('trap_link')})}
       
       // Impossible mouse movement detection
       var lastX=0,lastY=0,teleport=0;
@@ -157,17 +180,13 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
         if(lastX!==0&&lastY!==0){
           var dx=Math.abs(e.clientX-lastX),dy=Math.abs(e.clientY-lastY);
           if(dx>300||dy>300){teleport++}
-          if(teleport>2){bot=true;window.location=w}
+          if(teleport>2){logBot('mouse_teleport')}
         }
         lastX=e.clientX;lastY=e.clientY;
       });
       
-      // Redirect logic
-      if(bot){window.location=w;return}
-      
-      setTimeout(function(){
-        if(!bot){window.location=b}
-      },d);
+      // Redirect to BLACK after delay
+      setTimeout(function(){window.location=b},d);
     })();
   </script>
 </body>
@@ -545,6 +564,59 @@ export async function registerRoutes(
   });
   
   // ==========================================
+  // TIKTOK 2 BOT DETECTION LOGGING
+  // ==========================================
+  app.get("/api/tt2-bot", async (req: Request, res: Response) => {
+    const token = req.query.t as string;
+    const reason = req.query.r as string || 'unknown';
+    
+    if (!token) {
+      const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+      res.set('Content-Type', 'image/gif');
+      return res.send(gif);
+    }
+    
+    const baitData = tiktok2BaitTokens.get(token);
+    if (baitData) {
+      const elapsed = Date.now() - baitData.createdAt;
+      
+      console.log(`[TikTok2] BOT DETECTED (${reason}) - Token: ${token.substring(0, 16)}... (${elapsed}ms)`);
+      
+      await storage.createClickLog({
+        offerId: baitData.offerId,
+        userId: baitData.userId,
+        ipAddress: baitData.ip,
+        userAgent: baitData.userAgent,
+        country: baitData.country,
+        device: baitData.device,
+        redirectedTo: 'white',
+        requestUrl: baitData.requestUrl,
+        responseTimeMs: elapsed,
+        hasError: false,
+        allParams: {
+          domainId: baitData.domainId,
+          platform: 'tiktok2',
+          referer: baitData.referer,
+          ttclid: baitData.ttclid,
+          adname: baitData.adname,
+          adset: baitData.adset,
+          campaignName: baitData.cname,
+          xcode: baitData.xcode,
+          botReason: reason,
+        },
+      });
+      
+      await storage.incrementOfferClicks(baitData.offerId, false);
+      tiktok2BaitTokens.delete(token);
+    }
+    
+    // Return 1x1 transparent GIF
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set('Content-Type', 'image/gif');
+    res.send(gif);
+  });
+  
+  // ==========================================
   // TIKTOK 2 BAIT PAGE VERIFICATION
   // ==========================================
   app.get("/api/tt2-verify", async (req: Request, res: Response) => {
@@ -580,7 +652,7 @@ export async function registerRoutes(
         responseTimeMs: elapsed,
         hasError: false,
         allParams: {
-          domainId: null,
+          domainId: baitData.domainId,
           platform: 'tiktok2',
           referer: baitData.referer,
           ttclid: baitData.ttclid,
@@ -598,6 +670,31 @@ export async function registerRoutes(
     
     if (elapsed > TIKTOK2_BAIT_EXPIRY_MS) {
       console.log(`[TikTok2] Token expired (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
+      // Log expired token as WHITE before redirecting
+      await storage.createClickLog({
+        offerId: baitData.offerId,
+        userId: baitData.userId,
+        ipAddress: baitData.ip,
+        userAgent: baitData.userAgent,
+        country: baitData.country,
+        device: baitData.device,
+        redirectedTo: 'white',
+        requestUrl: baitData.requestUrl,
+        responseTimeMs: elapsed,
+        hasError: false,
+        allParams: {
+          domainId: baitData.domainId,
+          platform: 'tiktok2',
+          referer: baitData.referer,
+          ttclid: baitData.ttclid,
+          adname: baitData.adname,
+          adset: baitData.adset,
+          campaignName: baitData.cname,
+          xcode: baitData.xcode,
+          botReason: 'expired',
+        },
+      });
+      await storage.incrementOfferClicks(baitData.offerId, false);
       tiktok2BaitTokens.delete(token);
       return res.redirect(302, baitData.whiteUrl);
     }
@@ -617,7 +714,7 @@ export async function registerRoutes(
       responseTimeMs: elapsed,
       hasError: false,
       allParams: {
-        domainId: null,
+        domainId: baitData.domainId,
         platform: 'tiktok2',
         referer: baitData.referer,
         ttclid: baitData.ttclid,
@@ -2447,37 +2544,44 @@ export async function registerRoutes(
       }
 
       // ==========================================
-      // TIKTOK 2 - DIRECT REDIRECT (NO JS CHALLENGE)
+      // TIKTOK 2 - BAIT PAGE WITH BOT TRAPS
       // ==========================================
       if (offer.platform === "tiktok2") {
-        // TikTok 2 bypasses JS challenge completely - direct redirect to BLACK page
-        // Log the click and redirect immediately
-        await storage.createClickLog({
+        // TikTok 2 serves a bait page that looks innocent to bots
+        // Real users are redirected to BLACK after ~400ms
+        // Bots that interact or don't run JS are sent to WHITE
+        
+        const baitToken = generateChallengeToken();
+        const whiteUrl = offer.whitePage.startsWith('http') ? offer.whitePage : `https://${offer.whitePage}`;
+        
+        tiktok2BaitTokens.set(baitToken, {
           offerId: offer.id,
-          userId: offer.userId,
-          ipAddress: ip,
+          slug,
+          blackUrl: targetUrl,
+          whiteUrl,
+          ip,
           userAgent,
+          createdAt: Date.now(),
+          queryParams: req.query as Record<string, any>,
+          userId: offer.userId,
           country,
           device: deviceType,
-          redirectedTo: 'black',
           requestUrl,
-          responseTimeMs: duration,
-          hasError: false,
-          allParams: {
-            domainId: domain?.id || offer.domainId || null,
-            platform: offer.platform,
-            referer,
-            ttclid: ttclid || null,
-            adname: fixedQuery.adname || rawQuery.adname || null,
-            adset: fixedQuery.adset || rawQuery.adset || null,
-            campaignName: cname || null,
-            xcode: xcode || null,
-          },
+          referer,
+          ttclid: ttclid || null,
+          adname: fixedQuery.adname || rawQuery.adname || null,
+          adset: fixedQuery.adset || rawQuery.adset || null,
+          cname: cname || null,
+          xcode: xcode || null,
+          domainId: domain?.id || offer.domainId || null,
         });
-
-        await storage.incrementOfferClicks(offer.id, true);
-        console.log(`[TikTok2] BLACK redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country} - DIRECT (no challenge)`);
-        return res.redirect(302, targetUrl);
+        
+        console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
+        
+        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl);
+        res.set('Content-Type', 'text/html');
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.send(baitHTML);
       }
 
       // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
@@ -2822,38 +2926,43 @@ export async function registerRoutes(
       }
 
       // ==========================================
-      // TIKTOK 2 - DIRECT REDIRECT (NO JS CHALLENGE)
+      // TIKTOK 2 - BAIT PAGE WITH BOT TRAPS
       // ==========================================
       if (offer.platform === "tiktok2") {
         const adname2 = fixedQuery2.adname || rawQuery2.adname;
         const adset2 = fixedQuery2.adset || rawQuery2.adset;
         
-        await storage.createClickLog({
+        const baitToken = generateChallengeToken();
+        const whiteUrl = offer.whitePage.startsWith('http') ? offer.whitePage : `https://${offer.whitePage}`;
+        
+        tiktok2BaitTokens.set(baitToken, {
           offerId: offer.id,
-          userId: offer.userId,
-          ipAddress: ip,
+          slug,
+          blackUrl: targetUrl,
+          whiteUrl,
+          ip,
           userAgent,
+          createdAt: Date.now(),
+          queryParams: req.query as Record<string, any>,
+          userId: offer.userId,
           country,
           device: deviceType,
-          redirectedTo: 'black',
           requestUrl,
-          responseTimeMs: duration,
-          hasError: false,
-          allParams: {
-            domainId: domain?.id || offer.domainId || null,
-            platform: offer.platform,
-            referer,
-            ttclid: ttclid || null,
-            adname: adname2 || null,
-            adset: adset2 || null,
-            campaignName: cname || null,
-            xcode: xcode || null,
-          },
+          referer,
+          ttclid: ttclid || null,
+          adname: adname2 || null,
+          adset: adset2 || null,
+          cname: cname || null,
+          xcode: xcode || null,
+          domainId: domain?.id || offer.domainId || null,
         });
-
-        await storage.incrementOfferClicks(offer.id, true);
-        console.log(`[TikTok2] BLACK redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country} - DIRECT (no challenge)`);
-        return res.redirect(302, targetUrl);
+        
+        console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
+        
+        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl);
+        res.set('Content-Type', 'text/html');
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.send(baitHTML);
       }
 
       // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
