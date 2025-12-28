@@ -242,8 +242,15 @@ export default function Logs() {
                         <TableCell className="max-w-[300px]">
                           {log.requestUrl ? (
                             <div 
-                              className="text-xs font-mono text-muted-foreground truncate"
-                              title={language === "pt-BR" ? "Parametros parcialmente ocultos" : "Parameters partially hidden"}
+                              className="text-xs font-mono text-muted-foreground truncate cursor-help"
+                              title={(() => {
+                                try {
+                                  const url = new URL(log.requestUrl);
+                                  return url.pathname + url.search;
+                                } catch {
+                                  return log.requestUrl;
+                                }
+                              })()}
                             >
                               {(() => {
                                 try {
