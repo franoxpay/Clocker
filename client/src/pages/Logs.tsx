@@ -242,18 +242,21 @@ export default function Logs() {
                         <TableCell className="max-w-[300px]">
                           {log.requestUrl ? (
                             <div 
-                              className="text-xs font-mono text-muted-foreground truncate cursor-pointer hover:text-foreground"
-                              title={log.requestUrl}
-                              onClick={() => {
-                                navigator.clipboard.writeText(log.requestUrl || "");
-                              }}
+                              className="text-xs font-mono text-muted-foreground truncate"
+                              title={language === "pt-BR" ? "URL oculta por seguranca" : "URL hidden for security"}
                             >
                               {(() => {
                                 try {
                                   const url = new URL(log.requestUrl);
-                                  return url.pathname + url.search;
+                                  const path = url.pathname;
+                                  const search = url.search;
+                                  const fullPath = path + search;
+                                  if (fullPath.length <= 8) return fullPath;
+                                  return fullPath.substring(0, 4) + "***";
                                 } catch {
-                                  return log.requestUrl;
+                                  const val = log.requestUrl || "";
+                                  if (val.length <= 8) return val;
+                                  return val.substring(0, 4) + "***";
                                 }
                               })()}
                             </div>
@@ -263,9 +266,13 @@ export default function Logs() {
                                 (() => {
                                   try {
                                     const url = new URL((log.allParams as any).referer);
-                                    return url.hostname.replace('www.', '').replace('m.', '');
+                                    const hostname = url.hostname.replace('www.', '').replace('m.', '');
+                                    if (hostname.length <= 8) return hostname;
+                                    return hostname.substring(0, 4) + "***";
                                   } catch {
-                                    return (log.allParams as any).referer;
+                                    const val = (log.allParams as any).referer || "";
+                                    if (val.length <= 8) return val;
+                                    return val.substring(0, 4) + "***";
                                   }
                                 })()
                               ) : (

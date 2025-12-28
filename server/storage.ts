@@ -95,7 +95,7 @@ export interface IStorage {
   getAdminImpersonation(sessionToken: string): Promise<{ adminId: string; targetUserId: string } | undefined>;
   deleteAdminImpersonation(sessionToken: string): Promise<void>;
 
-  getSystemMetrics72h(): Promise<{
+  getSystemMetrics72h(pageType?: string, baselineTime?: Date): Promise<{
     totalClicks: number;
     successfulClicks: number;
     failedClicks: number;
@@ -116,6 +116,9 @@ export interface IStorage {
       device: string | null;
       createdAt: Date;
       hasError: boolean | null;
+      redirectedTo: string | null;
+      offerName: string | null;
+      failReason: string | null;
     }>;
   }>;
 }
@@ -539,7 +542,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(adminImpersonations).where(eq(adminImpersonations.sessionToken, sessionToken));
   }
 
-  async getSystemMetrics72h(): Promise<{
+  async getSystemMetrics72h(pageType?: string, baselineTime?: Date): Promise<{
     totalClicks: number;
     successfulClicks: number;
     failedClicks: number;
@@ -560,10 +563,21 @@ export class DatabaseStorage implements IStorage {
       device: string | null;
       createdAt: Date;
       hasError: boolean | null;
+      redirectedTo: string | null;
+      offerName: string | null;
+      failReason: string | null;
     }>;
   }> {
     const hours72Ago = new Date();
     hours72Ago.setHours(hours72Ago.getHours() - 72);
+    
+    const startTime = baselineTime && baselineTime > hours72Ago ? baselineTime : hours72Ago;
+
+    // Build conditions array
+    const conditions = [gte(clickLogs.createdAt, startTime)];
+    if (pageType && pageType !== "all") {
+      conditions.push(eq(clickLogs.redirectedTo, pageType));
+    }
 
     // Get overall stats
     const [overallStats] = await db
@@ -576,7 +590,7 @@ export class DatabaseStorage implements IStorage {
         maxResponseTimeMs: sql<number>`COALESCE(MAX(${clickLogs.responseTimeMs}), 0)`,
       })
       .from(clickLogs)
-      .where(gte(clickLogs.createdAt, hours72Ago));
+      .where(and(...conditions));
 
     // Get hourly breakdown
     const hourlyStats = await db
@@ -588,11 +602,11 @@ export class DatabaseStorage implements IStorage {
         avgResponseTime: sql<number>`COALESCE(AVG(${clickLogs.responseTimeMs}), 0)`,
       })
       .from(clickLogs)
-      .where(gte(clickLogs.createdAt, hours72Ago))
+      .where(and(...conditions))
       .groupBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`)
       .orderBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`);
 
-    // Get slowest requests
+    // Get slowest requests with offer name
     const slowestRequests = await db
       .select({
         id: clickLogs.id,
@@ -601,9 +615,13 @@ export class DatabaseStorage implements IStorage {
         device: clickLogs.device,
         createdAt: clickLogs.createdAt,
         hasError: clickLogs.hasError,
+        redirectedTo: clickLogs.redirectedTo,
+        errorMessage: clickLogs.errorMessage,
+        offerName: offers.name,
       })
       .from(clickLogs)
-      .where(gte(clickLogs.createdAt, hours72Ago))
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(and(...conditions))
       .orderBy(sql`${clickLogs.responseTimeMs} DESC NULLS LAST`)
       .limit(20);
 
@@ -628,6 +646,9 @@ export class DatabaseStorage implements IStorage {
         device: row.device,
         createdAt: row.createdAt,
         hasError: row.hasError,
+        redirectedTo: row.redirectedTo,
+        offerName: row.offerName,
+        failReason: row.errorMessage,
       })),
     };
   }
