@@ -2495,9 +2495,15 @@ export async function registerRoutes(
       const deviceAllowed = offer.allowedDevices.includes(deviceType);
 
       // Check country filter
-      // Allow "XX" (unknown/TikTok preview) to pass if other requirements are met
-      const country = await getCountryFromIP(ip);
-      const countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+      // TikTok2: Skip geolocation check entirely (TikTok preview uses US datacenter IPs)
+      // Other platforms: Check country normally
+      let country = "XX";
+      let countryAllowed = true;
+      
+      if (offer.platform !== "tiktok2") {
+        country = await getCountryFromIP(ip);
+        countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+      }
 
       // Determine redirect type
       const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
@@ -2881,9 +2887,16 @@ export async function registerRoutes(
 
       const deviceType = parseUserAgent(userAgent);
       const deviceAllowed = offer.allowedDevices.includes(deviceType);
-      // Allow "XX" (unknown/TikTok preview) to pass if other requirements are met
-      const country = await getCountryFromIP(ip);
-      const countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+      
+      // TikTok2: Skip geolocation check entirely (TikTok preview uses US datacenter IPs)
+      // Other platforms: Check country normally
+      let country = "XX";
+      let countryAllowed = true;
+      
+      if (offer.platform !== "tiktok2") {
+        country = await getCountryFromIP(ip);
+        countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+      }
 
       const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
