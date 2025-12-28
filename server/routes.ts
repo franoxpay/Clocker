@@ -110,7 +110,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
   const delay = 350 + Math.floor(Math.random() * 150); // 350-500ms with jitter
   const safeWhiteUrl = sanitizeUrl(whiteUrl);
-  const botLogUrl = `/api/tt2-bot?t=${token}`;
+  const botLogUrl = `/b/${token}`;
   
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -138,7 +138,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
   
   <!-- Non-JS fallback beacon - logs when meta refresh triggers -->
   <noscript>
-    <img src="/api/tt2-bot?t=${token}&r=no_js" width="1" height="1" alt="" style="position:absolute;left:-9999px">
+    <img src="/b/${token}?r=no_js" width="1" height="1" alt="" style="position:absolute;left:-9999px">
   </noscript>
   
   <!-- Honeypot traps for bots -->
@@ -148,7 +148,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string): string {
   
   <script>
     (function(){
-      var w='${safeWhiteUrl}',b='/api/tt2-verify?t=${token}',bl='${botLogUrl}',d=${delay};
+      var w='${safeWhiteUrl}',b='/v/${token}',bl='${botLogUrl}',d=${delay};
       
       function logBot(r){
         var img=new Image();
@@ -564,8 +564,66 @@ export async function registerRoutes(
   });
   
   // ==========================================
-  // TIKTOK 2 BOT DETECTION LOGGING
+  // TIKTOK 2 BOT DETECTION LOGGING (supports both /api/tt2-bot and /b/:token for custom domains)
   // ==========================================
+  
+  // Bot detection handler - shared logic
+  async function handleBotDetection(token: string, reason: string, res: Response) {
+    if (!token) {
+      const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+      res.set('Content-Type', 'image/gif');
+      return res.send(gif);
+    }
+    
+    const baitData = tiktok2BaitTokens.get(token);
+    if (baitData) {
+      const elapsed = Date.now() - baitData.createdAt;
+      
+      console.log(`[TikTok2] BOT DETECTED (${reason}) - Token: ${token.substring(0, 16)}... (${elapsed}ms)`);
+      
+      await storage.createClickLog({
+        offerId: baitData.offerId,
+        userId: baitData.userId,
+        ipAddress: baitData.ip,
+        userAgent: baitData.userAgent,
+        country: baitData.country,
+        device: baitData.device,
+        redirectedTo: 'white',
+        requestUrl: baitData.requestUrl,
+        responseTimeMs: elapsed,
+        hasError: false,
+        allParams: {
+          domainId: baitData.domainId,
+          platform: 'tiktok2',
+          referer: baitData.referer,
+          ttclid: baitData.ttclid,
+          adname: baitData.adname,
+          adset: baitData.adset,
+          campaignName: baitData.cname,
+          xcode: baitData.xcode,
+          botReason: reason,
+        },
+      });
+      
+      await storage.incrementOfferClicks(baitData.offerId, false);
+      tiktok2BaitTokens.delete(token);
+    }
+    
+    // Return 1x1 transparent GIF
+    const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+    res.set('Content-Type', 'image/gif');
+    res.send(gif);
+  }
+  
+  // Route for custom domains: /b/:token
+  app.get("/b/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    const reason = (req.query.r as string) || 'unknown';
+    console.log(`[TikTok2] Bot detection via /b/:token - Token: ${token?.substring(0, 16)}...`);
+    return handleBotDetection(token, reason, res);
+  });
+  
+  // Legacy route: /api/tt2-bot
   app.get("/api/tt2-bot", async (req: Request, res: Response) => {
     const token = req.query.t as string;
     const reason = req.query.r as string || 'unknown';
@@ -617,14 +675,14 @@ export async function registerRoutes(
   });
   
   // ==========================================
-  // TIKTOK 2 BAIT PAGE VERIFICATION
+  // TIKTOK 2 BAIT PAGE VERIFICATION (supports both /api/tt2-verify and /v/:token for custom domains)
   // ==========================================
-  app.get("/api/tt2-verify", async (req: Request, res: Response) => {
-    const token = req.query.t as string;
-    const host = req.get("host") || "";
-    const xForwardedHost = req.get("x-forwarded-host") || "";
+  
+  // Verification handler - shared logic
+  async function handleVerification(token: string, res: Response) {
+    const host = "";
     
-    console.log(`[TikTok2] Verify endpoint hit - Host: ${host}, X-Forwarded-Host: ${xForwardedHost}, Token: ${token?.substring(0, 16) || 'MISSING'}...`);
+    console.log(`[TikTok2] Verify - Token: ${token?.substring(0, 16) || 'MISSING'}...`);
     
     if (!token) {
       console.log(`[TikTok2] Verify - Missing token`);
@@ -643,7 +701,6 @@ export async function registerRoutes(
     // Validate timing - too fast is suspicious, too slow means expired
     if (elapsed < 200) {
       console.log(`[TikTok2] BOT DETECTED - Too fast (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
-      // Still redirect to white, but log as bot
       await storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
@@ -674,7 +731,6 @@ export async function registerRoutes(
     
     if (elapsed > TIKTOK2_BAIT_EXPIRY_MS) {
       console.log(`[TikTok2] Token expired (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
-      // Log expired token as WHITE before redirecting
       await storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
@@ -733,6 +789,19 @@ export async function registerRoutes(
     tiktok2BaitTokens.delete(token);
     
     return res.redirect(302, baitData.blackUrl);
+  }
+  
+  // Route for custom domains: /v/:token
+  app.get("/v/:token", async (req: Request, res: Response) => {
+    const { token } = req.params;
+    console.log(`[TikTok2] Verify via /v/:token - Token: ${token?.substring(0, 16)}...`);
+    return handleVerification(token, res);
+  });
+  
+  // Legacy route: /api/tt2-verify
+  app.get("/api/tt2-verify", async (req: Request, res: Response) => {
+    const token = req.query.t as string;
+    return handleVerification(token, res);
   });
   
   // Challenge verification route (called by JavaScript)
