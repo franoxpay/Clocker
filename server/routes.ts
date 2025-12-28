@@ -2495,8 +2495,9 @@ export async function registerRoutes(
       const deviceAllowed = offer.allowedDevices.includes(deviceType);
 
       // Check country filter
+      // Allow "XX" (unknown/TikTok preview) to pass if other requirements are met
       const country = await getCountryFromIP(ip);
-      const countryAllowed = offer.allowedCountries.includes(country);
+      const countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
 
       // Determine redirect type
       const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
@@ -2880,8 +2881,9 @@ export async function registerRoutes(
 
       const deviceType = parseUserAgent(userAgent);
       const deviceAllowed = offer.allowedDevices.includes(deviceType);
+      // Allow "XX" (unknown/TikTok preview) to pass if other requirements are met
       const country = await getCountryFromIP(ip);
-      const countryAllowed = offer.allowedCountries.includes(country);
+      const countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
 
       const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
