@@ -750,7 +750,21 @@ export async function registerRoutes(
   // ==========================================
   // TIKTOK2 TELEMETRY ENDPOINT - Collects behavioral data
   // ==========================================
+  
+  // CORS preflight for telemetry
+  app.options("/tt2/telemetry", (req: Request, res: Response) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.status(204).send();
+  });
+  
   app.post("/tt2/telemetry", async (req: Request, res: Response) => {
+    // Allow CORS for telemetry from any origin
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    
     console.log('[TikTok2 Telemetry] Received request, Content-Type:', req.headers['content-type']);
     
     try {
