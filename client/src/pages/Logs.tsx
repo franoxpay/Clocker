@@ -242,34 +242,18 @@ export default function Logs() {
                         <TableCell className="max-w-[300px]">
                           {log.requestUrl ? (
                             <div 
-                              className="text-xs font-mono text-muted-foreground truncate cursor-help"
-                              title={(() => {
+                              className="text-xs font-mono text-muted-foreground truncate cursor-pointer hover:text-foreground"
+                              title={log.requestUrl}
+                              onClick={() => {
+                                navigator.clipboard.writeText(log.requestUrl || "");
+                              }}
+                            >
+                              {(() => {
                                 try {
                                   const url = new URL(log.requestUrl);
                                   return url.pathname + url.search;
                                 } catch {
                                   return log.requestUrl;
-                                }
-                              })()}
-                            >
-                              {(() => {
-                                try {
-                                  const url = new URL(log.requestUrl);
-                                  const path = url.pathname;
-                                  const params = new URLSearchParams(url.search);
-                                  const maskedParams: string[] = [];
-                                  params.forEach((value, key) => {
-                                    if (key.toLowerCase() === "xcode") {
-                                      maskedParams.push(`${key}=${value}`);
-                                    } else if (value.length <= 4) {
-                                      maskedParams.push(`${key}=${value}***`);
-                                    } else {
-                                      maskedParams.push(`${key}=${value.substring(0, 4)}****`);
-                                    }
-                                  });
-                                  return path + (maskedParams.length > 0 ? "?" + maskedParams.join("&") : "");
-                                } catch {
-                                  return log.requestUrl || "-";
                                 }
                               })()}
                             </div>
@@ -279,13 +263,9 @@ export default function Logs() {
                                 (() => {
                                   try {
                                     const url = new URL((log.allParams as any).referer);
-                                    const hostname = url.hostname.replace('www.', '').replace('m.', '');
-                                    if (hostname.length <= 8) return hostname;
-                                    return hostname.substring(0, 4) + "***";
+                                    return url.hostname.replace('www.', '').replace('m.', '');
                                   } catch {
-                                    const val = (log.allParams as any).referer || "";
-                                    if (val.length <= 8) return val;
-                                    return val.substring(0, 4) + "***";
+                                    return (log.allParams as any).referer;
                                   }
                                 })()
                               ) : (

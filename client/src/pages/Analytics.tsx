@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +17,7 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText, Filter } from "lucide-react";
+import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,15 +25,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import type { Offer } from "@shared/schema";
 
 interface AdvancedStats {
   totalClicks: number;
@@ -89,27 +79,9 @@ const COLORS = [
 export default function Analytics() {
   const { language } = useLanguage();
   const isPt = language === "pt-BR";
-  const [offerId, setOfferId] = useState<string>("all");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-
-  const { data: offers = [] } = useQuery<Offer[]>({
-    queryKey: ["/api/offers"],
-  });
-
-  const queryParams = new URLSearchParams();
-  if (offerId && offerId !== "all") queryParams.set("offerId", offerId);
-  if (dateFrom) queryParams.set("dateFrom", dateFrom);
-  if (dateTo) queryParams.set("dateTo", dateTo);
 
   const { data: stats, isLoading } = useQuery<AdvancedStats>({
-    queryKey: ["/api/analytics/advanced", offerId, dateFrom, dateTo],
-    queryFn: async () => {
-      const url = `/api/analytics/advanced${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
-      const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch analytics");
-      return res.json();
-    },
+    queryKey: ["/api/analytics/advanced"],
   });
 
   const t = {
@@ -132,18 +104,6 @@ export default function Analytics() {
     exportSummary: isPt ? "Relatorio Completo" : "Full Report",
     exportByCountry: isPt ? "Por Pais" : "By Country",
     exportByDevice: isPt ? "Por Dispositivo" : "By Device",
-    filterOffer: isPt ? "Filtrar por Oferta" : "Filter by Offer",
-    filterDate: isPt ? "Filtrar por Data" : "Filter by Date",
-    from: isPt ? "De" : "From",
-    to: isPt ? "Ate" : "To",
-    clearFilters: isPt ? "Limpar Filtros" : "Clear Filters",
-    allOffers: isPt ? "Todas as Ofertas" : "All Offers",
-  };
-
-  const clearFilters = () => {
-    setOfferId("all");
-    setDateFrom("");
-    setDateTo("");
   };
 
   const handleExport = (type: string, reportType?: string) => {
@@ -223,57 +183,6 @@ export default function Analytics() {
           </Button>
         </div>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            {t.filterOffer}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <Select value={offerId} onValueChange={setOfferId}>
-                <SelectTrigger data-testid="filter-analytics-offer">
-                  <SelectValue placeholder={t.filterOffer} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{t.allOffers}</SelectItem>
-                  {offers.map((offer) => (
-                    <SelectItem key={offer.id} value={String(offer.id)}>
-                      {offer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                placeholder={t.from}
-                data-testid="filter-analytics-date-from"
-              />
-            </div>
-            <div>
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                placeholder={t.to}
-                data-testid="filter-analytics-date-to"
-              />
-            </div>
-            <div>
-              <Button variant="outline" onClick={clearFilters} data-testid="button-clear-analytics-filters">
-                {t.clearFilters}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (

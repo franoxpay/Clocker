@@ -54,9 +54,6 @@ setInterval(() => {
   }
 }, 60000);
 
-// Module-scope baseline time for slow requests (persists across requests, resets on server restart)
-let slowRequestsBaselineTime: Date | null = null;
-
 function generateChallengeToken(): string {
   return randomBytes(32).toString('hex');
 }
@@ -1313,7 +1310,6 @@ export async function registerRoutes(
   app.get("/api/analytics/advanced", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const { offerId, dateFrom, dateTo } = req.query;
       const logs = await storage.getClickLogs(userId, 1, 10000);
       
       const countryStats = new Map<string, { total: number; black: number; white: number }>();
@@ -1324,24 +1320,8 @@ export async function registerRoutes(
       
       let totalBlack = 0;
       let totalWhite = 0;
-      let filteredTotal = 0;
       
       for (const log of logs.logs) {
-        if (offerId && String(log.offerId) !== String(offerId)) continue;
-        
-        const logDate = new Date(log.createdAt);
-        if (dateFrom) {
-          const fromDate = new Date(dateFrom as string);
-          fromDate.setHours(0, 0, 0, 0);
-          if (logDate < fromDate) continue;
-        }
-        if (dateTo) {
-          const toDate = new Date(dateTo as string);
-          toDate.setHours(23, 59, 59, 999);
-          if (logDate > toDate) continue;
-        }
-        
-        filteredTotal++;
         const isBlack = log.redirectedTo === "black";
         if (isBlack) totalBlack++; else totalWhite++;
         
@@ -1369,6 +1349,7 @@ export async function registerRoutes(
         ps.total++;
         if (isBlack) ps.black++; else ps.white++;
         
+        const logDate = new Date(log.createdAt);
         const hour = logDate.getHours();
         const weekday = logDate.getDay();
         hourlyStats[hour].total++;
@@ -1377,7 +1358,7 @@ export async function registerRoutes(
         if (isBlack) weekdayStats[weekday].black++; else weekdayStats[weekday].white++;
       }
       
-      const conversionRate = filteredTotal > 0 ? (totalBlack / filteredTotal * 100).toFixed(1) : "0";
+      const conversionRate = logs.total > 0 ? (totalBlack / logs.total * 100).toFixed(1) : "0";
       
       const byCountry = Array.from(countryStats.entries())
         .map(([name, stats]) => ({
@@ -2287,28 +2268,10 @@ export async function registerRoutes(
   // System monitoring metrics - last 72 hours
   app.get("/api/admin/system-metrics", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { pageType } = req.query;
-      const metrics = await storage.getSystemMetrics72h(
-        pageType as string | undefined,
-        slowRequestsBaselineTime || undefined
-      );
-      res.json({
-        ...metrics,
-        baselineTime: slowRequestsBaselineTime?.toISOString() || null,
-      });
+      const metrics = await storage.getSystemMetrics72h();
+      res.json(metrics);
     } catch (error) {
       console.error("Error fetching system metrics:", error);
-      res.status(500).json({ message: "Internal server error" });
-    }
-  });
-
-  // Reset slow requests baseline
-  app.post("/api/admin/reset-slow-baseline", isAdmin, async (req: Request, res: Response) => {
-    try {
-      slowRequestsBaselineTime = new Date();
-      res.json({ success: true, baselineTime: slowRequestsBaselineTime.toISOString() });
-    } catch (error) {
-      console.error("Error resetting baseline:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
