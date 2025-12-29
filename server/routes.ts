@@ -369,7 +369,7 @@ function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: stri
 </html>`;
 }
 
-function generateChallengeHTML(token: string, honeypotId: string): string {
+function generateChallengeHTML(token: string, honeypotId: string, baseUrl?: string): string {
   // Generate random variable names to avoid detection
   const varNames = {
     checks: `_${randomBytes(4).toString('hex')}`,
@@ -377,6 +377,14 @@ function generateChallengeHTML(token: string, honeypotId: string): string {
     start: `_${randomBytes(4).toString('hex')}`,
     result: `_${randomBytes(4).toString('hex')}`,
   };
+  
+  // Use absolute URLs to avoid routing issues with custom domains
+  const prefix = baseUrl ? baseUrl : '';
+  const verifyUrl = `${prefix}/api/challenge/verify`;
+  const completeUrl = `${prefix}/api/challenge/complete`;
+  const honeypotUrl = `${prefix}/api/honeypot`;
+  const trapUrl = `${prefix}/api/trap`;
+  const submitUrl = `${prefix}/api/submit`;
 
   return `<!DOCTYPE html>
 <html lang="pt-BR">
@@ -438,9 +446,9 @@ function generateChallengeHTML(token: string, honeypotId: string): string {
   </div>
   
   <!-- Honeypot links - bots will find and potentially access these -->
-  <a href="/api/honeypot/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">admin</a>
-  <a href="/api/trap/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">login</a>
-  <form action="/api/submit/${token}" class="${honeypotId}">
+  <a href="${honeypotUrl}/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">admin</a>
+  <a href="${trapUrl}/${token}" class="${honeypotId}" tabindex="-1" aria-hidden="true">login</a>
+  <form action="${submitUrl}/${token}" class="${honeypotId}">
     <input type="text" name="email" class="${honeypotId}">
     <input type="password" name="password" class="${honeypotId}">
   </form>
@@ -548,14 +556,14 @@ function generateChallengeHTML(token: string, honeypotId: string): string {
         img.onload = function() {
           // Success - redirect will happen server-side via meta refresh
           setTimeout(function() {
-            window.location.href = '/api/challenge/complete/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
+            window.location.href = '${completeUrl}/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
           }, 100);
         };
         img.onerror = function() {
           // Fallback to direct navigation
-          window.location.href = '/api/challenge/complete/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
+          window.location.href = '${completeUrl}/' + '${token}' + '?v=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e;
         };
-        img.src = '/api/challenge/verify/' + '${token}' + '?s=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e + '&r=' + ${varNames.result}.r;
+        img.src = '${verifyUrl}/' + '${token}' + '?s=' + ${varNames.result}.s + '&e=' + ${varNames.result}.e + '&r=' + ${varNames.result}.r;
       }
       
       // Add some randomness to timing (800-1500ms)
@@ -2874,7 +2882,8 @@ export async function registerRoutes(
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
         // Build base URL for verification redirects (important for custom domains)
-        const proto = req.get('x-forwarded-proto') || 'https';
+        // Safe protocol fallback: X-Forwarded-Proto (for proxies) > req.protocol > secure detection > http
+        const proto = req.get('x-forwarded-proto') || req.protocol || (req.secure ? 'https' : 'http');
         const hostHeader = req.get('x-forwarded-host') || req.get('host') || '';
         const baseUrl = hostHeader ? `${proto}://${hostHeader}` : '';
         
@@ -2930,10 +2939,18 @@ export async function registerRoutes(
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
       
+      // Build base URL for challenge verification redirects (important for custom domains)
+      // Safe protocol fallback: X-Forwarded-Proto (for proxies) > req.protocol > secure detection > http
+      const proto = req.get('x-forwarded-proto') || req.protocol || (req.secure ? 'https' : 'http');
+      const hostHeader = req.get('x-forwarded-host') || req.get('host') || '';
+      const baseUrl = hostHeader ? `${proto}://${hostHeader}` : '';
+      
+      console.log(`[Cloak] Using baseUrl: ${baseUrl} for challenge redirects`);
+      
       // Serve the challenge HTML page
       res.set('Content-Type', 'text/html');
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      return res.send(generateChallengeHTML(challengeToken, honeypotId));
+      return res.send(generateChallengeHTML(challengeToken, honeypotId, baseUrl));
     } catch (error: any) {
       console.error("[Cloak] Error:", error);
       // Try to log the error click if we have offer info
@@ -3264,7 +3281,8 @@ export async function registerRoutes(
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
         // Build base URL for verification redirects (important for custom domains)
-        const proto = req.get('x-forwarded-proto') || 'https';
+        // Safe protocol fallback: X-Forwarded-Proto (for proxies) > req.protocol > secure detection > http
+        const proto = req.get('x-forwarded-proto') || req.protocol || (req.secure ? 'https' : 'http');
         const hostHeader = req.get('x-forwarded-host') || req.get('host') || '';
         const baseUrl = hostHeader ? `${proto}://${hostHeader}` : '';
         
@@ -3315,9 +3333,17 @@ export async function registerRoutes(
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
       
+      // Build base URL for challenge verification redirects (important for custom domains)
+      // Safe protocol fallback: X-Forwarded-Proto (for proxies) > req.protocol > secure detection > http
+      const challengeProto = req.get('x-forwarded-proto') || req.protocol || (req.secure ? 'https' : 'http');
+      const challengeHost = req.get('x-forwarded-host') || req.get('host') || '';
+      const challengeBaseUrl = challengeHost ? `${challengeProto}://${challengeHost}` : '';
+      
+      console.log(`[Cloak] Using baseUrl: ${challengeBaseUrl} for challenge redirects`);
+      
       res.set('Content-Type', 'text/html');
       res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-      return res.send(generateChallengeHTML(challengeToken, honeypotId));
+      return res.send(generateChallengeHTML(challengeToken, honeypotId, challengeBaseUrl));
     } catch (error: any) {
       console.error("[Cloak] Error:", error);
       // Log the click with error status - NO CLICKS LOST
