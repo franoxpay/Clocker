@@ -106,6 +106,110 @@ function sanitizeUrl(url: string): string {
   }
 }
 
+// ==========================================
+// IP EXTRACTION HELPER
+// ==========================================
+// Extract the real client IP from request headers
+// Prioritizes IPv4 and skips known datacenter/proxy IPs (like Facebook's 2a03:2880::/32)
+function extractClientIP(req: Request): string {
+  // Known datacenter/proxy IPv6 prefixes to skip
+  const proxyIPv6Prefixes = [
+    '2a03:2880', // Facebook/Meta datacenter
+    '2606:4700', // Cloudflare
+    '2001:4860', // Google
+  ];
+  
+  // Check if IP is a known proxy/datacenter IP
+  const isProxyIP = (ip: string): boolean => {
+    const normalizedIP = ip.toLowerCase().trim();
+    return proxyIPv6Prefixes.some(prefix => normalizedIP.startsWith(prefix.toLowerCase()));
+  };
+  
+  // Check if IP is private/reserved
+  const isPrivateIP = (ip: string): boolean => {
+    // IPv4 private ranges
+    if (/^10\./.test(ip)) return true;
+    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return true;
+    if (/^192\.168\./.test(ip)) return true;
+    if (/^127\./.test(ip)) return true;
+    if (/^169\.254\./.test(ip)) return true;
+    // IPv6 private/local
+    if (/^(fc|fd|fe80|::1)/i.test(ip)) return true;
+    return false;
+  };
+  
+  // Check if IP is valid IPv4
+  const isIPv4 = (ip: string): boolean => {
+    return /^(\d{1,3}\.){3}\d{1,3}$/.test(ip);
+  };
+  
+  // Clean up IP (remove ::ffff: prefix for IPv4-mapped IPv6)
+  const cleanIP = (ip: string): string => {
+    return ip.replace(/^::ffff:/i, '').trim();
+  };
+  
+  // Get all forwarded IPs
+  const xForwardedFor = req.headers["x-forwarded-for"] as string || '';
+  const cfConnectingIP = req.headers["cf-connecting-ip"] as string || '';
+  const trueClientIP = req.headers["true-client-ip"] as string || '';
+  const xRealIP = req.headers["x-real-ip"] as string || '';
+  
+  // Build list of candidate IPs (from most reliable to least)
+  const candidates: string[] = [];
+  
+  // Add CF-Connecting-IP first (most reliable if using Cloudflare)
+  if (cfConnectingIP) {
+    candidates.push(cleanIP(cfConnectingIP));
+  }
+  
+  // Add True-Client-IP (used by some CDNs)
+  if (trueClientIP) {
+    candidates.push(cleanIP(trueClientIP));
+  }
+  
+  // Add X-Real-IP
+  if (xRealIP) {
+    candidates.push(cleanIP(xRealIP));
+  }
+  
+  // Add X-Forwarded-For IPs (can have multiple, comma-separated)
+  if (xForwardedFor) {
+    const forwardedIPs = xForwardedFor.split(',').map(ip => cleanIP(ip));
+    candidates.push(...forwardedIPs);
+  }
+  
+  // Add socket remote address as last resort
+  if (req.socket?.remoteAddress) {
+    candidates.push(cleanIP(req.socket.remoteAddress));
+  }
+  if (req.ip) {
+    candidates.push(cleanIP(req.ip));
+  }
+  
+  // First pass: find first valid public IPv4 (preferred)
+  for (const ip of candidates) {
+    if (isIPv4(ip) && !isPrivateIP(ip) && !isProxyIP(ip)) {
+      return ip;
+    }
+  }
+  
+  // Second pass: find any valid public IP (including IPv6) but skip proxy IPs
+  for (const ip of candidates) {
+    if (!isPrivateIP(ip) && !isProxyIP(ip) && ip !== 'unknown' && ip !== '') {
+      return ip;
+    }
+  }
+  
+  // Third pass: return any non-empty IP as last resort
+  for (const ip of candidates) {
+    if (ip && ip !== 'unknown') {
+      return ip;
+    }
+  }
+  
+  return 'unknown';
+}
+
 function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: string): string {
   const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
@@ -2514,7 +2618,7 @@ export async function registerRoutes(
     const rawHost = req.get("host") || "";
     const host = rawHost.split(":")[0]; // Remove port if present
     const userAgent = req.get("user-agent") || "";
-    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
+    const ip = extractClientIP(req);
     const referer = req.get("referer") || "";
     const requestUrlR = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
@@ -3086,7 +3190,7 @@ export async function registerRoutes(
     // Manually trigger the /r/:slug handler logic
     const startTime = Date.now();
     const userAgent = req.get("user-agent") || "";
-    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "";
+    const ip = extractClientIP(req);
     const referer = req.get("referer") || "";
     const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
