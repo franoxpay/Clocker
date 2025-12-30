@@ -210,6 +210,46 @@ function extractClientIP(req: Request): string {
   return 'unknown';
 }
 
+// ==========================================
+// UTM PARAMETER HELPER
+// ==========================================
+// Append UTM parameters (and other tracking params) from query string to destination URL
+// Excludes internal cloaking params like fbcl, xcode, ttclid, cname
+function appendUTMParams(targetUrl: string, queryParams: Record<string, any>): string {
+  // List of internal cloaking params to exclude
+  const excludedParams = ['fbcl', 'xcode', 'ttclid', 'cname', 'adname', 'adset'];
+  
+  // Params to include (UTM and other tracking)
+  const paramsToInclude: [string, string][] = [];
+  
+  for (const [key, value] of Object.entries(queryParams)) {
+    // Skip excluded params and non-string values
+    if (excludedParams.includes(key.toLowerCase())) continue;
+    if (typeof value !== 'string' || !value) continue;
+    
+    // Clean up key (remove leading ? if present from malformed URLs)
+    const cleanKey = key.startsWith('?') ? key.substring(1) : key;
+    if (excludedParams.includes(cleanKey.toLowerCase())) continue;
+    
+    paramsToInclude.push([cleanKey, value]);
+  }
+  
+  if (paramsToInclude.length === 0) {
+    return targetUrl;
+  }
+  
+  try {
+    const url = new URL(targetUrl.startsWith('http') ? targetUrl : `https://${targetUrl}`);
+    for (const [key, value] of paramsToInclude) {
+      url.searchParams.set(key, value);
+    }
+    return url.toString();
+  } catch (e) {
+    console.error('[UTM] Error appending params to URL:', e);
+    return targetUrl;
+  }
+}
+
 function generateTikTok2BaitHTML(token: string, whiteUrl: string, baseUrl?: string): string {
   const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
   const trapLinkId = `tl_${randomBytes(4).toString('hex')}`;
@@ -1156,7 +1196,9 @@ export async function registerRoutes(
     await storage.incrementOfferClicks(baitData.offerId, true);
     tiktok2BaitTokens.delete(token);
     
-    return res.redirect(302, baitData.blackUrl);
+    // Append UTM parameters to black page URL
+    const finalBlackUrl = appendUTMParams(baitData.blackUrl, baitData.queryParams);
+    return res.redirect(302, finalBlackUrl);
   }
   
   // Route for custom domains: /v/:token and /go/:token (fallback)
@@ -1288,23 +1330,8 @@ export async function registerRoutes(
       }
       targetUrl = offer.whitePageUrl;
     } else {
-      // Human verified - go to black page
-      targetUrl = challenge.targetUrl;
-      
-      // Add query params if going to black page
-      if (Object.keys(challenge.queryParams).length > 0) {
-        try {
-          const url = new URL(targetUrl);
-          for (const [key, value] of Object.entries(challenge.queryParams)) {
-            if (typeof value === 'string') {
-              url.searchParams.set(key, value);
-            }
-          }
-          targetUrl = url.toString();
-        } catch (e) {
-          console.error('[AntiBot] Error building URL with params:', e);
-        }
-      }
+      // Human verified - go to black page with UTM params
+      targetUrl = appendUTMParams(challenge.targetUrl, challenge.queryParams);
     }
     
     // LOG THE CLICK AFTER CHALLENGE RESULT (this is the only place clicks to black are logged)
@@ -3031,11 +3058,14 @@ export async function registerRoutes(
         });
 
         await storage.incrementOfferClicks(offer.id, true);
-        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${targetUrl}`);
+        
+        // Append UTM parameters to black page URL
+        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${finalUrl}`);
         
         // Direct 302 redirect - no intermediate page
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        return res.redirect(302, targetUrl);
+        return res.redirect(302, finalUrl);
       }
 
       // For BLACK page candidates (TikTok only - uses JavaScript challenge)
@@ -3466,11 +3496,14 @@ export async function registerRoutes(
         });
 
         await storage.incrementOfferClicks(offer.id, true);
-        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${targetUrl}`);
+        
+        // Append UTM parameters to black page URL
+        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${finalUrl}`);
         
         // Direct 302 redirect - no intermediate page
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        return res.redirect(302, targetUrl);
+        return res.redirect(302, finalUrl);
       }
 
       // For BLACK page candidates (TikTok only - uses JavaScript challenge)
