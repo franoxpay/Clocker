@@ -2423,6 +2423,42 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/dashboard", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const platform = req.query.platform as string | undefined;
+      const metrics = await storage.getAdminDashboardMetrics(platform);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching admin dashboard:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/users-new", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const period = (req.query.period as '7d' | '30d' | '1y') || '7d';
+      const data = await storage.getUsersNewByPeriod(period);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching new users:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/users-ranking", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const period = (req.query.period as 'today' | '7d' | '30d') || 'today';
+      const platform = req.query.platform as string | undefined;
+      const data = await storage.getUsersRanking(page, limit, period, platform);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching users ranking:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/plans", isAdmin, async (req: Request, res: Response) => {
     try {
       const plan = await storage.createPlan(req.body);

@@ -121,6 +121,32 @@ export interface IStorage {
       allParams: Record<string, string> | null;
     }>;
   }>;
+
+  getAdminDashboardMetrics(platform?: string): Promise<{
+    clicksToday: { total: number; black: number; white: number; failed: number };
+    clicksLast7Days: { total: number; black: number; white: number; failed: number };
+    clicksByDay: Array<{ date: string; total: number; black: number; white: number; failed: number }>;
+    usersTotal: { total: number; paid: number; free: number };
+    usersByPlan: Array<{ planId: number; planName: string; count: number }>;
+  }>;
+
+  getUsersNewByPeriod(period: '7d' | '30d' | '1y'): Promise<Array<{ date: string; count: number }>>;
+
+  getUsersRanking(
+    page: number,
+    limit: number,
+    period: 'today' | '7d' | '30d',
+    platform?: string
+  ): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      planName: string | null;
+      totalClicks: number;
+      clicksToday: number;
+    }>;
+    total: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -649,6 +675,222 @@ export class DatabaseStorage implements IStorage {
         platform: row.platform,
         allParams: row.allParams as Record<string, string> | null,
       })),
+    };
+  }
+
+  async getAdminDashboardMetrics(platform?: string): Promise<{
+    clicksToday: { total: number; black: number; white: number; failed: number };
+    clicksLast7Days: { total: number; black: number; white: number; failed: number };
+    clicksByDay: Array<{ date: string; total: number; black: number; white: number; failed: number }>;
+    usersTotal: { total: number; paid: number; free: number };
+    usersByPlan: Array<{ planId: number; planName: string; count: number }>;
+  }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days7Ago = new Date(today);
+    days7Ago.setDate(days7Ago.getDate() - 7);
+
+    const platformFilter = platform && platform !== 'all' ? and(gte(clickLogs.createdAt, today), eq(clickLogs.platform, platform)) : gte(clickLogs.createdAt, today);
+    const platformFilter7d = platform && platform !== 'all' ? and(gte(clickLogs.createdAt, days7Ago), eq(clickLogs.platform, platform)) : gte(clickLogs.createdAt, days7Ago);
+
+    const [todayStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
+      })
+      .from(clickLogs)
+      .where(platformFilter);
+
+    const [last7DaysStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
+      })
+      .from(clickLogs)
+      .where(platformFilter7d);
+
+    const dailyStats = await db
+      .select({
+        date: sql<string>`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD')`,
+        total: sql<number>`COUNT(*)`,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
+      })
+      .from(clickLogs)
+      .where(platformFilter7d)
+      .groupBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD')`)
+      .orderBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD')`);
+
+    const [userStats] = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        paid: sql<number>`SUM(CASE WHEN ${users.planId} IS NOT NULL AND ${users.planId} > 0 THEN 1 ELSE 0 END)`,
+        free: sql<number>`SUM(CASE WHEN ${users.planId} IS NULL OR ${users.planId} = 0 THEN 1 ELSE 0 END)`,
+      })
+      .from(users);
+
+    const planStats = await db
+      .select({
+        planId: plans.id,
+        planName: plans.name,
+        count: sql<number>`COUNT(${users.id})`,
+      })
+      .from(plans)
+      .leftJoin(users, eq(users.planId, plans.id))
+      .groupBy(plans.id, plans.name)
+      .orderBy(sql`COUNT(${users.id}) DESC`);
+
+    return {
+      clicksToday: {
+        total: Number(todayStats?.total || 0),
+        black: Number(todayStats?.black || 0),
+        white: Number(todayStats?.white || 0),
+        failed: Number(todayStats?.failed || 0),
+      },
+      clicksLast7Days: {
+        total: Number(last7DaysStats?.total || 0),
+        black: Number(last7DaysStats?.black || 0),
+        white: Number(last7DaysStats?.white || 0),
+        failed: Number(last7DaysStats?.failed || 0),
+      },
+      clicksByDay: dailyStats.map(row => ({
+        date: row.date,
+        total: Number(row.total),
+        black: Number(row.black),
+        white: Number(row.white),
+        failed: Number(row.failed),
+      })),
+      usersTotal: {
+        total: Number(userStats?.total || 0),
+        paid: Number(userStats?.paid || 0),
+        free: Number(userStats?.free || 0),
+      },
+      usersByPlan: planStats.map(row => ({
+        planId: row.planId,
+        planName: row.planName,
+        count: Number(row.count),
+      })),
+    };
+  }
+
+  async getUsersNewByPeriod(period: '7d' | '30d' | '1y'): Promise<Array<{ date: string; count: number }>> {
+    const now = new Date();
+    let startDate: Date;
+    let groupFormat: string;
+
+    switch (period) {
+      case '7d':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 7);
+        groupFormat = 'YYYY-MM-DD';
+        break;
+      case '30d':
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - 30);
+        groupFormat = 'YYYY-MM-DD';
+        break;
+      case '1y':
+        startDate = new Date(now);
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        groupFormat = 'YYYY-MM';
+        break;
+    }
+
+    const result = await db
+      .select({
+        date: sql<string>`TO_CHAR(${users.createdAt}, ${groupFormat})`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(users)
+      .where(gte(users.createdAt, startDate))
+      .groupBy(sql`TO_CHAR(${users.createdAt}, ${groupFormat})`)
+      .orderBy(sql`TO_CHAR(${users.createdAt}, ${groupFormat})`);
+
+    return result.map(row => ({
+      date: row.date,
+      count: Number(row.count),
+    }));
+  }
+
+  async getUsersRanking(
+    page: number,
+    limit: number,
+    period: 'today' | '7d' | '30d',
+    platform?: string
+  ): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      planName: string | null;
+      totalClicks: number;
+      clicksToday: number;
+    }>;
+    total: number;
+  }> {
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    let periodStart: Date;
+    switch (period) {
+      case 'today':
+        periodStart = today;
+        break;
+      case '7d':
+        periodStart = new Date(today);
+        periodStart.setDate(periodStart.getDate() - 7);
+        break;
+      case '30d':
+        periodStart = new Date(today);
+        periodStart.setDate(periodStart.getDate() - 30);
+        break;
+    }
+
+    const offset = (page - 1) * limit;
+
+    const conditions = [gte(clickLogs.createdAt, periodStart)];
+    if (platform && platform !== 'all') {
+      conditions.push(eq(clickLogs.platform, platform));
+    }
+
+    const rankingQuery = await db
+      .select({
+        userId: users.id,
+        email: users.email,
+        planName: plans.name,
+        totalClicks: sql<number>`COUNT(${clickLogs.id})`,
+        clicksToday: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
+      })
+      .from(users)
+      .leftJoin(plans, eq(users.planId, plans.id))
+      .leftJoin(clickLogs, and(eq(clickLogs.userId, users.id), ...conditions))
+      .groupBy(users.id, users.email, plans.name)
+      .having(sql`COUNT(${clickLogs.id}) > 0`)
+      .orderBy(sql`COUNT(${clickLogs.id}) DESC`)
+      .limit(limit)
+      .offset(offset);
+
+    const [countResult] = await db
+      .select({
+        count: sql<number>`COUNT(DISTINCT ${users.id})`,
+      })
+      .from(users)
+      .innerJoin(clickLogs, and(eq(clickLogs.userId, users.id), ...conditions));
+
+    return {
+      users: rankingQuery.map(row => ({
+        id: row.userId,
+        email: row.email ?? '',
+        planName: row.planName,
+        totalClicks: Number(row.totalClicks),
+        clicksToday: Number(row.clicksToday),
+      })),
+      total: Number(countResult?.count || 0),
     };
   }
 }
