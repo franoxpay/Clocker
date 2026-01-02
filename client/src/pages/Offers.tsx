@@ -293,7 +293,7 @@ export default function Offers() {
   };
 
   const getOfferParams = (offer: OfferWithDomain) => {
-    if (offer.platform === "tiktok2") {
+    if (offer.platform === "tiktok") {
       return `?ttclid=__CLICKID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
     }
     return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
@@ -431,7 +431,7 @@ export default function Offers() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tiktok2">TikTok</SelectItem>
+                      <SelectItem value="tiktok">TikTok</SelectItem>
                       <SelectItem value="facebook">Facebook</SelectItem>
                     </SelectContent>
                   </Select>
@@ -721,7 +721,7 @@ export default function Offers() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {offer.platform === "tiktok2" ? "TikTok" : "Facebook"}
+                          {offer.platform === "tiktok" ? "TikTok" : "Facebook"}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">

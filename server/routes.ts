@@ -922,7 +922,7 @@ export async function registerRoutes(
         hasError: false,
         allParams: {
           domainId: baitData.domainId,
-          platform: 'tiktok2',
+          platform: 'tiktok',
           referer: baitData.referer,
           ttclid: baitData.ttclid,
           adname: baitData.adname,
@@ -1061,7 +1061,7 @@ export async function registerRoutes(
         hasError: false,
         allParams: {
           domainId: baitData.domainId,
-          platform: 'tiktok2',
+          platform: 'tiktok',
           referer: baitData.referer,
           ttclid: baitData.ttclid,
           adname: baitData.adname,
@@ -1122,7 +1122,7 @@ export async function registerRoutes(
         hasError: false,
         allParams: {
           domainId: baitData.domainId,
-          platform: 'tiktok2',
+          platform: 'tiktok',
           referer: baitData.referer,
           ttclid: baitData.ttclid,
           adname: baitData.adname,
@@ -1152,7 +1152,7 @@ export async function registerRoutes(
         hasError: false,
         allParams: {
           domainId: baitData.domainId,
-          platform: 'tiktok2',
+          platform: 'tiktok',
           referer: baitData.referer,
           ttclid: baitData.ttclid,
           adname: baitData.adname,
@@ -1183,7 +1183,7 @@ export async function registerRoutes(
       hasError: false,
       allParams: {
         domainId: baitData.domainId,
-        platform: 'tiktok2',
+        platform: 'tiktok',
         referer: baitData.referer,
         ttclid: baitData.ttclid,
         adname: baitData.adname,
@@ -2856,7 +2856,7 @@ export async function registerRoutes(
         console.log(`[Cloak] BOT DETECTED - User-Agent typo: "Bulid" instead of "Build"`);
       }
       
-      if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok") {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
@@ -2935,7 +2935,7 @@ export async function registerRoutes(
       let country = "XX";
       let countryAllowed = true;
       
-      if (offer.platform !== "tiktok2") {
+      if (offer.platform !== "tiktok") {
         country = await getCountryFromIP(ip);
         countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
       }
@@ -2971,10 +2971,10 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: offer.platform === "tiktok2" ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-            adname: offer.platform === "tiktok2" ? (fixedQuery.adname || rawQuery.adname || null) : null,
-            adset: offer.platform === "tiktok2" ? (fixedQuery.adset || rawQuery.adset || null) : null,
+            adname: offer.platform === "tiktok" ? (fixedQuery.adname || rawQuery.adname || null) : null,
+            adset: offer.platform === "tiktok" ? (fixedQuery.adset || rawQuery.adset || null) : null,
             failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
             isBotDetected,
           },
@@ -2988,7 +2988,7 @@ export async function registerRoutes(
       // ==========================================
       // TIKTOK 2 - BAIT PAGE WITH BOT TRAPS
       // ==========================================
-      if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok") {
         // TikTok 2 serves a bait page that looks innocent to bots
         // Real users are redirected to BLACK after ~400ms
         // Bots that interact or don't run JS are sent to WHITE
@@ -3313,7 +3313,7 @@ export async function registerRoutes(
       let paramsValid = false;
       let failReason = "";
 
-      if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok") {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
@@ -3377,7 +3377,7 @@ export async function registerRoutes(
       let country = "XX";
       let countryAllowed = true;
       
-      if (offer.platform !== "tiktok2") {
+      if (offer.platform !== "tiktok") {
         country = await getCountryFromIP(ip);
         countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
       }
@@ -3411,10 +3411,10 @@ export async function registerRoutes(
             referer,
             ttclid: ttclid || null,
             fbcl: fbcl || null,
-            campaignName: offer.platform === "tiktok2" ? cname : (fbcl?.split("|")[0] || null),
+            campaignName: offer.platform === "tiktok" ? cname : (fbcl?.split("|")[0] || null),
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
-            adname: offer.platform === "tiktok2" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
-            adset: offer.platform === "tiktok2" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
+            adname: offer.platform === "tiktok" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
+            adset: offer.platform === "tiktok" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
             failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
           },
         });
@@ -3427,7 +3427,7 @@ export async function registerRoutes(
       // ==========================================
       // TIKTOK 2 - BAIT PAGE WITH BOT TRAPS
       // ==========================================
-      if (offer.platform === "tiktok2") {
+      if (offer.platform === "tiktok") {
         const adname2 = fixedQuery2.adname || rawQuery2.adname;
         const adset2 = fixedQuery2.adset || rawQuery2.adset;
         
