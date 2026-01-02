@@ -86,10 +86,16 @@ Key entities defined in `shared/schema.ts`:
 ## Recent Changes
 
 ### January 2, 2026
+- **Admin Dashboard**: Created new `/confg-admin/dashboard` page with comprehensive system metrics:
+  - Metrics cards showing clicks today/7 days (black/white/failed breakdown), user statistics (total/paid/free)
+  - Charts for clicks by day and new users over time (7d/30d/1y periods)
+  - User ranking table with pagination (25 per page), showing total clicks and daily clicks
+  - Platform filter and auto-refresh every 5 minutes
+  - Added dashboard link to admin sidebar with translations (pt-BR/en)
+- **Storage Fixes**: Corrected platform filtering queries - platform field exists only in `offers` table, not `clickLogs`; updated `getSystemMetrics72h`, `getAdminDashboardMetrics`, and `getUsersRanking` to use proper joins with offers table
 - **Analytics Filters**: Added offer and date range filtering to the Analytics page with proper query caching using queryKey-derived parameters
 - **Admin Monitoring Enhancements**:
   - Added page type (black/white) and platform columns to slowest requests table
   - Implemented filters for page type and platform
   - Added reset button to clear filters
   - Added diagnostic dialog showing detailed request info including response time, page type, platform, country, device, date, possible slow causes, and request parameters
-- **Storage Updates**: Updated getSystemMetrics72h to include redirectedTo, platform, and allParams in slowestRequests; added date filtering support to getClickLogs
