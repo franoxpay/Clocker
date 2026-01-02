@@ -18,9 +18,8 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText, Filter } from "lucide-react";
+import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -92,22 +91,57 @@ export default function Analytics() {
   
   const [filters, setFilters] = useState({
     offerId: "",
-    startDate: "",
-    endDate: "",
+    dateRange: "all",
+    platform: "",
   });
 
   const { data: offers = [] } = useQuery<Offer[]>({
     queryKey: ["/api/offers"],
   });
 
+  const getDateRange = (range: string) => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    let startDate = "";
+    let endDate = today.toISOString().split('T')[0];
+    
+    switch (range) {
+      case "today":
+        startDate = endDate;
+        break;
+      case "yesterday":
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        startDate = yesterday.toISOString().split('T')[0];
+        endDate = startDate;
+        break;
+      case "week":
+        const weekAgo = new Date(today);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        startDate = weekAgo.toISOString().split('T')[0];
+        break;
+      case "month":
+        const monthAgo = new Date(today);
+        monthAgo.setMonth(monthAgo.getMonth() - 1);
+        startDate = monthAgo.toISOString().split('T')[0];
+        break;
+      default:
+        startDate = "";
+        endDate = "";
+    }
+    return { startDate, endDate };
+  };
+
   const { data: stats, isLoading } = useQuery<AdvancedStats>({
-    queryKey: ["/api/analytics/advanced", filters.offerId, filters.startDate, filters.endDate],
+    queryKey: ["/api/analytics/advanced", filters.offerId, filters.dateRange, filters.platform],
     queryFn: async ({ queryKey }) => {
-      const [, offerId, startDate, endDate] = queryKey as string[];
+      const [, offerId, dateRange, platform] = queryKey as string[];
+      const { startDate, endDate } = getDateRange(dateRange);
       const params = new URLSearchParams();
       if (offerId && offerId !== 'all') params.set('offerId', offerId);
       if (startDate) params.set('startDate', startDate);
       if (endDate) params.set('endDate', endDate);
+      if (platform && platform !== 'all') params.set('platform', platform);
       
       const url = params.toString() 
         ? `/api/analytics/advanced?${params.toString()}`
@@ -119,7 +153,7 @@ export default function Analytics() {
   });
 
   const resetFilters = () => {
-    setFilters({ offerId: "", startDate: "", endDate: "" });
+    setFilters({ offerId: "", dateRange: "all", platform: "" });
   };
 
   const t = {
@@ -222,66 +256,58 @@ export default function Analytics() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="w-4 h-4" />
-            {isPt ? "Filtros" : "Filters"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">
-                {isPt ? "Oferta" : "Offer"}
-              </label>
-              <Select
-                value={filters.offerId}
-                onValueChange={(value) => setFilters({ ...filters, offerId: value })}
-              >
-                <SelectTrigger data-testid="filter-analytics-offer">
-                  <SelectValue placeholder={isPt ? "Todas as ofertas" : "All offers"} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{isPt ? "Todas" : "All"}</SelectItem>
-                  {offers.map((offer) => (
-                    <SelectItem key={offer.id} value={String(offer.id)}>
-                      {offer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">
-                {isPt ? "Data Inicial" : "Start Date"}
-              </label>
-              <Input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                data-testid="filter-analytics-start-date"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">
-                {isPt ? "Data Final" : "End Date"}
-              </label>
-              <Input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                data-testid="filter-analytics-end-date"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button variant="outline" onClick={resetFilters} data-testid="button-reset-analytics-filters">
-                {isPt ? "Limpar Filtros" : "Clear Filters"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={filters.offerId}
+          onValueChange={(value) => setFilters({ ...filters, offerId: value })}
+        >
+          <SelectTrigger className="w-44" data-testid="filter-analytics-offer">
+            <SelectValue placeholder={isPt ? "Todas as ofertas" : "All offers"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{isPt ? "Todas as ofertas" : "All offers"}</SelectItem>
+            {offers.map((offer) => (
+              <SelectItem key={offer.id} value={String(offer.id)}>
+                {offer.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.dateRange}
+          onValueChange={(value) => setFilters({ ...filters, dateRange: value })}
+        >
+          <SelectTrigger className="w-40" data-testid="filter-analytics-date">
+            <SelectValue placeholder={isPt ? "Período" : "Period"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{isPt ? "Todo período" : "All time"}</SelectItem>
+            <SelectItem value="today">{isPt ? "Hoje" : "Today"}</SelectItem>
+            <SelectItem value="yesterday">{isPt ? "Ontem" : "Yesterday"}</SelectItem>
+            <SelectItem value="week">{isPt ? "Essa semana" : "This week"}</SelectItem>
+            <SelectItem value="month">{isPt ? "Esse mês" : "This month"}</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={filters.platform}
+          onValueChange={(value) => setFilters({ ...filters, platform: value })}
+        >
+          <SelectTrigger className="w-36" data-testid="filter-analytics-platform">
+            <SelectValue placeholder={isPt ? "Plataforma" : "Platform"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{isPt ? "Todas" : "All"}</SelectItem>
+            <SelectItem value="tiktok">TikTok</SelectItem>
+            <SelectItem value="facebook">Facebook</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Button variant="outline" onClick={resetFilters} data-testid="button-reset-analytics-filters">
+          {isPt ? "Limpar" : "Clear"}
+        </Button>
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (
