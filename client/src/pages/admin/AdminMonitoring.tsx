@@ -364,9 +364,8 @@ export default function AdminMonitoring() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{isPt ? "Todas" : "All"}</SelectItem>
+                  <SelectItem value="tiktok2">TikTok</SelectItem>
                   <SelectItem value="facebook">Facebook</SelectItem>
-                  <SelectItem value="tiktok">TikTok</SelectItem>
-                  <SelectItem value="tiktok2">TikTok2</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -487,11 +486,11 @@ export default function AdminMonitoring() {
                                       : "Very high response time (>500ms)"}
                                   </li>
                                 )}
-                                {req.platform === "tiktok" && (
+                                {req.platform === "tiktok2" && (
                                   <li className="text-muted-foreground">
                                     {isPt 
-                                      ? "TikTok usa desafio JS que adiciona latência" 
-                                      : "TikTok uses JS challenge adding latency"}
+                                      ? "TikTok usa validação de parâmetros que pode adicionar latência" 
+                                      : "TikTok uses parameter validation that may add latency"}
                                   </li>
                                 )}
                                 {req.hasError && (
