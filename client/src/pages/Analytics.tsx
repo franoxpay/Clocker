@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,14 +18,23 @@ import {
   AreaChart,
   Area,
 } from "recharts";
-import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText } from "lucide-react";
+import { TrendingUp, Users, Globe, Smartphone, Clock, Calendar, Download, FileText, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { Offer } from "@shared/schema";
 
 interface AdvancedStats {
   totalClicks: number;
@@ -79,10 +89,38 @@ const COLORS = [
 export default function Analytics() {
   const { language } = useLanguage();
   const isPt = language === "pt-BR";
+  
+  const [filters, setFilters] = useState({
+    offerId: "",
+    startDate: "",
+    endDate: "",
+  });
+
+  const { data: offers = [] } = useQuery<Offer[]>({
+    queryKey: ["/api/offers"],
+  });
 
   const { data: stats, isLoading } = useQuery<AdvancedStats>({
-    queryKey: ["/api/analytics/advanced"],
+    queryKey: ["/api/analytics/advanced", filters.offerId, filters.startDate, filters.endDate],
+    queryFn: async ({ queryKey }) => {
+      const [, offerId, startDate, endDate] = queryKey as string[];
+      const params = new URLSearchParams();
+      if (offerId && offerId !== 'all') params.set('offerId', offerId);
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      
+      const url = params.toString() 
+        ? `/api/analytics/advanced?${params.toString()}`
+        : '/api/analytics/advanced';
+      const res = await fetch(url, { credentials: 'include' });
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
   });
+
+  const resetFilters = () => {
+    setFilters({ offerId: "", startDate: "", endDate: "" });
+  };
 
   const t = {
     title: isPt ? "Analytics Avancado" : "Advanced Analytics",
@@ -183,6 +221,67 @@ export default function Analytics() {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-4 h-4" />
+            {isPt ? "Filtros" : "Filters"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="text-sm text-muted-foreground mb-1.5 block">
+                {isPt ? "Oferta" : "Offer"}
+              </label>
+              <Select
+                value={filters.offerId}
+                onValueChange={(value) => setFilters({ ...filters, offerId: value })}
+              >
+                <SelectTrigger data-testid="filter-analytics-offer">
+                  <SelectValue placeholder={isPt ? "Todas as ofertas" : "All offers"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{isPt ? "Todas" : "All"}</SelectItem>
+                  {offers.map((offer) => (
+                    <SelectItem key={offer.id} value={String(offer.id)}>
+                      {offer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1.5 block">
+                {isPt ? "Data Inicial" : "Start Date"}
+              </label>
+              <Input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                data-testid="filter-analytics-start-date"
+              />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground mb-1.5 block">
+                {isPt ? "Data Final" : "End Date"}
+              </label>
+              <Input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                data-testid="filter-analytics-end-date"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button variant="outline" onClick={resetFilters} data-testid="button-reset-analytics-filters">
+                {isPt ? "Limpar Filtros" : "Clear Filters"}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (

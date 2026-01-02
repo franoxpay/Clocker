@@ -82,3 +82,14 @@ Key entities defined in `shared/schema.ts`:
 - `date-fns`: Date formatting with locale support
 - `recharts`: Dashboard charting
 - `lucide-react`: Icon library
+
+## Recent Changes
+
+### January 2, 2026
+- **Analytics Filters**: Added offer and date range filtering to the Analytics page with proper query caching using queryKey-derived parameters
+- **Admin Monitoring Enhancements**:
+  - Added page type (black/white) and platform columns to slowest requests table
+  - Implemented filters for page type and platform
+  - Added reset button to clear filters
+  - Added diagnostic dialog showing detailed request info including response time, page type, platform, country, device, date, possible slow causes, and request parameters
+- **Storage Updates**: Updated getSystemMetrics72h to include redirectedTo, platform, and allParams in slowestRequests; added date filtering support to getClickLogs

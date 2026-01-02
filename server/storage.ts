@@ -116,6 +116,9 @@ export interface IStorage {
       device: string | null;
       createdAt: Date;
       hasError: boolean | null;
+      redirectedTo: string | null;
+      platform: string | null;
+      allParams: Record<string, string> | null;
     }>;
   }>;
 }
@@ -401,7 +404,7 @@ export class DatabaseStorage implements IStorage {
     userId: string,
     page: number,
     limit: number,
-    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string }
+    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string; startDate?: string; endDate?: string }
   ): Promise<{ logs: ClickLog[]; total: number }> {
     const offset = (page - 1) * limit;
     const conditions = [eq(clickLogs.userId, userId)];
@@ -411,6 +414,14 @@ export class DatabaseStorage implements IStorage {
     }
     if (filters?.redirectType) {
       conditions.push(eq(clickLogs.redirectedTo, filters.redirectType));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(clickLogs.createdAt, new Date(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      conditions.push(lte(clickLogs.createdAt, endDate));
     }
 
     const whereClause = and(...conditions);
@@ -560,6 +571,9 @@ export class DatabaseStorage implements IStorage {
       device: string | null;
       createdAt: Date;
       hasError: boolean | null;
+      redirectedTo: string | null;
+      platform: string | null;
+      allParams: Record<string, string> | null;
     }>;
   }> {
     const hours72Ago = new Date();
@@ -601,6 +615,9 @@ export class DatabaseStorage implements IStorage {
         device: clickLogs.device,
         createdAt: clickLogs.createdAt,
         hasError: clickLogs.hasError,
+        redirectedTo: clickLogs.redirectedTo,
+        platform: clickLogs.platform,
+        allParams: clickLogs.allParams,
       })
       .from(clickLogs)
       .where(gte(clickLogs.createdAt, hours72Ago))
@@ -628,6 +645,9 @@ export class DatabaseStorage implements IStorage {
         device: row.device,
         createdAt: row.createdAt,
         hasError: row.hasError,
+        redirectedTo: row.redirectedTo,
+        platform: row.platform,
+        allParams: row.allParams as Record<string, string> | null,
       })),
     };
   }

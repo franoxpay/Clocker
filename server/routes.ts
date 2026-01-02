@@ -1449,7 +1449,15 @@ export async function registerRoutes(
   app.get("/api/analytics/advanced", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const logs = await storage.getClickLogs(userId, 1, 10000);
+      const offerId = req.query.offerId as string;
+      const startDate = req.query.startDate as string;
+      const endDate = req.query.endDate as string;
+      
+      const logs = await storage.getClickLogs(userId, 1, 10000, {
+        offerId: offerId && offerId !== 'all' ? parseInt(offerId) : undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+      });
       
       const countryStats = new Map<string, { total: number; black: number; white: number }>();
       const deviceStats = new Map<string, { total: number; black: number; white: number }>();
