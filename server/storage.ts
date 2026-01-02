@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte, lte, isNull } from "drizzle-orm";
+import { eq, and, desc, sql, gte, lte, isNull, inArray } from "drizzle-orm";
 import { db } from "./db";
 import {
   users,
@@ -144,6 +144,44 @@ export interface IStorage {
       planName: string | null;
       totalClicks: number;
       clicksToday: number;
+    }>;
+    total: number;
+  }>;
+
+  getClicksBreakdownByUserIds(userIds: string[]): Promise<Map<string, {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    lifetime: number;
+  }>>;
+
+  getBillingMetrics(): Promise<{
+    subscriptionsActive: number;
+    subscriptionsInactive: number;
+    subscriptionsTrial: number;
+    subscriptionsSuspended: number;
+    usersToday: number;
+    usersThisMonth: number;
+    mrr: number;
+    totalRevenue: number;
+  }>;
+
+  getSubscribersWithPagination(
+    page: number,
+    limit: number,
+    filters?: { planId?: number; status?: string; startDate?: Date; endDate?: Date }
+  ): Promise<{
+    subscribers: Array<{
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      planId: number | null;
+      planName: string | null;
+      subscriptionStatus: string;
+      subscriptionStartDate: Date | null;
+      subscriptionEndDate: Date | null;
+      stripeCustomerId: string | null;
     }>;
     total: number;
   }>;
@@ -930,6 +968,189 @@ export class DatabaseStorage implements IStorage {
         planName: row.planName,
         totalClicks: Number(row.totalClicks),
         clicksToday: Number(row.clicksToday),
+      })),
+      total: Number(countResult?.count || 0),
+    };
+  }
+
+  async getClicksBreakdownByUserIds(userIds: string[]): Promise<Map<string, {
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    lifetime: number;
+  }>> {
+    if (userIds.length === 0) {
+      return new Map();
+    }
+
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const weekStart = new Date(today);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const result = await db
+      .select({
+        userId: clickLogs.userId,
+        today: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
+        thisWeek: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${weekStart} THEN 1 ELSE 0 END)`,
+        thisMonth: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${monthStart} THEN 1 ELSE 0 END)`,
+        lifetime: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .where(inArray(clickLogs.userId, userIds))
+      .groupBy(clickLogs.userId);
+
+    const map = new Map<string, { today: number; thisWeek: number; thisMonth: number; lifetime: number }>();
+    
+    for (const userId of userIds) {
+      map.set(userId, { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 });
+    }
+    
+    for (const row of result) {
+      map.set(row.userId, {
+        today: Number(row.today),
+        thisWeek: Number(row.thisWeek),
+        thisMonth: Number(row.thisMonth),
+        lifetime: Number(row.lifetime),
+      });
+    }
+
+    return map;
+  }
+
+  async getBillingMetrics(): Promise<{
+    subscriptionsActive: number;
+    subscriptionsInactive: number;
+    subscriptionsTrial: number;
+    subscriptionsSuspended: number;
+    usersToday: number;
+    usersThisMonth: number;
+    mrr: number;
+    totalRevenue: number;
+  }> {
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [stats] = await db
+      .select({
+        active: sql<number>`SUM(CASE WHEN ${users.subscriptionStatus} = 'active' THEN 1 ELSE 0 END)`,
+        inactive: sql<number>`SUM(CASE WHEN ${users.subscriptionStatus} = 'inactive' OR ${users.subscriptionStatus} IS NULL THEN 1 ELSE 0 END)`,
+        trial: sql<number>`SUM(CASE WHEN ${users.trialEndsAt} IS NOT NULL AND ${users.trialEndsAt} > NOW() THEN 1 ELSE 0 END)`,
+        suspended: sql<number>`SUM(CASE WHEN ${users.suspendedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+        usersToday: sql<number>`SUM(CASE WHEN ${users.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
+        usersThisMonth: sql<number>`SUM(CASE WHEN ${users.createdAt} >= ${monthStart} THEN 1 ELSE 0 END)`,
+      })
+      .from(users);
+
+    const mrrResult = await db
+      .select({
+        mrr: sql<number>`COALESCE(SUM(${plans.price}), 0)`,
+      })
+      .from(users)
+      .innerJoin(plans, eq(users.planId, plans.id))
+      .where(eq(users.subscriptionStatus, 'active'));
+
+    return {
+      subscriptionsActive: Number(stats?.active || 0),
+      subscriptionsInactive: Number(stats?.inactive || 0),
+      subscriptionsTrial: Number(stats?.trial || 0),
+      subscriptionsSuspended: Number(stats?.suspended || 0),
+      usersToday: Number(stats?.usersToday || 0),
+      usersThisMonth: Number(stats?.usersThisMonth || 0),
+      mrr: Number(mrrResult[0]?.mrr || 0),
+      totalRevenue: 0,
+    };
+  }
+
+  async getSubscribersWithPagination(
+    page: number,
+    limit: number,
+    filters?: { planId?: number; status?: string; startDate?: Date; endDate?: Date }
+  ): Promise<{
+    subscribers: Array<{
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      planId: number | null;
+      planName: string | null;
+      subscriptionStatus: string;
+      subscriptionStartDate: Date | null;
+      subscriptionEndDate: Date | null;
+      stripeCustomerId: string | null;
+    }>;
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
+    const conditions: any[] = [];
+
+    if (filters?.planId) {
+      conditions.push(eq(users.planId, filters.planId));
+    }
+    if (filters?.status) {
+      if (filters.status === 'suspended') {
+        conditions.push(sql`${users.suspendedAt} IS NOT NULL`);
+      } else if (filters.status === 'trial') {
+        conditions.push(sql`${users.trialEndsAt} IS NOT NULL AND ${users.trialEndsAt} > NOW()`);
+      } else {
+        conditions.push(eq(users.subscriptionStatus, filters.status));
+      }
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(users.createdAt, filters.startDate));
+    }
+    if (filters?.endDate) {
+      conditions.push(lte(users.createdAt, filters.endDate));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const result = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        planId: users.planId,
+        planName: plans.name,
+        subscriptionStatus: users.subscriptionStatus,
+        subscriptionStartDate: users.subscriptionStartDate,
+        subscriptionEndDate: users.subscriptionEndDate,
+        stripeCustomerId: users.stripeCustomerId,
+      })
+      .from(users)
+      .leftJoin(plans, eq(users.planId, plans.id))
+      .where(whereClause)
+      .orderBy(desc(users.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const countQuery = db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(users);
+    
+    const [countResult] = whereClause 
+      ? await countQuery.where(whereClause)
+      : await countQuery;
+
+    return {
+      subscribers: result.map(row => ({
+        id: row.id,
+        email: row.email ?? '',
+        firstName: row.firstName,
+        lastName: row.lastName,
+        planId: row.planId,
+        planName: row.planName,
+        subscriptionStatus: row.subscriptionStatus ?? 'inactive',
+        subscriptionStartDate: row.subscriptionStartDate,
+        subscriptionEndDate: row.subscriptionEndDate,
+        stripeCustomerId: row.stripeCustomerId,
       })),
       total: Number(countResult?.count || 0),
     };

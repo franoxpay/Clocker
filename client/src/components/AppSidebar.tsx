@@ -30,6 +30,7 @@ import {
   BarChart3,
   ArrowLeft,
   Activity,
+  Wallet,
 } from "lucide-react";
 const logoPreta = "/images/logo-dark.png";
 const logoBranca = "/images/logo-light.png";
@@ -47,6 +48,7 @@ const adminNavItems = [
   { key: "dashboard", path: "/confg-admin/dashboard", icon: LayoutDashboard, label: "nav.admin.dashboard" },
   { key: "users", path: "/confg-admin/users", icon: Users, label: "nav.admin.users" },
   { key: "plans", path: "/confg-admin/plans", icon: CreditCard, label: "nav.admin.plans" },
+  { key: "billing", path: "/confg-admin/billing", icon: Wallet, label: "nav.admin.billing" },
   { key: "shared-domains", path: "/confg-admin/shared-domains", icon: Globe, label: "nav.admin.sharedDomains" },
   { key: "monitoring", path: "/confg-admin/monitoring", icon: Activity, label: "nav.admin.monitoring" },
   { key: "settings", path: "/confg-admin/settings", icon: Cog, label: "nav.admin.settings" },

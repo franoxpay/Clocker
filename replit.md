@@ -99,3 +99,13 @@ Key entities defined in `shared/schema.ts`:
   - Implemented filters for page type and platform
   - Added reset button to clear filters
   - Added diagnostic dialog showing detailed request info including response time, page type, platform, country, device, date, possible slow causes, and request parameters
+- **AdminUsers Clicks Display**: Updated clicks column to show "X today | Y month" format with tooltip breakdown showing daily, weekly, monthly, and lifetime totals
+- **Admin Billing Page**: Created new `/confg-admin/billing` page with:
+  - 8 metrics cards: active/inactive/trial/suspended subscriptions, users today/month, MRR, total revenue
+  - New users chart with 7d/30d/1y period selector
+  - Pie chart showing subscription status distribution
+  - Subscribers tab with table, status/plan filters, and pagination (25/50/100 per page)
+  - Payments tab showing Stripe payment history with user email, amount, status
+  - Backend endpoints: `/api/admin/billing/metrics`, `/subscribers`, `/payments`, `/subscriptions-chart`
+  - Bilingual translations (pt-BR: "Faturamento", en: "Billing")
+  - Wallet icon in admin sidebar navigation

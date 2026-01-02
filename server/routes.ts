@@ -2237,7 +2237,16 @@ export async function registerRoutes(
       const limit = 20;
       const search = req.query.search as string | undefined;
       const result = await storage.getAllUsers(page, limit, search);
-      res.json({ ...result, page, limit });
+      
+      const userIds = result.users.map(u => u.id);
+      const clicksBreakdown = await storage.getClicksBreakdownByUserIds(userIds);
+      
+      const usersWithClicks = result.users.map(user => ({
+        ...user,
+        clicksBreakdown: clicksBreakdown.get(user.id) || { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 },
+      }));
+      
+      res.json({ users: usersWithClicks, total: result.total, page, limit });
     } catch (error) {
       console.error("Error fetching users:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -2455,6 +2464,127 @@ export async function registerRoutes(
       res.json(data);
     } catch (error) {
       console.error("Error fetching users ranking:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/billing/metrics", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const metrics = await storage.getBillingMetrics();
+      
+      let totalRevenue = 0;
+      if (isStripeConfigured()) {
+        try {
+          const stripe = getStripeClient();
+          let hasMore = true;
+          let startingAfter: string | undefined;
+          
+          while (hasMore) {
+            const params: any = { limit: 100 };
+            if (startingAfter) {
+              params.starting_after = startingAfter;
+            }
+            const charges = await stripe.charges.list(params);
+            totalRevenue += charges.data
+              .filter(c => c.status === 'succeeded')
+              .reduce((sum, c) => sum + c.amount, 0) / 100;
+            hasMore = charges.has_more;
+            if (charges.data.length > 0) {
+              startingAfter = charges.data[charges.data.length - 1].id;
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching Stripe charges:", e);
+        }
+      }
+      
+      res.json({
+        subscriptionsActive: metrics.subscriptionsActive,
+        subscriptionsInactive: metrics.subscriptionsInactive,
+        subscriptionsTrial: metrics.subscriptionsTrial,
+        subscriptionsSuspended: metrics.subscriptionsSuspended,
+        usersToday: metrics.usersToday,
+        usersThisMonth: metrics.usersThisMonth,
+        mrr: metrics.mrr,
+        totalRevenue,
+      });
+    } catch (error) {
+      console.error("Error fetching billing metrics:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/billing/subscribers", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const planId = req.query.planId ? parseInt(req.query.planId as string) : undefined;
+      const status = req.query.status as string | undefined;
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      
+      const data = await storage.getSubscribersWithPagination(page, limit, { planId, status, startDate, endDate });
+      res.json({ ...data, page, limit });
+    } catch (error) {
+      console.error("Error fetching subscribers:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/billing/payments", isAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!isStripeConfigured()) {
+        return res.json({ payments: [], total: 0 });
+      }
+      
+      const stripe = getStripeClient();
+      const limit = parseInt(req.query.limit as string) || 25;
+      const startingAfter = req.query.startingAfter as string | undefined;
+      
+      const params: any = { limit };
+      if (startingAfter) {
+        params.starting_after = startingAfter;
+      }
+      
+      const charges = await stripe.charges.list(params);
+      
+      const payments = await Promise.all(
+        charges.data.map(async (charge) => {
+          let userEmail = null;
+          if (charge.customer) {
+            const user = await storage.getUserByStripeCustomerId(charge.customer as string);
+            userEmail = user?.email || null;
+          }
+          return {
+            id: charge.id,
+            amount: charge.amount / 100,
+            currency: charge.currency,
+            status: charge.status,
+            date: charge.created ? new Date(charge.created * 1000).toISOString() : null,
+            userEmail,
+            description: charge.description,
+          };
+        })
+      );
+      
+      res.json({
+        payments,
+        hasMore: charges.has_more,
+        lastId: charges.data.length > 0 ? charges.data[charges.data.length - 1].id : null,
+      });
+    } catch (error) {
+      console.error("Error fetching payments:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/billing/subscriptions-chart", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const period = (req.query.period as '7d' | '30d' | '1y') || '30d';
+      const data = await storage.getUsersNewByPeriod(period);
+      res.json(data);
+    } catch (error) {
+      console.error("Error fetching subscriptions chart:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

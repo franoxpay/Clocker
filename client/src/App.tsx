@@ -27,6 +27,7 @@ import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminSharedDomains from "@/pages/admin/AdminSharedDomains";
 import AdminMonitoring from "@/pages/admin/AdminMonitoring";
 import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminBilling from "@/pages/admin/AdminBilling";
 import NotFound from "@/pages/not-found";
 
 function UserRoutes() {
@@ -50,6 +51,7 @@ function AdminRoutes() {
       <Route path="/confg-admin/dashboard" component={AdminDashboard} />
       <Route path="/confg-admin/users" component={AdminUsers} />
       <Route path="/confg-admin/plans" component={AdminPlans} />
+      <Route path="/confg-admin/billing" component={AdminBilling} />
       <Route path="/confg-admin/shared-domains" component={AdminSharedDomains} />
       <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
       <Route path="/confg-admin/settings" component={AdminSettings} />

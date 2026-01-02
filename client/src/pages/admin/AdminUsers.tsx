@@ -47,6 +47,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   Search, 
   MoreVertical, 
@@ -61,8 +66,19 @@ import {
   Trash2,
 } from "lucide-react";
 
+interface ClicksBreakdown {
+  today: number;
+  thisWeek: number;
+  thisMonth: number;
+  lifetime: number;
+}
+
+interface UserWithClicks extends User {
+  clicksBreakdown: ClicksBreakdown;
+}
+
 interface UsersResponse {
-  users: User[];
+  users: UserWithClicks[];
   total: number;
   page: number;
   limit: number;
@@ -312,7 +328,25 @@ export default function AdminUsers() {
                       </TableCell>
                       <TableCell>{getPlanName(user.planId)}</TableCell>
                       <TableCell>
-                        {user.clicksUsedThisMonth?.toLocaleString() || 0}
+                        {user.clicksBreakdown ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="cursor-help tabular-nums">
+                                {(user.clicksBreakdown.today || 0).toLocaleString()} {language === "pt-BR" ? "hoje" : "today"} | {(user.clicksBreakdown.thisMonth || 0).toLocaleString()} {language === "pt-BR" ? "mês" : "month"}
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <div className="space-y-1 text-sm">
+                                <div>{language === "pt-BR" ? "Hoje" : "Today"}: {(user.clicksBreakdown.today || 0).toLocaleString()}</div>
+                                <div>{language === "pt-BR" ? "Semana" : "Week"}: {(user.clicksBreakdown.thisWeek || 0).toLocaleString()}</div>
+                                <div>{language === "pt-BR" ? "Mês" : "Month"}: {(user.clicksBreakdown.thisMonth || 0).toLocaleString()}</div>
+                                <div>{language === "pt-BR" ? "Vitalício" : "Lifetime"}: {(user.clicksBreakdown.lifetime || 0).toLocaleString()}</div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
                       </TableCell>
                       <TableCell>{getStatusBadge(user)}</TableCell>
                       <TableCell>
