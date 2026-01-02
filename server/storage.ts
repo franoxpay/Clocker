@@ -632,7 +632,7 @@ export class DatabaseStorage implements IStorage {
       .groupBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`)
       .orderBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD HH24:00')`);
 
-    // Get slowest requests
+    // Get slowest requests with platform from offers
     const slowestRequests = await db
       .select({
         id: clickLogs.id,
@@ -642,10 +642,11 @@ export class DatabaseStorage implements IStorage {
         createdAt: clickLogs.createdAt,
         hasError: clickLogs.hasError,
         redirectedTo: clickLogs.redirectedTo,
-        platform: clickLogs.platform,
+        platform: offers.platform,
         allParams: clickLogs.allParams,
       })
       .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
       .where(gte(clickLogs.createdAt, hours72Ago))
       .orderBy(sql`${clickLogs.responseTimeMs} DESC NULLS LAST`)
       .limit(20);
