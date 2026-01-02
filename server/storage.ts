@@ -690,8 +690,12 @@ export class DatabaseStorage implements IStorage {
     const days7Ago = new Date(today);
     days7Ago.setDate(days7Ago.getDate() - 7);
 
-    const platformFilter = platform && platform !== 'all' ? and(gte(clickLogs.createdAt, today), eq(clickLogs.platform, platform)) : gte(clickLogs.createdAt, today);
-    const platformFilter7d = platform && platform !== 'all' ? and(gte(clickLogs.createdAt, days7Ago), eq(clickLogs.platform, platform)) : gte(clickLogs.createdAt, days7Ago);
+    const buildPlatformConditions = (dateCondition: any) => {
+      if (platform && platform !== 'all') {
+        return and(dateCondition, eq(offers.platform, platform));
+      }
+      return dateCondition;
+    };
 
     const [todayStats] = await db
       .select({
@@ -701,7 +705,8 @@ export class DatabaseStorage implements IStorage {
         failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
       })
       .from(clickLogs)
-      .where(platformFilter);
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildPlatformConditions(gte(clickLogs.createdAt, today)));
 
     const [last7DaysStats] = await db
       .select({
@@ -711,7 +716,8 @@ export class DatabaseStorage implements IStorage {
         failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
       })
       .from(clickLogs)
-      .where(platformFilter7d);
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildPlatformConditions(gte(clickLogs.createdAt, days7Ago)));
 
     const dailyStats = await db
       .select({
@@ -722,7 +728,8 @@ export class DatabaseStorage implements IStorage {
         failed: sql<number>`SUM(CASE WHEN ${clickLogs.hasError} = true THEN 1 ELSE 0 END)`,
       })
       .from(clickLogs)
-      .where(platformFilter7d)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildPlatformConditions(gte(clickLogs.createdAt, days7Ago)))
       .groupBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD')`)
       .orderBy(sql`TO_CHAR(${clickLogs.createdAt}, 'YYYY-MM-DD')`);
 
@@ -853,34 +860,67 @@ export class DatabaseStorage implements IStorage {
 
     const offset = (page - 1) * limit;
 
-    const conditions = [gte(clickLogs.createdAt, periodStart)];
-    if (platform && platform !== 'all') {
-      conditions.push(eq(clickLogs.platform, platform));
-    }
+    const baseConditions = [gte(clickLogs.createdAt, periodStart)];
+    
+    const buildQuery = () => {
+      if (platform && platform !== 'all') {
+        return db
+          .select({
+            userId: users.id,
+            email: users.email,
+            planName: plans.name,
+            totalClicks: sql<number>`COUNT(${clickLogs.id})`,
+            clicksToday: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
+          })
+          .from(users)
+          .leftJoin(plans, eq(users.planId, plans.id))
+          .innerJoin(clickLogs, eq(clickLogs.userId, users.id))
+          .innerJoin(offers, eq(clickLogs.offerId, offers.id))
+          .where(and(...baseConditions, eq(offers.platform, platform)))
+          .groupBy(users.id, users.email, plans.name)
+          .having(sql`COUNT(${clickLogs.id}) > 0`)
+          .orderBy(sql`COUNT(${clickLogs.id}) DESC`)
+          .limit(limit)
+          .offset(offset);
+      }
+      return db
+        .select({
+          userId: users.id,
+          email: users.email,
+          planName: plans.name,
+          totalClicks: sql<number>`COUNT(${clickLogs.id})`,
+          clicksToday: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
+        })
+        .from(users)
+        .leftJoin(plans, eq(users.planId, plans.id))
+        .innerJoin(clickLogs, eq(clickLogs.userId, users.id))
+        .where(and(...baseConditions))
+        .groupBy(users.id, users.email, plans.name)
+        .having(sql`COUNT(${clickLogs.id}) > 0`)
+        .orderBy(sql`COUNT(${clickLogs.id}) DESC`)
+        .limit(limit)
+        .offset(offset);
+    };
 
-    const rankingQuery = await db
-      .select({
-        userId: users.id,
-        email: users.email,
-        planName: plans.name,
-        totalClicks: sql<number>`COUNT(${clickLogs.id})`,
-        clicksToday: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
-      })
-      .from(users)
-      .leftJoin(plans, eq(users.planId, plans.id))
-      .leftJoin(clickLogs, and(eq(clickLogs.userId, users.id), ...conditions))
-      .groupBy(users.id, users.email, plans.name)
-      .having(sql`COUNT(${clickLogs.id}) > 0`)
-      .orderBy(sql`COUNT(${clickLogs.id}) DESC`)
-      .limit(limit)
-      .offset(offset);
+    const rankingQuery = await buildQuery();
 
-    const [countResult] = await db
-      .select({
-        count: sql<number>`COUNT(DISTINCT ${users.id})`,
-      })
-      .from(users)
-      .innerJoin(clickLogs, and(eq(clickLogs.userId, users.id), ...conditions));
+    const buildCountQuery = () => {
+      if (platform && platform !== 'all') {
+        return db
+          .select({ count: sql<number>`COUNT(DISTINCT ${users.id})` })
+          .from(users)
+          .innerJoin(clickLogs, eq(clickLogs.userId, users.id))
+          .innerJoin(offers, eq(clickLogs.offerId, offers.id))
+          .where(and(...baseConditions, eq(offers.platform, platform)));
+      }
+      return db
+        .select({ count: sql<number>`COUNT(DISTINCT ${users.id})` })
+        .from(users)
+        .innerJoin(clickLogs, eq(clickLogs.userId, users.id))
+        .where(and(...baseConditions));
+    };
+
+    const [countResult] = await buildCountQuery();
 
     return {
       users: rankingQuery.map(row => ({

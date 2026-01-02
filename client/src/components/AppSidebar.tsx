@@ -44,6 +44,7 @@ const userNavItems = [
 ];
 
 const adminNavItems = [
+  { key: "dashboard", path: "/confg-admin/dashboard", icon: LayoutDashboard, label: "nav.admin.dashboard" },
   { key: "users", path: "/confg-admin/users", icon: Users, label: "nav.admin.users" },
   { key: "plans", path: "/confg-admin/plans", icon: CreditCard, label: "nav.admin.plans" },
   { key: "shared-domains", path: "/confg-admin/shared-domains", icon: Globe, label: "nav.admin.sharedDomains" },
