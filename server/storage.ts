@@ -44,6 +44,7 @@ export interface IStorage {
   getAllPlans(): Promise<Plan[]>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   updatePlan(id: number, data: Partial<InsertPlan>): Promise<Plan | undefined>;
+  deletePlan(id: number): Promise<void>;
 
   getDomain(id: number): Promise<Domain | undefined>;
   getDomainBySubdomain(subdomain: string): Promise<Domain | undefined>;
@@ -281,6 +282,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(plans.id, id))
       .returning();
     return updated;
+  }
+
+  async deletePlan(id: number): Promise<void> {
+    await db.delete(plans).where(eq(plans.id, id));
   }
 
   async getDomain(id: number): Promise<Domain | undefined> {

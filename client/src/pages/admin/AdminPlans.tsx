@@ -15,6 +15,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -22,17 +32,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Plan } from "@shared/schema";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Trash2, Star, CreditCard } from "lucide-react";
 
 export default function AdminPlans() {
   const { t, language } = useLanguage();
   const { toast } = useToast();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState<Plan | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -44,6 +60,9 @@ export default function AdminPlans() {
     trialDays: "0",
     isUnlimited: false,
     isActive: true,
+    isPopular: false,
+    hasTrial: false,
+    stripePriceId: "",
   });
 
   const { data: plans = [], isLoading } = useQuery<Plan[]>({
@@ -54,11 +73,12 @@ export default function AdminPlans() {
     mutationFn: async (data: typeof formData) => {
       const res = await apiRequest("POST", "/api/admin/plans", {
         ...data,
-        price: parseFloat(data.price),
+        price: parseFloat(data.price) * 100,
         maxOffers: parseInt(data.maxOffers) || 0,
         maxDomains: parseInt(data.maxDomains) || 0,
         maxClicks: parseInt(data.maxClicks) || 0,
         trialDays: parseInt(data.trialDays) || 0,
+        stripePriceId: data.stripePriceId || null,
       });
       return res.json();
     },
@@ -83,11 +103,12 @@ export default function AdminPlans() {
     mutationFn: async (data: typeof formData & { id: number }) => {
       const res = await apiRequest("PUT", `/api/admin/plans/${data.id}`, {
         ...data,
-        price: parseFloat(data.price),
+        price: parseFloat(data.price) * 100,
         maxOffers: parseInt(data.maxOffers) || 0,
         maxDomains: parseInt(data.maxDomains) || 0,
         maxClicks: parseInt(data.maxClicks) || 0,
         trialDays: parseInt(data.trialDays) || 0,
+        stripePriceId: data.stripePriceId || null,
       });
       return res.json();
     },
@@ -98,6 +119,27 @@ export default function AdminPlans() {
       toast({
         title: t("common.success"),
         description: language === "pt-BR" ? "Plano atualizado" : "Plan updated",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/plans/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
+      setDeletingPlan(null);
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Plano excluído" : "Plan deleted",
       });
     },
     onError: () => {
@@ -119,6 +161,9 @@ export default function AdminPlans() {
       trialDays: "0",
       isUnlimited: false,
       isActive: true,
+      isPopular: false,
+      hasTrial: false,
+      stripePriceId: "",
     });
   };
 
@@ -126,13 +171,16 @@ export default function AdminPlans() {
     setFormData({
       name: plan.name,
       nameEn: plan.nameEn,
-      price: String(plan.price),
+      price: String(plan.price / 100),
       maxOffers: String(plan.maxOffers),
       maxDomains: String(plan.maxDomains),
       maxClicks: String(plan.maxClicks),
       trialDays: String(plan.trialDays),
       isUnlimited: plan.isUnlimited,
       isActive: plan.isActive,
+      isPopular: plan.isPopular,
+      hasTrial: plan.hasTrial,
+      stripePriceId: plan.stripePriceId || "",
     });
     setEditingPlan(plan);
   };
@@ -151,6 +199,10 @@ export default function AdminPlans() {
     if (clicks >= 1000000) return `${(clicks / 1000000).toFixed(0)}M`;
     if (clicks >= 1000) return `${(clicks / 1000).toFixed(0)}k`;
     return clicks.toString();
+  };
+
+  const formatPrice = (price: number) => {
+    return `R$ ${(price / 100).toFixed(2)}`;
   };
 
   const PlanForm = () => (
@@ -179,7 +231,7 @@ export default function AdminPlans() {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="price">{t("admin.plans.price")}</Label>
+        <Label htmlFor="price">{t("admin.plans.price")} (R$)</Label>
         <Input
           id="price"
           type="number"
@@ -192,14 +244,41 @@ export default function AdminPlans() {
         />
       </div>
 
-      <div className="flex items-center justify-between">
-        <Label htmlFor="isUnlimited">{t("admin.plans.unlimited")}</Label>
-        <Switch
-          id="isUnlimited"
-          checked={formData.isUnlimited}
-          onCheckedChange={(checked) => setFormData({ ...formData, isUnlimited: checked })}
-          data-testid="switch-plan-unlimited"
+      <div className="space-y-2">
+        <Label htmlFor="stripePriceId">Stripe Price ID</Label>
+        <Input
+          id="stripePriceId"
+          value={formData.stripePriceId}
+          onChange={(e) => setFormData({ ...formData, stripePriceId: e.target.value })}
+          placeholder="price_1ABC..."
+          data-testid="input-stripe-price-id"
         />
+        <p className="text-xs text-muted-foreground">
+          {language === "pt-BR" 
+            ? "ID do preço no Stripe para processar pagamentos" 
+            : "Stripe price ID for payment processing"}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-center justify-between p-3 border rounded-md">
+          <Label htmlFor="isUnlimited">{t("admin.plans.unlimited")}</Label>
+          <Switch
+            id="isUnlimited"
+            checked={formData.isUnlimited}
+            onCheckedChange={(checked) => setFormData({ ...formData, isUnlimited: checked })}
+            data-testid="switch-plan-unlimited"
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 border rounded-md">
+          <Label htmlFor="isPopular">{language === "pt-BR" ? "Mais Popular" : "Most Popular"}</Label>
+          <Switch
+            id="isPopular"
+            checked={formData.isPopular}
+            onCheckedChange={(checked) => setFormData({ ...formData, isPopular: checked })}
+            data-testid="switch-plan-popular"
+          />
+        </div>
       </div>
 
       {!formData.isUnlimited && (
@@ -243,19 +322,32 @@ export default function AdminPlans() {
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="trialDays">{t("admin.plans.trialDays")}</Label>
-        <Input
-          id="trialDays"
-          type="number"
-          min="0"
-          value={formData.trialDays}
-          onChange={(e) => setFormData({ ...formData, trialDays: e.target.value })}
-          data-testid="input-plan-trial-days"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="flex items-center justify-between p-3 border rounded-md">
+          <Label htmlFor="hasTrial">{language === "pt-BR" ? "Oferecer Trial" : "Offer Trial"}</Label>
+          <Switch
+            id="hasTrial"
+            checked={formData.hasTrial}
+            onCheckedChange={(checked) => setFormData({ ...formData, hasTrial: checked, trialDays: checked ? formData.trialDays : "0" })}
+            data-testid="switch-plan-has-trial"
+          />
+        </div>
+        {formData.hasTrial && (
+          <div className="space-y-2">
+            <Label htmlFor="trialDays">{t("admin.plans.trialDays")}</Label>
+            <Input
+              id="trialDays"
+              type="number"
+              min="1"
+              value={formData.trialDays}
+              onChange={(e) => setFormData({ ...formData, trialDays: e.target.value })}
+              data-testid="input-plan-trial-days"
+            />
+          </div>
+        )}
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-3 border rounded-md">
         <Label htmlFor="isActive">{t("offers.active")}</Label>
         <Switch
           id="isActive"
@@ -303,7 +395,7 @@ export default function AdminPlans() {
               {t("admin.plans.create")}
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{t("admin.plans.create")}</DialogTitle>
             </DialogHeader>
@@ -330,17 +422,26 @@ export default function AdminPlans() {
                   <TableHead>{t("admin.plans.maxDomains")}</TableHead>
                   <TableHead>{t("admin.plans.maxClicks")}</TableHead>
                   <TableHead>{t("admin.plans.trial")}</TableHead>
+                  <TableHead>Stripe</TableHead>
                   <TableHead>{t("offers.status")}</TableHead>
-                  <TableHead className="w-12">{t("common.actions")}</TableHead>
+                  <TableHead className="w-24">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {plans.map((plan) => (
                   <TableRow key={plan.id} data-testid={`row-plan-${plan.id}`}>
                     <TableCell className="font-medium">
-                      {language === "pt-BR" ? plan.name : plan.nameEn}
+                      <div className="flex items-center gap-2">
+                        {language === "pt-BR" ? plan.name : plan.nameEn}
+                        {plan.isPopular && (
+                          <Badge variant="default" className="gap-1">
+                            <Star className="w-3 h-3" />
+                            {language === "pt-BR" ? "Popular" : "Popular"}
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell>R$ {plan.price.toFixed(2)}</TableCell>
+                    <TableCell>{formatPrice(plan.price)}</TableCell>
                     <TableCell>
                       {plan.isUnlimited ? t("admin.plans.unlimited") : plan.maxOffers}
                     </TableCell>
@@ -351,7 +452,7 @@ export default function AdminPlans() {
                       {formatClicks(plan.maxClicks, plan.isUnlimited)}
                     </TableCell>
                     <TableCell>
-                      {plan.trialDays > 0 ? (
+                      {plan.hasTrial && plan.trialDays > 0 ? (
                         <Badge variant="secondary">
                           {plan.trialDays} {language === "pt-BR" ? "dias" : "days"}
                         </Badge>
@@ -360,19 +461,48 @@ export default function AdminPlans() {
                       )}
                     </TableCell>
                     <TableCell>
+                      {plan.stripePriceId ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="gap-1 cursor-help">
+                              <CreditCard className="w-3 h-3" />
+                              {language === "pt-BR" ? "Configurado" : "Configured"}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="font-mono text-xs">{plan.stripePriceId}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <Badge variant="secondary">
+                          {language === "pt-BR" ? "Não configurado" : "Not configured"}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={plan.isActive ? "default" : "secondary"}>
                         {plan.isActive ? t("offers.active") : t("offers.inactive")}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(plan)}
-                        data-testid={`button-edit-plan-${plan.id}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(plan)}
+                          data-testid={`button-edit-plan-${plan.id}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeletingPlan(plan)}
+                          data-testid={`button-delete-plan-${plan.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -383,13 +513,37 @@ export default function AdminPlans() {
       </Card>
 
       <Dialog open={!!editingPlan} onOpenChange={(open) => !open && setEditingPlan(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("admin.plans.edit")}</DialogTitle>
           </DialogHeader>
           <PlanForm />
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletingPlan} onOpenChange={(open) => !open && setDeletingPlan(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {language === "pt-BR" ? "Excluir plano?" : "Delete plan?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {language === "pt-BR" 
+                ? `Tem certeza que deseja excluir o plano "${deletingPlan?.name}"? Esta ação não pode ser desfeita.`
+                : `Are you sure you want to delete the plan "${deletingPlan?.nameEn}"? This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingPlan && deleteMutation.mutate(deletingPlan.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? t("common.loading") : t("common.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

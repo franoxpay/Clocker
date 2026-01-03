@@ -2610,6 +2610,17 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/plans/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const planId = parseInt(req.params.id);
+      await storage.deletePlan(planId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting plan:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Shared domains - Admin routes
   app.get("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
     try {
