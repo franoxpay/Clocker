@@ -205,7 +205,7 @@ export default function AdminPlans() {
     return `R$ ${(price / 100).toFixed(2)}`;
   };
 
-  const PlanForm = () => (
+  const planFormContent = (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -213,7 +213,7 @@ export default function AdminPlans() {
           <Input
             id="name"
             value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
             required
             data-testid="input-plan-name"
           />
@@ -223,7 +223,7 @@ export default function AdminPlans() {
           <Input
             id="nameEn"
             value={formData.nameEn}
-            onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+            onChange={(e) => setFormData(prev => ({ ...prev, nameEn: e.target.value }))}
             required
             data-testid="input-plan-name-en"
           />
@@ -238,7 +238,7 @@ export default function AdminPlans() {
           step="0.01"
           min="0"
           value={formData.price}
-          onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+          onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
           required
           data-testid="input-plan-price"
         />
@@ -249,14 +249,14 @@ export default function AdminPlans() {
         <Input
           id="stripePriceId"
           value={formData.stripePriceId}
-          onChange={(e) => setFormData({ ...formData, stripePriceId: e.target.value })}
+          onChange={(e) => setFormData(prev => ({ ...prev, stripePriceId: e.target.value }))}
           placeholder="price_1ABC..."
           data-testid="input-stripe-price-id"
         />
         <p className="text-xs text-muted-foreground">
           {language === "pt-BR" 
-            ? "ID do preço no Stripe para processar pagamentos" 
-            : "Stripe price ID for payment processing"}
+            ? "Opcional - será criado automaticamente no checkout" 
+            : "Optional - will be created automatically at checkout"}
         </p>
       </div>
 
@@ -266,7 +266,7 @@ export default function AdminPlans() {
           <Switch
             id="isUnlimited"
             checked={formData.isUnlimited}
-            onCheckedChange={(checked) => setFormData({ ...formData, isUnlimited: checked })}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isUnlimited: checked }))}
             data-testid="switch-plan-unlimited"
           />
         </div>
@@ -275,7 +275,7 @@ export default function AdminPlans() {
           <Switch
             id="isPopular"
             checked={formData.isPopular}
-            onCheckedChange={(checked) => setFormData({ ...formData, isPopular: checked })}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isPopular: checked }))}
             data-testid="switch-plan-popular"
           />
         </div>
@@ -290,7 +290,7 @@ export default function AdminPlans() {
               type="number"
               min="0"
               value={formData.maxOffers}
-              onChange={(e) => setFormData({ ...formData, maxOffers: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, maxOffers: e.target.value }))}
               required
               data-testid="input-plan-max-offers"
             />
@@ -302,7 +302,7 @@ export default function AdminPlans() {
               type="number"
               min="0"
               value={formData.maxDomains}
-              onChange={(e) => setFormData({ ...formData, maxDomains: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, maxDomains: e.target.value }))}
               required
               data-testid="input-plan-max-domains"
             />
@@ -314,7 +314,7 @@ export default function AdminPlans() {
               type="number"
               min="0"
               value={formData.maxClicks}
-              onChange={(e) => setFormData({ ...formData, maxClicks: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, maxClicks: e.target.value }))}
               required
               data-testid="input-plan-max-clicks"
             />
@@ -328,7 +328,7 @@ export default function AdminPlans() {
           <Switch
             id="hasTrial"
             checked={formData.hasTrial}
-            onCheckedChange={(checked) => setFormData({ ...formData, hasTrial: checked, trialDays: checked ? formData.trialDays : "0" })}
+            onCheckedChange={(checked) => setFormData(prev => ({ ...prev, hasTrial: checked, trialDays: checked ? prev.trialDays : "0" }))}
             data-testid="switch-plan-has-trial"
           />
         </div>
@@ -340,7 +340,7 @@ export default function AdminPlans() {
               type="number"
               min="1"
               value={formData.trialDays}
-              onChange={(e) => setFormData({ ...formData, trialDays: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, trialDays: e.target.value }))}
               data-testid="input-plan-trial-days"
             />
           </div>
@@ -352,7 +352,7 @@ export default function AdminPlans() {
         <Switch
           id="isActive"
           checked={formData.isActive}
-          onCheckedChange={(checked) => setFormData({ ...formData, isActive: checked })}
+          onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
           data-testid="switch-plan-active"
         />
       </div>
@@ -399,7 +399,7 @@ export default function AdminPlans() {
             <DialogHeader>
               <DialogTitle>{t("admin.plans.create")}</DialogTitle>
             </DialogHeader>
-            <PlanForm />
+            {planFormContent}
           </DialogContent>
         </Dialog>
       </div>
@@ -517,7 +517,7 @@ export default function AdminPlans() {
           <DialogHeader>
             <DialogTitle>{t("admin.plans.edit")}</DialogTitle>
           </DialogHeader>
-          <PlanForm />
+          {planFormContent}
         </DialogContent>
       </Dialog>
 
