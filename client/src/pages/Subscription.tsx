@@ -81,8 +81,8 @@ export default function Subscription() {
   const activePlans = plans.filter(p => p.isActive);
 
   const checkoutMutation = useMutation({
-    mutationFn: async (priceId: string) => {
-      const res = await apiRequest("POST", "/api/subscription/checkout", { priceId });
+    mutationFn: async (payload: { priceId?: string; planId?: number }) => {
+      const res = await apiRequest("POST", "/api/subscription/checkout", payload);
       return res.json();
     },
     onSuccess: (data) => {
@@ -163,17 +163,11 @@ export default function Subscription() {
   };
 
   const handleSelectPlan = (plan: Plan) => {
-    if (!plan.stripePriceId) {
-      toast({
-        title: t("common.error"),
-        description: language === "pt-BR" 
-          ? "Este plano não está disponível para compra no momento" 
-          : "This plan is not available for purchase at the moment",
-        variant: "destructive",
-      });
-      return;
+    if (plan.stripePriceId) {
+      checkoutMutation.mutate({ priceId: plan.stripePriceId });
+    } else {
+      checkoutMutation.mutate({ planId: plan.id });
     }
-    checkoutMutation.mutate(plan.stripePriceId);
   };
 
   const isCurrentPlan = (planId: number) => user?.planId === planId;
@@ -367,7 +361,7 @@ export default function Subscription() {
                 <Button
                   className="w-full"
                   variant={isCurrentPlan(plan.id) ? "secondary" : (plan.isPopular ? "default" : "outline")}
-                  disabled={isCurrentPlan(plan.id) || checkoutMutation.isPending || !plan.stripePriceId}
+                  disabled={isCurrentPlan(plan.id) || checkoutMutation.isPending}
                   onClick={() => handleSelectPlan(plan)}
                   data-testid={`button-select-plan-${plan.id}`}
                 >

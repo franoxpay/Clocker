@@ -2249,10 +2249,10 @@ export async function registerRoutes(
   app.post("/api/subscription/checkout", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const { priceId } = req.body;
+      const { priceId, planId } = req.body;
       
-      if (!priceId) {
-        return res.status(400).json({ message: "Price ID is required" });
+      if (!priceId && !planId) {
+        return res.status(400).json({ message: "Price ID or Plan ID is required" });
       }
       
       const user = await storage.getUser(userId);
@@ -2265,27 +2265,52 @@ export async function registerRoutes(
       let customerId = user.stripeCustomerId;
       if (!customerId) {
         const customer = await stripe.customers.create({
-          email: user.email,
+          email: user.email || `user-${userId}@clerion.app`,
           metadata: { userId: user.id },
         });
         await storage.updateUser(userId, { stripeCustomerId: customer.id });
         customerId = customer.id;
       }
 
-      const plan = await storage.getPlanByStripePriceId(priceId);
-      const trialDays = plan?.hasTrial ? plan.trialDays : undefined;
+      let plan = priceId ? await storage.getPlanByStripePriceId(priceId) : null;
+      if (!plan && planId) {
+        plan = await storage.getPlan(planId);
+      }
+      
+      if (!plan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
 
-      const session = await stripe.checkout.sessions.create({
+      const trialDays = plan.hasTrial ? plan.trialDays : undefined;
+
+      let sessionConfig: any = {
         customer: customerId,
         payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
         success_url: `${req.protocol}://${req.get('host')}/subscription?checkout=success`,
         cancel_url: `${req.protocol}://${req.get('host')}/subscription?checkout=cancelled`,
         subscription_data: trialDays ? { trial_period_days: trialDays } : undefined,
-        metadata: { userId, priceId },
-      });
+        metadata: { userId, planId: String(plan.id) },
+      };
 
+      if (priceId && plan.stripePriceId) {
+        sessionConfig.line_items = [{ price: priceId, quantity: 1 }];
+      } else {
+        sessionConfig.line_items = [{
+          price_data: {
+            currency: 'brl',
+            product_data: { 
+              name: plan.name,
+              description: plan.nameEn || undefined,
+            },
+            unit_amount: plan.price,
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        }];
+      }
+
+      const session = await stripe.checkout.sessions.create(sessionConfig);
       res.json({ url: session.url });
     } catch (error) {
       console.error("Error creating checkout session:", error);
