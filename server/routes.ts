@@ -2094,7 +2094,7 @@ export async function registerRoutes(
 
   app.get("/api/stripe/config", async (req: Request, res: Response) => {
     try {
-      const publishableKey = getStripePublishableKey();
+      const publishableKey = await getStripePublishableKey();
       res.json({ publishableKey });
     } catch (error) {
       console.error("Error fetching Stripe config:", error);
@@ -2116,7 +2116,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Plan not found" });
       }
 
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       
       let customerId = user.stripeCustomerId;
       if (!customerId) {
@@ -2181,7 +2181,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No billing account found" });
       }
 
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       const session = await stripe.billingPortal.sessions.create({
         customer: user.stripeCustomerId,
         return_url: `${req.protocol}://${req.get('host')}/settings`,
@@ -2202,7 +2202,7 @@ export async function registerRoutes(
         return res.json([]);
       }
 
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       const invoices = await stripe.invoices.list({
         customer: user.stripeCustomerId,
         limit: 10,
@@ -2227,6 +2227,89 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       console.error("Error changing password:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/user/usage", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const usage = await storage.getUserUsage(userId);
+      res.json({
+        offersCount: usage.offers.used,
+        domainsCount: usage.domains.used,
+        clicksThisMonth: usage.clicks.used,
+      });
+    } catch (error) {
+      console.error("Error fetching user usage:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/subscription/checkout", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const { priceId } = req.body;
+      
+      if (!priceId) {
+        return res.status(400).json({ message: "Price ID is required" });
+      }
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const stripe = await getStripeClient();
+      
+      let customerId = user.stripeCustomerId;
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { userId: user.id },
+        });
+        await storage.updateUser(userId, { stripeCustomerId: customer.id });
+        customerId = customer.id;
+      }
+
+      const plan = await storage.getPlanByStripePriceId(priceId);
+      const trialDays = plan?.hasTrial ? plan.trialDays : undefined;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${req.protocol}://${req.get('host')}/subscription?checkout=success`,
+        cancel_url: `${req.protocol}://${req.get('host')}/subscription?checkout=cancelled`,
+        subscription_data: trialDays ? { trial_period_days: trialDays } : undefined,
+        metadata: { userId, priceId },
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/subscription/portal", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found" });
+      }
+
+      const stripe = await getStripeClient();
+      const session = await stripe.billingPortal.sessions.create({
+        customer: user.stripeCustomerId,
+        return_url: `${req.protocol}://${req.get('host')}/subscription`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating billing portal:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -2473,9 +2556,10 @@ export async function registerRoutes(
       const metrics = await storage.getBillingMetrics();
       
       let totalRevenue = 0;
-      if (isStripeConfigured()) {
+      const stripeConfigured = await isStripeConfigured();
+      if (stripeConfigured) {
         try {
-          const stripe = getStripeClient();
+          const stripe = await getStripeClient();
           let hasMore = true;
           let startingAfter: string | undefined;
           
@@ -2533,11 +2617,12 @@ export async function registerRoutes(
 
   app.get("/api/admin/billing/payments", isAdmin, async (req: Request, res: Response) => {
     try {
-      if (!isStripeConfigured()) {
+      const stripeConfigured = await isStripeConfigured();
+      if (!stripeConfigured) {
         return res.json({ payments: [], total: 0 });
       }
       
-      const stripe = getStripeClient();
+      const stripe = await getStripeClient();
       const limit = parseInt(req.query.limit as string) || 25;
       const startingAfter = req.query.startingAfter as string | undefined;
       

@@ -20,6 +20,7 @@ import Offers from "@/pages/Offers";
 import Domains from "@/pages/Domains";
 import Logs from "@/pages/Logs";
 import Analytics from "@/pages/Analytics";
+import Subscription from "@/pages/Subscription";
 import Settings from "@/pages/Settings";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import AdminPlans from "@/pages/admin/AdminPlans";
@@ -38,6 +39,7 @@ function UserRoutes() {
       <Route path="/domains" component={Domains} />
       <Route path="/logs" component={Logs} />
       <Route path="/analytics" component={Analytics} />
+      <Route path="/subscription" component={Subscription} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

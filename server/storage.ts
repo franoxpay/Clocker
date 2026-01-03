@@ -39,8 +39,14 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(page: number, limit: number, search?: string): Promise<{ users: User[]; total: number }>;
   deleteUserWithCascade(userId: string): Promise<void>;
+  getUserUsage(userId: string): Promise<{
+    offers: { used: number; limit: number | null };
+    domains: { used: number; limit: number | null };
+    clicks: { used: number; limit: number | null };
+  }>;
 
   getPlan(id: number): Promise<Plan | undefined>;
+  getPlanByStripePriceId(priceId: string): Promise<Plan | undefined>;
   getAllPlans(): Promise<Plan[]>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   updatePlan(id: number, data: Partial<InsertPlan>): Promise<Plan | undefined>;
@@ -261,8 +267,67 @@ export class DatabaseStorage implements IStorage {
     await db.delete(users).where(eq(users.id, userId));
   }
 
+  async getUserUsage(userId: string): Promise<{
+    offers: { used: number; limit: number | null };
+    domains: { used: number; limit: number | null };
+    clicks: { used: number; limit: number | null };
+  }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return {
+        offers: { used: 0, limit: null },
+        domains: { used: 0, limit: null },
+        clicks: { used: 0, limit: null },
+      };
+    }
+
+    const plan = user.planId ? await this.getPlan(user.planId) : null;
+
+    const [offersCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(offers)
+      .where(eq(offers.userId, userId));
+
+    const [domainsCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(domains)
+      .where(eq(domains.userId, userId));
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const [clicksCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(clickLogs)
+      .where(
+        and(
+          eq(clickLogs.userId, userId),
+          gte(clickLogs.createdAt, startOfMonth)
+        )
+      );
+
+    return {
+      offers: {
+        used: offersCount?.count || 0,
+        limit: plan?.maxOffers ?? null,
+      },
+      domains: {
+        used: domainsCount?.count || 0,
+        limit: plan?.maxDomains ?? null,
+      },
+      clicks: {
+        used: clicksCount?.count || 0,
+        limit: plan?.maxClicks ?? null,
+      },
+    };
+  }
+
   async getPlan(id: number): Promise<Plan | undefined> {
     const [plan] = await db.select().from(plans).where(eq(plans.id, id)).limit(1);
+    return plan;
+  }
+
+  async getPlanByStripePriceId(priceId: string): Promise<Plan | undefined> {
+    const [plan] = await db.select().from(plans).where(eq(plans.stripePriceId, priceId)).limit(1);
     return plan;
   }
 
