@@ -64,6 +64,7 @@ export const plans = pgTable("plans", {
   trialDays: integer("trial_days").default(0).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   isUnlimited: boolean("is_unlimited").default(false).notNull(),
+  isPopular: boolean("is_popular").default(false).notNull(),
   stripePriceId: varchar("stripe_price_id"),
   stripeProductId: varchar("stripe_product_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
