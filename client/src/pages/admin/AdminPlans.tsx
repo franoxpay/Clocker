@@ -72,12 +72,17 @@ export default function AdminPlans() {
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const res = await apiRequest("POST", "/api/admin/plans", {
-        ...data,
+        name: data.name,
+        nameEn: data.nameEn,
         price: parseFloat(data.price) * 100,
         maxOffers: parseInt(data.maxOffers) || 0,
         maxDomains: parseInt(data.maxDomains) || 0,
         maxClicks: parseInt(data.maxClicks) || 0,
         trialDays: parseInt(data.trialDays) || 0,
+        isUnlimited: data.isUnlimited,
+        isActive: data.isActive,
+        isPopular: data.isPopular,
+        hasTrial: data.hasTrial,
         stripePriceId: data.stripePriceId || null,
       });
       return res.json();
@@ -101,14 +106,20 @@ export default function AdminPlans() {
 
   const updateMutation = useMutation({
     mutationFn: async (data: typeof formData & { id: number }) => {
-      const res = await apiRequest("PUT", `/api/admin/plans/${data.id}`, {
-        ...data,
-        price: parseFloat(data.price) * 100,
-        maxOffers: parseInt(data.maxOffers) || 0,
-        maxDomains: parseInt(data.maxDomains) || 0,
-        maxClicks: parseInt(data.maxClicks) || 0,
-        trialDays: parseInt(data.trialDays) || 0,
-        stripePriceId: data.stripePriceId || null,
+      const { id, ...formFields } = data;
+      const res = await apiRequest("PUT", `/api/admin/plans/${id}`, {
+        name: formFields.name,
+        nameEn: formFields.nameEn,
+        price: parseFloat(formFields.price) * 100,
+        maxOffers: parseInt(formFields.maxOffers) || 0,
+        maxDomains: parseInt(formFields.maxDomains) || 0,
+        maxClicks: parseInt(formFields.maxClicks) || 0,
+        trialDays: parseInt(formFields.trialDays) || 0,
+        isUnlimited: formFields.isUnlimited,
+        isActive: formFields.isActive,
+        isPopular: formFields.isPopular,
+        hasTrial: formFields.hasTrial,
+        stripePriceId: formFields.stripePriceId || null,
       });
       return res.json();
     },
