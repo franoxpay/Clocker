@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
 import { randomBytes, createHash } from "crypto";
-import { getStripeClient, getStripePublishableKey, isStripeConfigured } from "./stripeClient";
+import { getStripeClient, getStripePublishableKey, isStripeConfigured, ensureStripeCustomer } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { tiktok2Telemetry } from "@shared/schema";
@@ -2127,15 +2127,12 @@ export async function registerRoutes(
 
       const stripe = await getStripeClient();
       
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email,
-          metadata: { userId: user.id },
-        });
-        await storage.updateUser(userId, { stripeCustomerId: customer.id });
-        customerId = customer.id;
-      }
+      const { customerId } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
 
       const priceResult = await db.execute(
         sql`SELECT id FROM stripe.prices WHERE product = ${plan.stripePriceId} AND active = true LIMIT 1`
@@ -2191,13 +2188,25 @@ export async function registerRoutes(
 
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
-      if (!user?.stripeCustomerId) {
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.stripeCustomerId) {
         return res.status(400).json({ message: "No billing account found" });
       }
 
       const stripe = await getStripeClient();
+      
+      const { customerId } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
+      
       const session = await stripe.billingPortal.sessions.create({
-        customer: user.stripeCustomerId,
+        customer: customerId,
         return_url: `${req.protocol}://${req.get('host')}/settings`,
       });
 
@@ -2222,8 +2231,20 @@ export async function registerRoutes(
       }
 
       const stripe = await getStripeClient();
+      
+      const { customerId, wasRecreated } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
+      
+      if (wasRecreated) {
+        return res.json([]);
+      }
+      
       const invoices = await stripe.invoices.list({
-        customer: user.stripeCustomerId,
+        customer: customerId,
         limit: 10,
       });
 
@@ -2289,15 +2310,12 @@ export async function registerRoutes(
 
       const stripe = await getStripeClient();
       
-      let customerId = user.stripeCustomerId;
-      if (!customerId) {
-        const customer = await stripe.customers.create({
-          email: user.email || `user-${userId}@clerion.app`,
-          metadata: { userId: user.id },
-        });
-        await storage.updateUser(userId, { stripeCustomerId: customer.id });
-        customerId = customer.id;
-      }
+      const { customerId } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
 
       let plan = priceId ? await storage.getPlanByStripePriceId(priceId) : null;
       if (!plan && planId) {
@@ -2354,13 +2372,25 @@ export async function registerRoutes(
 
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
-      if (!user?.stripeCustomerId) {
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (!user.stripeCustomerId) {
         return res.status(400).json({ message: "No billing account found" });
       }
 
       const stripe = await getStripeClient();
+      
+      const { customerId } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
+      
       const session = await stripe.billingPortal.sessions.create({
-        customer: user.stripeCustomerId,
+        customer: customerId,
         return_url: `${req.protocol}://${req.get('host')}/subscription`,
       });
 

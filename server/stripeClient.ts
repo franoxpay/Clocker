@@ -85,3 +85,54 @@ export async function isStripeConfigured(): Promise<boolean> {
     return false;
   }
 }
+
+export function getStripeEnvironment(): 'production' | 'development' {
+  return process.env.REPLIT_DEPLOYMENT === '1' ? 'production' : 'development';
+}
+
+interface EnsureCustomerResult {
+  customerId: string;
+  wasRecreated: boolean;
+}
+
+export async function ensureStripeCustomer(
+  userId: string,
+  email: string,
+  currentStripeCustomerId: string | null,
+  updateUserFn: (userId: string, data: { stripeCustomerId: string; stripeSubscriptionId?: null }) => Promise<void>
+): Promise<EnsureCustomerResult> {
+  const stripe = await getStripeClient();
+  const environment = getStripeEnvironment();
+  
+  if (currentStripeCustomerId) {
+    try {
+      const customer = await stripe.customers.retrieve(currentStripeCustomerId);
+      if (!customer.deleted) {
+        return { customerId: currentStripeCustomerId, wasRecreated: false };
+      }
+    } catch (error: any) {
+      if (error?.code !== 'resource_missing') {
+        console.error(`Stripe customer validation error for ${currentStripeCustomerId}:`, error?.message);
+      }
+    }
+    console.log(`Stale Stripe customer ${currentStripeCustomerId} detected for user ${userId} in ${environment} environment. Creating new customer.`);
+  }
+  
+  const newCustomer = await stripe.customers.create({
+    email: email || `user-${userId}@clerion.app`,
+    metadata: { 
+      userId,
+      environment,
+      createdAt: new Date().toISOString(),
+    },
+  });
+  
+  await updateUserFn(userId, { 
+    stripeCustomerId: newCustomer.id,
+    stripeSubscriptionId: null,
+  });
+  
+  console.log(`Created new Stripe customer ${newCustomer.id} for user ${userId} in ${environment} environment.`);
+  
+  return { customerId: newCustomer.id, wasRecreated: !!currentStripeCustomerId };
+}
