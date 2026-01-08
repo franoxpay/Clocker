@@ -2216,8 +2216,11 @@ export async function registerRoutes(
         date: inv.created ? new Date(inv.created * 1000).toISOString() : null,
         pdfUrl: inv.invoice_pdf,
       })));
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching invoices:", error);
+      if (error?.code === "resource_missing" || error?.type === "StripeInvalidRequestError") {
+        return res.json([]);
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
