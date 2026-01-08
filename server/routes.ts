@@ -2094,16 +2094,25 @@ export async function registerRoutes(
 
   app.get("/api/stripe/config", async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
       const publishableKey = await getStripePublishableKey();
       res.json({ publishableKey });
     } catch (error) {
       console.error("Error fetching Stripe config:", error);
-      res.status(500).json({ message: "Internal server error" });
+      res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
     }
   });
 
   app.post("/api/billing/checkout", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
       const userId = (req.user as any).id;
       const { planId } = req.body;
       const user = await storage.getUser(userId);
@@ -2175,6 +2184,11 @@ export async function registerRoutes(
 
   app.post("/api/billing/portal", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       if (!user?.stripeCustomerId) {
@@ -2196,6 +2210,11 @@ export async function registerRoutes(
 
   app.get("/api/billing/invoices", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.json([]);
+      }
+
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       if (!user?.stripeCustomerId) {
@@ -2251,6 +2270,11 @@ export async function registerRoutes(
 
   app.post("/api/subscription/checkout", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
       const userId = (req.user as any).id;
       const { priceId, planId } = req.body;
       
@@ -2323,6 +2347,11 @@ export async function registerRoutes(
 
   app.post("/api/subscription/portal", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
       const userId = (req.user as any).id;
       const user = await storage.getUser(userId);
       if (!user?.stripeCustomerId) {
