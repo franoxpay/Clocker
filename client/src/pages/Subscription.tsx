@@ -1,9 +1,12 @@
+import { useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearch, useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Table,
   TableBody,
@@ -24,7 +27,9 @@ import {
   Zap,
   LinkIcon,
   Globe,
-  BarChart3
+  BarChart3,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -64,6 +69,42 @@ export default function Subscription() {
   const { user } = useAuth();
   const { toast } = useToast();
   const locale = language === "pt-BR" ? ptBR : enUS;
+  const searchString = useSearch();
+  const [, setLocation] = useLocation();
+  
+  const searchParams = new URLSearchParams(searchString);
+  const checkoutStatus = searchParams.get("checkout");
+
+  useEffect(() => {
+    if (checkoutStatus === "success") {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
+      
+      toast({
+        title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
+        description: language === "pt-BR" 
+          ? "Seu pagamento foi processado com sucesso." 
+          : "Your payment was processed successfully.",
+      });
+      
+      setTimeout(() => {
+        setLocation("/subscription");
+      }, 3000);
+    } else if (checkoutStatus === "canceled") {
+      toast({
+        title: language === "pt-BR" ? "Checkout cancelado" : "Checkout canceled",
+        description: language === "pt-BR" 
+          ? "Você cancelou o processo de assinatura." 
+          : "You canceled the subscription process.",
+        variant: "destructive",
+      });
+      
+      setTimeout(() => {
+        setLocation("/subscription");
+      }, 3000);
+    }
+  }, [checkoutStatus, toast, language, setLocation]);
 
   const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ["/api/plans"],
@@ -174,6 +215,34 @@ export default function Subscription() {
 
   return (
     <div className="p-6 space-y-6">
+      {checkoutStatus === "success" && (
+        <Alert className="border-green-500 bg-green-500/10">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <AlertTitle className="text-green-600 dark:text-green-400">
+            {language === "pt-BR" ? "Pagamento confirmado!" : "Payment confirmed!"}
+          </AlertTitle>
+          <AlertDescription>
+            {language === "pt-BR" 
+              ? "Sua assinatura foi ativada com sucesso. Aproveite todos os recursos do seu plano!"
+              : "Your subscription has been successfully activated. Enjoy all the features of your plan!"}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {checkoutStatus === "canceled" && (
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertTitle>
+            {language === "pt-BR" ? "Checkout cancelado" : "Checkout canceled"}
+          </AlertTitle>
+          <AlertDescription>
+            {language === "pt-BR" 
+              ? "O processo de assinatura foi cancelado. Você pode tentar novamente quando quiser."
+              : "The subscription process was canceled. You can try again whenever you want."}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-semibold" data-testid="title-subscription">
           {t("subscription.title")}
