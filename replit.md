@@ -92,6 +92,10 @@ Key entities defined in `shared/schema.ts`:
   - Updated `server/webhookHandlers.ts` to use `stripeSync.processWebhook()` instead of manual implementation
   - Webhook now automatically configured with proper events: customer, subscription, invoice, checkout, payment_intent, product, price events
   - Stripe data sync runs in background on startup via `syncBackfill()`
+- **Webhook Data Integrity Improvements**:
+  - Fixed `handleCheckoutSessionCompleted` to validate planId before updating users table (prevents NaN corruption)
+  - Now uses Stripe `session.created` timestamp for accurate subscription start dates
+  - Fixed `Subscription.tsx` to use `window.history.replaceState` instead of router navigation to avoid infinite loops
 
 ### January 2, 2026
 - **Admin Dashboard**: Created new `/confg-admin/dashboard` page with comprehensive system metrics:
