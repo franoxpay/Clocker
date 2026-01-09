@@ -143,8 +143,20 @@ export default function Subscription() {
 
   const checkoutMutation = useMutation({
     mutationFn: async (payload: { priceId?: string; planId?: number }) => {
-      const res = await apiRequest("POST", "/api/subscription/checkout", payload);
-      return res.json();
+      const res = await fetch("/api/subscription/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw { status: res.status, message: data.message || "Unknown error" };
+      }
+      
+      return data;
     },
     onSuccess: (data) => {
       if (data.url) {
@@ -171,11 +183,25 @@ export default function Subscription() {
       }
     },
     onError: (error: any) => {
+      let errorMessage: string;
+      
+      if (error?.message?.includes("Payment failed") || error?.message?.includes("payment")) {
+        errorMessage = language === "pt-BR" 
+          ? "O pagamento falhou. Por favor, tente novamente ou use um cartão diferente."
+          : "Payment failed. Please try again or use a different card.";
+      } else if (error?.message?.includes("card") || error?.message?.includes("cartão")) {
+        errorMessage = language === "pt-BR"
+          ? "Problema com o cartão. Verifique os dados e tente novamente."
+          : "Card issue. Please verify your card details and try again.";
+      } else {
+        errorMessage = language === "pt-BR" 
+          ? "Ocorreu um erro ao processar sua assinatura. Por favor, tente novamente."
+          : "An error occurred while processing your subscription. Please try again.";
+      }
+      
       toast({
         title: t("common.error"),
-        description: error?.message || (language === "pt-BR" 
-          ? "Ocorreu um erro ao processar sua assinatura." 
-          : "An error occurred while processing your subscription."),
+        description: errorMessage,
         variant: "destructive",
       });
     },
