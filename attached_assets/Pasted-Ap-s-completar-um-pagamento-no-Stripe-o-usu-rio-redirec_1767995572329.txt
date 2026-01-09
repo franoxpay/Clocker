@@ -1,0 +1,144 @@
+Após completar um pagamento no Stripe, o usuário é redirecionado para /subscription?checkout=success. Por um breve momento a página funciona, mas instantaneamente é redirecionada para /subscription com tela cinza (não carrega). O mesmo acontece com /settings. Outros menus funcionam normalmente.
+
+Causa Raiz Identificada
+O problema está no WebhookHandler que NÃO atualiza os dados do usuário após o pagamento.
+
+O sistema atual usa stripe-replit-sync.processWebhook() que apenas sincroniza dados para as tabelas do schema stripe.* (stripe.customers, stripe.subscriptions, etc.), mas NÃO atualiza a tabela users do aplicativo.
+
+Após o checkout, os seguintes campos do usuário deveriam ser atualizados mas NÃO são:
+
+stripeSubscriptionId - permanece null
+planId - permanece null
+subscriptionStatus - permanece "inactive"
+Evidência no banco de dados:
+
+-- Usuário principal (ggthiago30@gmail.com)
+stripe_customer_id: NULL
+stripe_subscription_id: NULL
+plan_id: NULL
+subscription_status: "inactive"
+Fluxo do Problema
+Usuário clica em "Assinar Plano"
+Sistema cria customer no Stripe e checkout session
+Usuário paga no Stripe ✓
+Stripe envia webhook checkout.session.completed ✓
+stripe-replit-sync processa e sincroniza para tabelas stripe.* ✓
+MAS NÃO atualiza a tabela users ❌
+Usuário retorna para /subscription?checkout=success
+Frontend tenta buscar /api/billing/invoices
+API verifica user.stripeCustomerId que é null
+API retorna array vazio ou erro
+Frontend fica em loading state infinito → TELA CINZA
+Arquivos Afetados
+server/webhookHandlers.ts - Precisa ser atualizado para também atualizar a tabela users
+server/index.ts - Webhook handler delegando para stripe-replit-sync
+client/src/pages/Subscription.tsx - Potencial loop no useEffect (linhas 78-107)
+client/src/pages/Settings.tsx - Mesma dependência de /api/billing/invoices
+Solução Necessária
+1. Atualizar server/webhookHandlers.ts
+O webhook precisa processar eventos específicos e atualizar a tabela users:
+
+// server/webhookHandlers.ts
+import { getStripeSync, getStripeClient } from './stripeClient';
+import { storage } from './storage';
+export class WebhookHandlers {
+  static async processWebhook(payload: Buffer, signature: string): Promise<void> {
+    // 1. Processar com stripe-replit-sync (sincroniza tabelas stripe.*)
+    const sync = await getStripeSync();
+    const event = await sync.processWebhook(payload, signature);
+    
+    // 2. Também processar eventos para atualizar tabela users
+    await this.handleStripeEvent(event);
+  }
+  
+  static async handleStripeEvent(event: any): Promise<void> {
+    const stripe = await getStripeClient();
+    
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const userId = session.metadata?.userId;
+        const planId = session.metadata?.planId;
+        const customerId = session.customer;
+        const subscriptionId = session.subscription;
+        
+        if (userId && subscriptionId) {
+          await storage.updateUser(userId, {
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscriptionId,
+            planId: planId ? parseInt(planId) : null,
+            subscriptionStatus: 'active',
+            subscriptionStartDate: new Date(),
+          });
+        }
+        break;
+      }
+      
+      case 'customer.subscription.updated':
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+        
+        // Buscar usuário pelo stripeCustomerId
+        const user = await storage.getUserByStripeCustomerId(customerId);
+        if (user) {
+          await storage.updateUser(user.id, {
+            subscriptionStatus: subscription.status,
+            subscriptionEndDate: subscription.ended_at 
+              ? new Date(subscription.ended_at * 1000) 
+              : null,
+          });
+        }
+        break;
+      }
+      
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        const customerId = invoice.customer;
+        
+        const user = await storage.getUserByStripeCustomerId(customerId);
+        if (user) {
+          await storage.updateUser(user.id, {
+            subscriptionStatus: 'past_due',
+          });
+        }
+        break;
+      }
+    }
+  }
+}
+2. Adicionar método getUserByStripeCustomerId em server/storage.ts
+async getUserByStripeCustomerId(stripeCustomerId: string): Promise<User | null> {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.stripeCustomerId, stripeCustomerId));
+  return user || null;
+}
+3. Corrigir potencial loop no Subscription.tsx
+Alterar linhas 91-93 e 103-105 para remover o parâmetro de busca sem causar loop:
+
+// Em vez de setLocation, usar window.history
+setTimeout(() => {
+  window.history.replaceState({}, '', '/subscription');
+}, 3000);
+Verificações Adicionais
+Verificar tabelas stripe. após próximo pagamento:*
+SELECT * FROM stripe.checkout_sessions ORDER BY created DESC LIMIT 1;
+SELECT * FROM stripe.subscriptions ORDER BY created DESC LIMIT 1;
+SELECT * FROM stripe.customers ORDER BY created DESC LIMIT 1;
+Verificar logs do webhook:
+grep -E "(webhook|Webhook|checkout|subscription)" /tmp/logs/Start_application_*.log
+Passos para Implementar a Correção
+Atualizar server/webhookHandlers.ts com o código acima
+Adicionar método getUserByStripeCustomerId em server/storage.ts
+Corrigir o loop no useEffect em Subscription.tsx
+Reiniciar o workflow
+Testar fazendo um novo pagamento de teste no Stripe sandbox
+Arquivos Chave para Referência
+server/webhookHandlers.ts - Handler de webhooks
+server/stripeClient.ts - Cliente Stripe com getStripeSync()
+server/storage.ts - Métodos de acesso ao banco
+server/routes.ts - Endpoints de checkout (linhas 2292-2364)
+client/src/pages/Subscription.tsx - Página de assinatura
+shared/schema.ts - Schema do banco (campos do usuário)
