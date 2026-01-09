@@ -86,6 +86,20 @@ Key entities defined in `shared/schema.ts`:
 ## Recent Changes
 
 ### January 9, 2026
+- **Subscription Page Layout Improvements**:
+  - Merged "Current Plan" and "Usage" sections into a single card (first column)
+  - Moved "Saved Cards" section to second column for better layout
+  - Changed "Manage Cards" button to "Add Card" that opens Stripe setup mode checkout
+  - Delete button only appears when user has more than 1 saved card
+- **Direct Subscription with Saved Cards**:
+  - POST `/api/subscription/checkout` now creates subscription directly using saved payment method (skips checkout redirect)
+  - Uses `payment_behavior: 'default_incomplete'` with expanded payment intent
+  - Properly handles SCA/3DS by returning `requiresAction` + `clientSecret` when bank verification needed
+  - Only marks user as active when subscription status is actually active/trialing (security fix)
+  - Falls back to checkout redirect if no saved cards exist
+- **Payment Method Deletion Validation**:
+  - DELETE `/api/billing/payment-methods/:id` now prevents deletion when only 1 card remains
+  - Returns 400 error with appropriate message in both languages
 - **Stripe Webhook Integration Fix**: Rewrote webhook handlers to use `stripe-replit-sync` managed webhooks:
   - Updated `server/index.ts` with proper initialization: `runMigrations()` → `getStripeSync()` → `findOrCreateManagedWebhook()` → `syncBackfill()`
   - Added `getStripeSync()` function to `server/stripeClient.ts` for stripe-replit-sync integration
