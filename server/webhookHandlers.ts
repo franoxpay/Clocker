@@ -1,4 +1,4 @@
-import { getStripeSync, isStripeConfigured } from './stripeClient';
+import { getStripeSync, isStripeConfigured, getStripeClient } from './stripeClient';
 import { storage } from './storage';
 
 export class WebhookHandlers {
@@ -20,8 +20,10 @@ export class WebhookHandlers {
 
     try {
       const sync = await getStripeSync();
-      await sync.processWebhook(payload, signature);
+      const event = await sync.processWebhook(payload, signature);
       console.log('Webhook processed successfully via stripe-replit-sync');
+      
+      await this.handleStripeEvent(event);
     } catch (error: any) {
       console.error('Stripe webhook processing error:', error.message);
       
@@ -31,6 +33,178 @@ export class WebhookHandlers {
       }
       
       throw error;
+    }
+  }
+
+  static async handleStripeEvent(event: any): Promise<void> {
+    console.log(`[WebhookHandlers] Processing event: ${event.type}`);
+    
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        await this.handleCheckoutSessionCompleted(event.data.object);
+        break;
+      }
+      
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated': {
+        await this.handleSubscriptionUpdated(event.data.object);
+        break;
+      }
+      
+      case 'customer.subscription.deleted': {
+        await this.handleSubscriptionDeleted(event.data.object);
+        break;
+      }
+      
+      case 'invoice.payment_failed': {
+        await this.handlePaymentFailed(event.data.object);
+        break;
+      }
+      
+      case 'invoice.payment_succeeded': {
+        await this.handlePaymentSucceeded(event.data.object);
+        break;
+      }
+    }
+  }
+
+  private static async handleCheckoutSessionCompleted(session: any): Promise<void> {
+    const userId = session.metadata?.userId;
+    const planId = session.metadata?.planId;
+    const customerId = session.customer;
+    const subscriptionId = session.subscription;
+
+    console.log(`[WebhookHandlers] checkout.session.completed - userId: ${userId}, planId: ${planId}, customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
+
+    if (!userId) {
+      console.log('[WebhookHandlers] No userId in session metadata, skipping user update');
+      return;
+    }
+
+    const user = await storage.getUser(userId);
+    if (!user) {
+      console.log(`[WebhookHandlers] User ${userId} not found, skipping update`);
+      return;
+    }
+
+    const updateData: any = {
+      stripeCustomerId: customerId,
+    };
+
+    if (subscriptionId) {
+      updateData.stripeSubscriptionId = subscriptionId;
+      updateData.subscriptionStatus = 'active';
+      updateData.subscriptionStartDate = new Date();
+    }
+
+    if (planId) {
+      updateData.planId = parseInt(planId, 10);
+    }
+
+    await storage.updateUser(userId, updateData);
+    console.log(`[WebhookHandlers] Updated user ${userId} with subscription data:`, updateData);
+  }
+
+  private static async handleSubscriptionUpdated(subscription: any): Promise<void> {
+    const customerId = subscription.customer;
+    const subscriptionId = subscription.id;
+    const status = subscription.status;
+
+    console.log(`[WebhookHandlers] subscription.updated - customerId: ${customerId}, subscriptionId: ${subscriptionId}, status: ${status}`);
+
+    const user = await storage.getUserByStripeCustomerId(customerId);
+    if (!user) {
+      console.log(`[WebhookHandlers] User with stripeCustomerId ${customerId} not found, skipping update`);
+      return;
+    }
+
+    const updateData: any = {
+      stripeSubscriptionId: subscriptionId,
+      subscriptionStatus: status,
+    };
+
+    if (subscription.current_period_end) {
+      updateData.subscriptionEndDate = new Date(subscription.current_period_end * 1000);
+    }
+
+    if (subscription.current_period_start && status === 'active') {
+      updateData.subscriptionStartDate = new Date(subscription.current_period_start * 1000);
+    }
+
+    if (subscription.items?.data?.[0]?.price?.id) {
+      const priceId = subscription.items.data[0].price.id;
+      const plan = await storage.getPlanByStripePriceId(priceId);
+      if (plan) {
+        updateData.planId = plan.id;
+      }
+    }
+
+    await storage.updateUser(user.id, updateData);
+    console.log(`[WebhookHandlers] Updated user ${user.id} with subscription update:`, updateData);
+  }
+
+  private static async handleSubscriptionDeleted(subscription: any): Promise<void> {
+    const customerId = subscription.customer;
+
+    console.log(`[WebhookHandlers] subscription.deleted - customerId: ${customerId}`);
+
+    const user = await storage.getUserByStripeCustomerId(customerId);
+    if (!user) {
+      console.log(`[WebhookHandlers] User with stripeCustomerId ${customerId} not found, skipping update`);
+      return;
+    }
+
+    const updateData = {
+      subscriptionStatus: 'canceled',
+      subscriptionEndDate: subscription.ended_at 
+        ? new Date(subscription.ended_at * 1000) 
+        : new Date(),
+    };
+
+    await storage.updateUser(user.id, updateData);
+    console.log(`[WebhookHandlers] Updated user ${user.id} - subscription canceled`);
+  }
+
+  private static async handlePaymentFailed(invoice: any): Promise<void> {
+    const customerId = invoice.customer;
+
+    console.log(`[WebhookHandlers] invoice.payment_failed - customerId: ${customerId}`);
+
+    const user = await storage.getUserByStripeCustomerId(customerId);
+    if (!user) {
+      console.log(`[WebhookHandlers] User with stripeCustomerId ${customerId} not found, skipping update`);
+      return;
+    }
+
+    await storage.updateUser(user.id, {
+      subscriptionStatus: 'past_due',
+    });
+    console.log(`[WebhookHandlers] Updated user ${user.id} - payment failed, status: past_due`);
+  }
+
+  private static async handlePaymentSucceeded(invoice: any): Promise<void> {
+    const customerId = invoice.customer;
+    const subscriptionId = invoice.subscription;
+
+    if (!subscriptionId) {
+      console.log('[WebhookHandlers] invoice.payment_succeeded - no subscription, skipping');
+      return;
+    }
+
+    console.log(`[WebhookHandlers] invoice.payment_succeeded - customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
+
+    const user = await storage.getUserByStripeCustomerId(customerId);
+    if (!user) {
+      console.log(`[WebhookHandlers] User with stripeCustomerId ${customerId} not found, skipping update`);
+      return;
+    }
+
+    if (user.subscriptionStatus !== 'active') {
+      await storage.updateUser(user.id, {
+        subscriptionStatus: 'active',
+        stripeSubscriptionId: subscriptionId,
+      });
+      console.log(`[WebhookHandlers] Updated user ${user.id} - payment succeeded, status: active`);
     }
   }
 }

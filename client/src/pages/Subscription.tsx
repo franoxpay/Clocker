@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useSearch, useLocation } from "wouter";
+import { useSearch } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +70,6 @@ export default function Subscription() {
   const { toast } = useToast();
   const locale = language === "pt-BR" ? ptBR : enUS;
   const searchString = useSearch();
-  const [, setLocation] = useLocation();
   
   const searchParams = new URLSearchParams(searchString);
   const checkoutStatus = searchParams.get("checkout");
@@ -89,7 +88,7 @@ export default function Subscription() {
       });
       
       setTimeout(() => {
-        setLocation("/subscription");
+        window.history.replaceState({}, '', '/subscription');
       }, 3000);
     } else if (checkoutStatus === "canceled") {
       toast({
@@ -101,10 +100,10 @@ export default function Subscription() {
       });
       
       setTimeout(() => {
-        setLocation("/subscription");
+        window.history.replaceState({}, '', '/subscription');
       }, 3000);
     }
-  }, [checkoutStatus, toast, language, setLocation]);
+  }, [checkoutStatus, toast, language]);
 
   const { data: plans = [], isLoading: plansLoading } = useQuery<Plan[]>({
     queryKey: ["/api/plans"],
