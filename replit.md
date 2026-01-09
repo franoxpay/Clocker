@@ -85,7 +85,18 @@ Key entities defined in `shared/schema.ts`:
 
 ## Recent Changes
 
-### January 9, 2026
+### January 9, 2026 (Update 2)
+- **Setup Mode Default Card**: When adding a card via setup checkout:
+  - Checkout session now includes metadata (userId, setupMode: 'true')
+  - Uses dedicated success URL: `checkout=setup_success`
+  - Webhook handler retrieves setupIntent and sets new card as customer's default payment method
+  - Prevents subscription failures when immediately subscribing after adding card
+- **Checkout Error UI**: Added visible Alert component on checkout errors with:
+  - Localized error messages (PT-BR/EN)
+  - "Add Card" button to launch setup checkout
+  - "Dismiss" button to clear error state
+
+### January 9, 2026 (Previous)
 - **Subscription Page Layout Improvements**:
   - Merged "Current Plan" and "Usage" sections into a single card (first column)
   - Moved "Saved Cards" section to second column for better layout
