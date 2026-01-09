@@ -70,11 +70,11 @@ export class WebhookHandlers {
 
   private static async handleCheckoutSessionCompleted(session: any): Promise<void> {
     const userId = session.metadata?.userId;
-    const planId = session.metadata?.planId;
+    const planIdStr = session.metadata?.planId;
     const customerId = session.customer;
     const subscriptionId = session.subscription;
 
-    console.log(`[WebhookHandlers] checkout.session.completed - userId: ${userId}, planId: ${planId}, customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
+    console.log(`[WebhookHandlers] checkout.session.completed - userId: ${userId}, planId: ${planIdStr}, customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
 
     if (!userId) {
       console.log('[WebhookHandlers] No userId in session metadata, skipping user update');
@@ -94,11 +94,22 @@ export class WebhookHandlers {
     if (subscriptionId) {
       updateData.stripeSubscriptionId = subscriptionId;
       updateData.subscriptionStatus = 'active';
-      updateData.subscriptionStartDate = new Date();
+      
+      const subscriptionStartTimestamp = session.created;
+      if (subscriptionStartTimestamp) {
+        updateData.subscriptionStartDate = new Date(subscriptionStartTimestamp * 1000);
+      } else {
+        updateData.subscriptionStartDate = new Date();
+      }
     }
 
-    if (planId) {
-      updateData.planId = parseInt(planId, 10);
+    if (planIdStr) {
+      const parsedPlanId = parseInt(planIdStr, 10);
+      if (!isNaN(parsedPlanId)) {
+        updateData.planId = parsedPlanId;
+      } else {
+        console.log(`[WebhookHandlers] Invalid planId in metadata: ${planIdStr}`);
+      }
     }
 
     await storage.updateUser(userId, updateData);
