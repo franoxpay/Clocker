@@ -378,10 +378,13 @@ export default function Subscription() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="w-5 h-5" />
-              {t("subscription.currentPlan")}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                {t("subscription.currentPlan")}
+              </CardTitle>
+              {getSubscriptionStatusBadge()}
+            </div>
             <CardDescription>
               {currentPlan 
                 ? (language === "pt-BR" ? currentPlan.name : currentPlan.nameEn)
@@ -389,17 +392,16 @@ export default function Subscription() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center gap-2">
-              {getSubscriptionStatusBadge()}
-              {user?.subscriptionEndDate && (
+            {user?.subscriptionEndDate && (
+              <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
                   {user.subscriptionStatus === "canceled" 
                     ? `${t("subscription.endsAt")}: `
                     : `${t("subscription.renewsAt")}: `}
                   {format(new Date(user.subscriptionEndDate), "PP", { locale })}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
             {currentPlan && (
               <div className="text-2xl font-bold">
                 {formatPrice(currentPlan.price)}
