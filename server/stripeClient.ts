@@ -90,6 +90,25 @@ export function getStripeEnvironment(): 'production' | 'development' {
   return process.env.REPLIT_DEPLOYMENT === '1' ? 'production' : 'development';
 }
 
+let stripeSync: any = null;
+
+export async function getStripeSync() {
+  if (!stripeSync) {
+    const { StripeSync } = await import('stripe-replit-sync');
+    const stripe = await getStripeClient();
+    const secretKey = await getCredentials().then(c => c.secretKey);
+
+    stripeSync = new StripeSync({
+      poolConfig: {
+        connectionString: process.env.DATABASE_URL!,
+        max: 2,
+      },
+      stripeSecretKey: secretKey,
+    });
+  }
+  return stripeSync;
+}
+
 interface EnsureCustomerResult {
   customerId: string;
   wasRecreated: boolean;

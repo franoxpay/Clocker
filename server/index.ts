@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { isStripeConfigured } from "./stripeClient";
+import { isStripeConfigured, getStripeSync } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
@@ -20,15 +20,73 @@ declare module "http" {
 }
 
 async function initStripe() {
-  if (!isStripeConfigured()) {
-    console.log('Stripe not configured, skipping initialization. Set STRIPE_SECRET_KEY and STRIPE_PUBLISHABLE_KEY in .env');
+  const configured = await isStripeConfigured();
+  if (!configured) {
+    console.log('Stripe not configured, skipping initialization');
     return;
   }
-  console.log('Stripe configured successfully via environment variables');
+
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    console.log('DATABASE_URL not set, skipping Stripe sync setup');
+    return;
+  }
+
+  try {
+    console.log('Initializing Stripe schema...');
+    const { runMigrations } = await import('stripe-replit-sync');
+    await runMigrations({ databaseUrl });
+    console.log('Stripe schema ready');
+
+    const stripeSync = await getStripeSync();
+
+    console.log('Setting up managed webhook...');
+    const replitDomains = process.env.REPLIT_DOMAINS?.split(',') || [];
+    const webhookBaseUrl = replitDomains[0] ? `https://${replitDomains[0]}` : '';
+    
+    if (webhookBaseUrl) {
+      const { webhook } = await stripeSync.findOrCreateManagedWebhook(
+        `${webhookBaseUrl}/api/stripe/webhook`,
+        {
+          enabled_events: [
+            'customer.created',
+            'customer.updated',
+            'customer.deleted',
+            'customer.subscription.created',
+            'customer.subscription.updated',
+            'customer.subscription.deleted',
+            'invoice.created',
+            'invoice.paid',
+            'invoice.payment_failed',
+            'invoice.payment_succeeded',
+            'checkout.session.completed',
+            'payment_intent.succeeded',
+            'payment_intent.payment_failed',
+            'product.created',
+            'product.updated',
+            'product.deleted',
+            'price.created',
+            'price.updated',
+            'price.deleted',
+          ]
+        }
+      );
+      console.log(`Webhook configured: ${webhook.url}`);
+    }
+
+    console.log('Syncing Stripe data in background...');
+    stripeSync.syncBackfill()
+      .then(() => console.log('Stripe data synced'))
+      .catch((err: any) => console.error('Error syncing Stripe data:', err.message));
+
+    console.log('Stripe initialized successfully');
+  } catch (error: any) {
+    console.error('Failed to initialize Stripe:', error.message);
+  }
 }
 
 app.post(
-  '/api/stripe/webhook',
+  '/api/stripe/webhook/:uuid?',
   express.raw({ type: 'application/json' }),
   async (req, res) => {
     const signature = req.headers['stripe-signature'];

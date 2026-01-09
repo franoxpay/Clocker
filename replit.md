@@ -85,6 +85,14 @@ Key entities defined in `shared/schema.ts`:
 
 ## Recent Changes
 
+### January 9, 2026
+- **Stripe Webhook Integration Fix**: Rewrote webhook handlers to use `stripe-replit-sync` managed webhooks:
+  - Updated `server/index.ts` with proper initialization: `runMigrations()` → `getStripeSync()` → `findOrCreateManagedWebhook()` → `syncBackfill()`
+  - Added `getStripeSync()` function to `server/stripeClient.ts` for stripe-replit-sync integration
+  - Updated `server/webhookHandlers.ts` to use `stripeSync.processWebhook()` instead of manual implementation
+  - Webhook now automatically configured with proper events: customer, subscription, invoice, checkout, payment_intent, product, price events
+  - Stripe data sync runs in background on startup via `syncBackfill()`
+
 ### January 2, 2026
 - **Admin Dashboard**: Created new `/confg-admin/dashboard` page with comprehensive system metrics:
   - Metrics cards showing clicks today/7 days (black/white/failed breakdown), user statistics (total/paid/free)
