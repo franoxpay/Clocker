@@ -2,7 +2,7 @@ import { getStripeSync, isStripeConfigured, getStripeClient } from './stripeClie
 import { storage } from './storage';
 
 export class WebhookHandlers {
-  static async processWebhook(payload: Buffer, signature: string): Promise<void> {
+  static async processWebhook(payload: Buffer, signature: string, uuid?: string): Promise<void> {
     if (!Buffer.isBuffer(payload)) {
       throw new Error(
         'STRIPE WEBHOOK ERROR: Payload must be a Buffer. ' +
@@ -20,7 +20,7 @@ export class WebhookHandlers {
 
     try {
       const sync = await getStripeSync();
-      const event = await sync.processWebhook(payload, signature);
+      const event = await sync.processWebhook(payload, signature, uuid);
       console.log('Webhook processed successfully via stripe-replit-sync');
       
       await this.handleStripeEvent(event);

@@ -2265,6 +2265,169 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/billing/payment-methods", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+      }
+
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user?.stripeCustomerId) {
+        return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+      }
+
+      const stripe = await getStripeClient();
+      
+      const { customerId, wasRecreated } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
+      
+      if (wasRecreated) {
+        return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+      }
+
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: customerId,
+        type: 'card',
+      });
+
+      const customer = await stripe.customers.retrieve(customerId) as any;
+      const defaultPaymentMethodId = customer.invoice_settings?.default_payment_method || null;
+
+      res.json({
+        paymentMethods: paymentMethods.data.map(pm => ({
+          id: pm.id,
+          brand: pm.card?.brand,
+          last4: pm.card?.last4,
+          expMonth: pm.card?.exp_month,
+          expYear: pm.card?.exp_year,
+          isDefault: pm.id === defaultPaymentMethodId,
+        })),
+        defaultPaymentMethodId,
+      });
+    } catch (error: any) {
+      console.error("Error fetching payment methods:", error);
+      if (error?.code === "resource_missing" || error?.type === "StripeInvalidRequestError") {
+        return res.json({ paymentMethods: [], defaultPaymentMethodId: null });
+      }
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/billing/payment-methods/setup", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const stripe = await getStripeClient();
+      
+      const { customerId } = await ensureStripeCustomer(
+        userId,
+        user.email || '',
+        user.stripeCustomerId,
+        async (uid, data) => storage.updateUser(uid, data)
+      );
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        usage: 'off_session',
+      });
+
+      res.json({ clientSecret: setupIntent.client_secret });
+    } catch (error) {
+      console.error("Error creating setup intent:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/billing/payment-methods/:id/default", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
+      const userId = (req.user as any).id;
+      const paymentMethodId = req.params.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found" });
+      }
+
+      const stripe = await getStripeClient();
+      
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== user.stripeCustomerId) {
+        return res.status(403).json({ message: "Payment method not found" });
+      }
+      
+      await stripe.customers.update(user.stripeCustomerId, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+
+      if (user.stripeSubscriptionId) {
+        await stripe.subscriptions.update(user.stripeSubscriptionId, {
+          default_payment_method: paymentMethodId,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error setting default payment method:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.delete("/api/billing/payment-methods/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const configured = await isStripeConfigured();
+      if (!configured) {
+        return res.status(503).json({ message: "Billing service unavailable", code: "STRIPE_NOT_CONFIGURED" });
+      }
+
+      const userId = (req.user as any).id;
+      const paymentMethodId = req.params.id;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.stripeCustomerId) {
+        return res.status(400).json({ message: "No billing account found" });
+      }
+
+      const stripe = await getStripeClient();
+      
+      const paymentMethod = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (paymentMethod.customer !== user.stripeCustomerId) {
+        return res.status(403).json({ message: "Payment method not found" });
+      }
+      
+      const customer = await stripe.customers.retrieve(user.stripeCustomerId) as any;
+      if (customer.invoice_settings?.default_payment_method === paymentMethodId) {
+        return res.status(400).json({ message: "Cannot delete default payment method" });
+      }
+
+      await stripe.paymentMethods.detach(paymentMethodId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting payment method:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/auth/change-password", isAuthenticated, async (req: Request, res: Response) => {
     try {
       res.json({ success: true });

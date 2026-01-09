@@ -96,6 +96,16 @@ Key entities defined in `shared/schema.ts`:
   - Fixed `handleCheckoutSessionCompleted` to validate planId before updating users table (prevents NaN corruption)
   - Now uses Stripe `session.created` timestamp for accurate subscription start dates
   - Fixed `Subscription.tsx` to use `window.history.replaceState` instead of router navigation to avoid infinite loops
+- **Saved Payment Methods Management**:
+  - Added 4 new API endpoints for payment method CRUD operations:
+    - `GET /api/billing/payment-methods` - List user's saved cards with default indicator
+    - `POST /api/billing/payment-methods/setup` - Create Stripe Setup Intent for adding new cards
+    - `POST /api/billing/payment-methods/:id/default` - Set a card as default (with ownership validation)
+    - `DELETE /api/billing/payment-methods/:id` - Remove a card (with ownership validation, prevents deleting default)
+  - Added payment methods UI section in Subscription page with list/set default/delete functionality
+  - Security: All payment method endpoints validate ownership by verifying method.customer matches user.stripeCustomerId
+  - Uses CreditCard icon from lucide-react instead of emojis for card brand display
+  - All interactive elements have proper data-testid attributes for testing
 
 ### January 2, 2026
 - **Admin Dashboard**: Created new `/confg-admin/dashboard` page with comprehensive system metrics:

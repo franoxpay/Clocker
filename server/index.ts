@@ -99,7 +99,8 @@ app.post(
         console.error('STRIPE WEBHOOK ERROR: req.body is not a Buffer');
         return res.status(500).json({ error: 'Webhook processing error' });
       }
-      await WebhookHandlers.processWebhook(req.body as Buffer, sig);
+      const uuid = req.params.uuid;
+      await WebhookHandlers.processWebhook(req.body as Buffer, sig, uuid);
       res.status(200).json({ received: true });
     } catch (error: any) {
       console.error('Webhook error:', error.message);

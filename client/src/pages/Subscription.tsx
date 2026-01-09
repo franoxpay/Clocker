@@ -29,7 +29,10 @@ import {
   Globe,
   BarChart3,
   CheckCircle,
-  XCircle
+  XCircle,
+  Plus,
+  Trash2,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -62,6 +65,20 @@ interface Payment {
   status: string;
   date: string | null;
   pdfUrl?: string;
+}
+
+interface PaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  isDefault: boolean;
+}
+
+interface PaymentMethodsResponse {
+  paymentMethods: PaymentMethod[];
+  defaultPaymentMethodId: string | null;
 }
 
 export default function Subscription() {
@@ -117,6 +134,10 @@ export default function Subscription() {
     queryKey: ["/api/billing/invoices"],
   });
 
+  const { data: paymentMethodsData, isLoading: paymentMethodsLoading } = useQuery<PaymentMethodsResponse>({
+    queryKey: ["/api/billing/payment-methods"],
+  });
+
   const currentPlan = plans.find(p => p.id === user?.planId);
   const activePlans = plans.filter(p => p.isActive);
 
@@ -155,6 +176,75 @@ export default function Subscription() {
       });
     },
   });
+
+  const setDefaultPaymentMethodMutation = useMutation({
+    mutationFn: async (paymentMethodId: string) => {
+      const res = await apiRequest("POST", `/api/billing/payment-methods/${paymentMethodId}/default`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+      toast({
+        title: language === "pt-BR" ? "Cartão padrão atualizado" : "Default card updated",
+        description: language === "pt-BR" 
+          ? "O cartão foi definido como padrão para pagamentos futuros."
+          : "The card has been set as default for future payments.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deletePaymentMethodMutation = useMutation({
+    mutationFn: async (paymentMethodId: string) => {
+      const res = await apiRequest("DELETE", `/api/billing/payment-methods/${paymentMethodId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+      toast({
+        title: language === "pt-BR" ? "Cartão removido" : "Card removed",
+        description: language === "pt-BR" 
+          ? "O cartão foi removido com sucesso."
+          : "The card has been successfully removed.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: t("common.error"),
+        description: error?.message || (language === "pt-BR" 
+          ? "Não é possível remover o cartão padrão" 
+          : "Cannot remove the default card"),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getCardBrandDisplay = (brand: string) => {
+    const brandLower = brand?.toLowerCase() || '';
+    switch (brandLower) {
+      case 'visa':
+        return 'Visa';
+      case 'mastercard':
+        return 'Mastercard';
+      case 'amex':
+        return 'American Express';
+      case 'elo':
+        return 'Elo';
+      case 'discover':
+        return 'Discover';
+      case 'diners':
+        return 'Diners';
+      case 'jcb':
+        return 'JCB';
+      default:
+        return brand?.charAt(0).toUpperCase() + brand?.slice(1) || 'Card';
+    }
+  };
 
   const formatPrice = (price: number) => {
     return `R$ ${(price / 100).toFixed(2).replace(".", ",")}`;
@@ -446,6 +536,111 @@ export default function Subscription() {
           ))
         )}
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+          <div>
+            <CardTitle>{language === "pt-BR" ? "Cartões Salvos" : "Saved Cards"}</CardTitle>
+            <CardDescription>
+              {language === "pt-BR" 
+                ? "Gerencie seus métodos de pagamento para assinaturas recorrentes" 
+                : "Manage your payment methods for recurring subscriptions"}
+            </CardDescription>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => portalMutation.mutate()}
+            disabled={portalMutation.isPending || !user?.stripeCustomerId}
+            data-testid="button-add-card"
+          >
+            {portalMutation.isPending ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            ) : (
+              <Plus className="w-4 h-4 mr-2" />
+            )}
+            {language === "pt-BR" ? "Gerenciar Cartões" : "Manage Cards"}
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {paymentMethodsLoading ? (
+            <div className="space-y-2">
+              {[...Array(2)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : !paymentMethodsData?.paymentMethods?.length ? (
+            <div className="text-center py-8">
+              <CreditCard className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">
+                {language === "pt-BR" 
+                  ? "Nenhum cartão salvo ainda. Ao realizar sua primeira assinatura, seu cartão será salvo automaticamente."
+                  : "No saved cards yet. When you make your first subscription, your card will be saved automatically."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {paymentMethodsData.paymentMethods.map((pm) => (
+                <div 
+                  key={pm.id} 
+                  className="flex items-center justify-between p-4 border rounded-lg"
+                  data-testid={`card-payment-method-${pm.id}`}
+                >
+                  <div className="flex items-center gap-4">
+                    <CreditCard className="w-8 h-8 text-muted-foreground" />
+                    <div>
+                      <div className="font-medium flex items-center gap-2">
+                        <span data-testid={`text-card-brand-${pm.id}`}>{getCardBrandDisplay(pm.brand)}</span>
+                        <span className="text-muted-foreground">**** {pm.last4}</span>
+                      </div>
+                      <div className="text-sm text-muted-foreground" data-testid={`text-card-expiry-${pm.id}`}>
+                        {language === "pt-BR" ? "Expira" : "Expires"} {pm.expMonth.toString().padStart(2, '0')}/{pm.expYear}
+                      </div>
+                    </div>
+                    {pm.isDefault && (
+                      <Badge variant="secondary" data-testid={`badge-default-card-${pm.id}`}>
+                        {language === "pt-BR" ? "Padrão" : "Default"}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!pm.isDefault && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setDefaultPaymentMethodMutation.mutate(pm.id)}
+                          disabled={setDefaultPaymentMethodMutation.isPending}
+                          data-testid={`button-set-default-${pm.id}`}
+                        >
+                          {setDefaultPaymentMethodMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            language === "pt-BR" ? "Definir padrão" : "Set as default"
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
+                          disabled={deletePaymentMethodMutation.isPending}
+                          data-testid={`button-delete-card-${pm.id}`}
+                        >
+                          {deletePaymentMethodMutation.isPending ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          )}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
