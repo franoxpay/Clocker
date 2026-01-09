@@ -149,11 +149,33 @@ export default function Subscription() {
     onSuccess: (data) => {
       if (data.url) {
         window.location.href = data.url;
+      } else if (data.requiresAction && data.clientSecret) {
+        toast({
+          title: language === "pt-BR" ? "Confirmação necessária" : "Confirmation required",
+          description: language === "pt-BR" 
+            ? "Por favor, complete a verificação no seu banco para finalizar o pagamento."
+            : "Please complete the verification with your bank to finalize payment.",
+        });
+        window.location.href = `/subscription?checkout=pending&secret=${data.clientSecret}`;
+      } else if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+        toast({
+          title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
+          description: language === "pt-BR" 
+            ? "Seu plano foi ativado com sucesso." 
+            : "Your plan has been successfully activated.",
+        });
       }
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: t("common.error"),
+        description: error?.message || (language === "pt-BR" 
+          ? "Ocorreu um erro ao processar sua assinatura." 
+          : "An error occurred while processing your subscription."),
         variant: "destructive",
       });
     },
@@ -382,79 +404,181 @@ export default function Subscription() {
                 </span>
               </div>
             )}
+            
+            <div className="border-t pt-4 space-y-3">
+              {usageLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                  <Skeleton className="h-6 w-full" />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <LinkIcon className="w-4 h-4" />
+                        {t("subscription.offersUsed")}
+                      </span>
+                      <span className="font-medium">
+                        {usage?.offersCount || 0} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : (currentPlan?.maxOffers || 0)}
+                      </span>
+                    </div>
+                    {!currentPlan?.isUnlimited && currentPlan && (
+                      <Progress 
+                        value={getUsagePercent(usage?.offersCount || 0, currentPlan.maxOffers, currentPlan.isUnlimited)} 
+                        className="h-2" 
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <Globe className="w-4 h-4" />
+                        {t("subscription.domainsUsed")}
+                      </span>
+                      <span className="font-medium">
+                        {usage?.domainsCount || 0} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : (currentPlan?.maxDomains || 0)}
+                      </span>
+                    </div>
+                    {!currentPlan?.isUnlimited && currentPlan && (
+                      <Progress 
+                        value={getUsagePercent(usage?.domainsCount || 0, currentPlan.maxDomains, currentPlan.isUnlimited)} 
+                        className="h-2" 
+                      />
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        {t("subscription.clicksUsed")}
+                      </span>
+                      <span className="font-medium">
+                        {formatClicks(usage?.clicksThisMonth || 0)} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : formatClicks(currentPlan?.maxClicks || 0)}
+                      </span>
+                    </div>
+                    {!currentPlan?.isUnlimited && currentPlan && (
+                      <Progress 
+                        value={getUsagePercent(usage?.clicksThisMonth || 0, currentPlan.maxClicks, currentPlan.isUnlimited)} 
+                        className="h-2" 
+                      />
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="w-5 h-5" />
-              {t("subscription.yourUsage")}
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="w-5 h-5" />
+                {language === "pt-BR" ? "Cartões Salvos" : "Saved Cards"}
+              </CardTitle>
+              <CardDescription>
+                {language === "pt-BR" 
+                  ? "Métodos de pagamento para assinaturas" 
+                  : "Payment methods for subscriptions"}
+              </CardDescription>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => checkoutMutation.mutate({})}
+              disabled={checkoutMutation.isPending || !user?.stripeCustomerId}
+              data-testid="button-add-card"
+            >
+              {checkoutMutation.isPending ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4 mr-2" />
+              )}
+              {language === "pt-BR" ? "Adicionar Cartão" : "Add Card"}
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {usageLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
-                <Skeleton className="h-6 w-full" />
+          <CardContent>
+            {paymentMethodsLoading ? (
+              <div className="space-y-2">
+                {[...Array(2)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : !paymentMethodsData?.paymentMethods?.length ? (
+              <div className="text-center py-8">
+                <CreditCard className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">
+                  {language === "pt-BR" 
+                    ? "Nenhum cartão salvo ainda."
+                    : "No saved cards yet."}
+                </p>
               </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2">
-                      <LinkIcon className="w-4 h-4" />
-                      {t("subscription.offersUsed")}
-                    </span>
-                    <span className="font-medium">
-                      {usage?.offersCount || 0} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : (currentPlan?.maxOffers || 0)}
-                    </span>
+              <div className="space-y-3">
+                {paymentMethodsData.paymentMethods.map((pm) => (
+                  <div 
+                    key={pm.id} 
+                    className="flex items-center justify-between p-3 border rounded-lg"
+                    data-testid={`card-payment-method-${pm.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <CreditCard className="w-6 h-6 text-muted-foreground" />
+                      <div>
+                        <div className="font-medium flex items-center gap-2 text-sm">
+                          <span data-testid={`text-card-brand-${pm.id}`}>{getCardBrandDisplay(pm.brand)}</span>
+                          <span className="text-muted-foreground">**** {pm.last4}</span>
+                          {pm.isDefault && (
+                            <Badge variant="secondary" className="text-xs" data-testid={`badge-default-card-${pm.id}`}>
+                              {language === "pt-BR" ? "Padrão" : "Default"}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground" data-testid={`text-card-expiry-${pm.id}`}>
+                          {language === "pt-BR" ? "Expira" : "Expires"} {pm.expMonth.toString().padStart(2, '0')}/{pm.expYear}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!pm.isDefault && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDefaultPaymentMethodMutation.mutate(pm.id)}
+                            disabled={setDefaultPaymentMethodMutation.isPending}
+                            data-testid={`button-set-default-${pm.id}`}
+                          >
+                            {setDefaultPaymentMethodMutation.isPending ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              language === "pt-BR" ? "Definir padrão" : "Set as default"
+                            )}
+                          </Button>
+                          {paymentMethodsData.paymentMethods.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
+                              disabled={deletePaymentMethodMutation.isPending}
+                              data-testid={`button-delete-card-${pm.id}`}
+                            >
+                              {deletePaymentMethodMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              )}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                  {!currentPlan?.isUnlimited && currentPlan && (
-                    <Progress 
-                      value={getUsagePercent(usage?.offersCount || 0, currentPlan.maxOffers, currentPlan.isUnlimited)} 
-                      className="h-2" 
-                    />
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2">
-                      <Globe className="w-4 h-4" />
-                      {t("subscription.domainsUsed")}
-                    </span>
-                    <span className="font-medium">
-                      {usage?.domainsCount || 0} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : (currentPlan?.maxDomains || 0)}
-                    </span>
-                  </div>
-                  {!currentPlan?.isUnlimited && currentPlan && (
-                    <Progress 
-                      value={getUsagePercent(usage?.domainsCount || 0, currentPlan.maxDomains, currentPlan.isUnlimited)} 
-                      className="h-2" 
-                    />
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4" />
-                      {t("subscription.clicksUsed")}
-                    </span>
-                    <span className="font-medium">
-                      {formatClicks(usage?.clicksThisMonth || 0)} {t("subscription.of")} {currentPlan?.isUnlimited ? t("subscription.unlimited") : formatClicks(currentPlan?.maxClicks || 0)}
-                    </span>
-                  </div>
-                  {!currentPlan?.isUnlimited && currentPlan && (
-                    <Progress 
-                      value={getUsagePercent(usage?.clicksThisMonth || 0, currentPlan.maxClicks, currentPlan.isUnlimited)} 
-                      className="h-2" 
-                    />
-                  )}
-                </div>
-              </>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -536,111 +660,6 @@ export default function Subscription() {
           ))
         )}
       </div>
-
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
-          <div>
-            <CardTitle>{language === "pt-BR" ? "Cartões Salvos" : "Saved Cards"}</CardTitle>
-            <CardDescription>
-              {language === "pt-BR" 
-                ? "Gerencie seus métodos de pagamento para assinaturas recorrentes" 
-                : "Manage your payment methods for recurring subscriptions"}
-            </CardDescription>
-          </div>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => portalMutation.mutate()}
-            disabled={portalMutation.isPending || !user?.stripeCustomerId}
-            data-testid="button-add-card"
-          >
-            {portalMutation.isPending ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Plus className="w-4 h-4 mr-2" />
-            )}
-            {language === "pt-BR" ? "Gerenciar Cartões" : "Manage Cards"}
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {paymentMethodsLoading ? (
-            <div className="space-y-2">
-              {[...Array(2)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : !paymentMethodsData?.paymentMethods?.length ? (
-            <div className="text-center py-8">
-              <CreditCard className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">
-                {language === "pt-BR" 
-                  ? "Nenhum cartão salvo ainda. Ao realizar sua primeira assinatura, seu cartão será salvo automaticamente."
-                  : "No saved cards yet. When you make your first subscription, your card will be saved automatically."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {paymentMethodsData.paymentMethods.map((pm) => (
-                <div 
-                  key={pm.id} 
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                  data-testid={`card-payment-method-${pm.id}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <CreditCard className="w-8 h-8 text-muted-foreground" />
-                    <div>
-                      <div className="font-medium flex items-center gap-2">
-                        <span data-testid={`text-card-brand-${pm.id}`}>{getCardBrandDisplay(pm.brand)}</span>
-                        <span className="text-muted-foreground">**** {pm.last4}</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground" data-testid={`text-card-expiry-${pm.id}`}>
-                        {language === "pt-BR" ? "Expira" : "Expires"} {pm.expMonth.toString().padStart(2, '0')}/{pm.expYear}
-                      </div>
-                    </div>
-                    {pm.isDefault && (
-                      <Badge variant="secondary" data-testid={`badge-default-card-${pm.id}`}>
-                        {language === "pt-BR" ? "Padrão" : "Default"}
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {!pm.isDefault && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setDefaultPaymentMethodMutation.mutate(pm.id)}
-                          disabled={setDefaultPaymentMethodMutation.isPending}
-                          data-testid={`button-set-default-${pm.id}`}
-                        >
-                          {setDefaultPaymentMethodMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            language === "pt-BR" ? "Definir padrão" : "Set as default"
-                          )}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deletePaymentMethodMutation.mutate(pm.id)}
-                          disabled={deletePaymentMethodMutation.isPending}
-                          data-testid={`button-delete-card-${pm.id}`}
-                        >
-                          {deletePaymentMethodMutation.isPending ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4 text-destructive" />
-                          )}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>

@@ -2420,6 +2420,15 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cannot delete default payment method" });
       }
 
+      const allPaymentMethods = await stripe.paymentMethods.list({
+        customer: user.stripeCustomerId,
+        type: 'card',
+      });
+      
+      if (allPaymentMethods.data.length <= 1) {
+        return res.status(400).json({ message: "Cannot delete the last payment method" });
+      }
+
       await stripe.paymentMethods.detach(paymentMethodId);
       res.json({ success: true });
     } catch (error) {
@@ -2462,10 +2471,6 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { priceId, planId } = req.body;
       
-      if (!priceId && !planId) {
-        return res.status(400).json({ message: "Price ID or Plan ID is required" });
-      }
-      
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -2480,6 +2485,17 @@ export async function registerRoutes(
         async (uid, data) => storage.updateUser(uid, data)
       );
 
+      if (!priceId && !planId) {
+        const session = await stripe.checkout.sessions.create({
+          customer: customerId,
+          payment_method_types: ['card'],
+          mode: 'setup',
+          success_url: `${req.protocol}://${req.get('host')}/subscription?checkout=success`,
+          cancel_url: `${req.protocol}://${req.get('host')}/subscription?checkout=cancelled`,
+        });
+        return res.json({ url: session.url });
+      }
+
       let plan = priceId ? await storage.getPlanByStripePriceId(priceId) : null;
       if (!plan && planId) {
         plan = await storage.getPlan(planId);
@@ -2487,6 +2503,83 @@ export async function registerRoutes(
       
       if (!plan) {
         return res.status(404).json({ message: "Plan not found" });
+      }
+
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: customerId,
+        type: 'card',
+      });
+
+      if (paymentMethods.data.length > 0) {
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const defaultPaymentMethod = customer.invoice_settings?.default_payment_method || paymentMethods.data[0].id;
+
+        const trialDays = plan.hasTrial ? plan.trialDays : undefined;
+        
+        let subscriptionConfig: any = {
+          customer: customerId,
+          default_payment_method: defaultPaymentMethod,
+          metadata: { userId, planId: String(plan.id) },
+        };
+
+        if (trialDays) {
+          subscriptionConfig.trial_period_days = trialDays;
+        }
+
+        if (priceId && plan.stripePriceId) {
+          subscriptionConfig.items = [{ price: priceId }];
+        } else {
+          const product = await stripe.products.create({
+            name: plan.name,
+            description: plan.nameEn || undefined,
+          });
+          
+          const price = await stripe.prices.create({
+            product: product.id,
+            unit_amount: plan.price,
+            currency: 'brl',
+            recurring: { interval: 'month' },
+          });
+          
+          subscriptionConfig.items = [{ price: price.id }];
+        }
+
+        const subscription = await stripe.subscriptions.create({
+          ...subscriptionConfig,
+          payment_behavior: 'default_incomplete',
+          expand: ['latest_invoice.payment_intent'],
+        });
+        
+        const subscriptionStatus = subscription.status;
+        
+        if (subscriptionStatus === 'incomplete') {
+          const invoice = subscription.latest_invoice as any;
+          const paymentIntent = invoice?.payment_intent;
+          
+          if (paymentIntent?.status === 'requires_action') {
+            return res.json({ 
+              requiresAction: true, 
+              clientSecret: paymentIntent.client_secret,
+              subscriptionId: subscription.id 
+            });
+          }
+          
+          return res.status(400).json({ 
+            message: "Payment failed. Please try again or use a different card." 
+          });
+        }
+        
+        await storage.updateUser(userId, {
+          stripeSubscriptionId: subscription.id,
+          planId: plan.id,
+          subscriptionStatus: subscriptionStatus === 'trialing' ? 'trialing' : 'active',
+          subscriptionStartDate: new Date(),
+          subscriptionEndDate: subscription.current_period_end 
+            ? new Date(subscription.current_period_end * 1000)
+            : null,
+        });
+
+        return res.json({ success: true, subscriptionId: subscription.id });
       }
 
       const trialDays = plan.hasTrial ? plan.trialDays : undefined;
