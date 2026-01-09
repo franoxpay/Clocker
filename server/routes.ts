@@ -2490,7 +2490,11 @@ export async function registerRoutes(
           customer: customerId,
           payment_method_types: ['card'],
           mode: 'setup',
-          success_url: `${req.protocol}://${req.get('host')}/subscription?checkout=success`,
+          metadata: {
+            userId: userId,
+            setupMode: 'true',
+          },
+          success_url: `${req.protocol}://${req.get('host')}/subscription?checkout=setup_success`,
           cancel_url: `${req.protocol}://${req.get('host')}/subscription?checkout=cancelled`,
         });
         return res.json({ url: session.url });

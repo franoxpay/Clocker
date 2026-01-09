@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -90,18 +90,33 @@ export default function Subscription() {
   
   const searchParams = new URLSearchParams(searchString);
   const checkoutStatus = searchParams.get("checkout");
+  const [checkoutError, setCheckoutError] = useState<{ message: string; showAddCard: boolean } | null>(null);
 
   useEffect(() => {
     if (checkoutStatus === "success") {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
       
       toast({
         title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
         description: language === "pt-BR" 
           ? "Seu pagamento foi processado com sucesso." 
           : "Your payment was processed successfully.",
+      });
+      
+      setTimeout(() => {
+        window.history.replaceState({}, '', '/subscription');
+      }, 3000);
+    } else if (checkoutStatus === "setup_success") {
+      queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+      
+      toast({
+        title: language === "pt-BR" ? "Cartão adicionado!" : "Card added!",
+        description: language === "pt-BR" 
+          ? "Seu cartão foi adicionado e definido como padrão." 
+          : "Your card was added and set as default.",
       });
       
       setTimeout(() => {
@@ -199,11 +214,7 @@ export default function Subscription() {
           : "An error occurred while processing your subscription. Please try again.";
       }
       
-      toast({
-        title: t("common.error"),
-        description: errorMessage,
-        variant: "destructive",
-      });
+      setCheckoutError({ message: errorMessage, showAddCard: true });
     },
   });
 
@@ -380,6 +391,41 @@ export default function Subscription() {
             {language === "pt-BR" 
               ? "O processo de assinatura foi cancelado. Você pode tentar novamente quando quiser."
               : "The subscription process was canceled. You can try again whenever you want."}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {checkoutError && (
+        <Alert variant="destructive">
+          <XCircle className="h-4 w-4" />
+          <AlertTitle>
+            {language === "pt-BR" ? "Erro no pagamento" : "Payment error"}
+          </AlertTitle>
+          <AlertDescription className="space-y-3">
+            <p>{checkoutError.message}</p>
+            {checkoutError.showAddCard && (
+              <div className="flex gap-2 mt-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setCheckoutError(null);
+                    checkoutMutation.mutate({});
+                  }}
+                  data-testid="button-add-card-error"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  {language === "pt-BR" ? "Adicionar Cartão" : "Add Card"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCheckoutError(null)}
+                  data-testid="button-dismiss-error"
+                >
+                  {language === "pt-BR" ? "Fechar" : "Dismiss"}
+                </Button>
+              </div>
+            )}
           </AlertDescription>
         </Alert>
       )}

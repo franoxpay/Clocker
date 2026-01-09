@@ -71,10 +71,32 @@ export class WebhookHandlers {
   private static async handleCheckoutSessionCompleted(session: any): Promise<void> {
     const userId = session.metadata?.userId;
     const planIdStr = session.metadata?.planId;
+    const setupMode = session.metadata?.setupMode;
     const customerId = session.customer;
     const subscriptionId = session.subscription;
+    const setupIntentId = session.setup_intent;
 
-    console.log(`[WebhookHandlers] checkout.session.completed - userId: ${userId}, planId: ${planIdStr}, customerId: ${customerId}, subscriptionId: ${subscriptionId}`);
+    console.log(`[WebhookHandlers] checkout.session.completed - userId: ${userId}, planId: ${planIdStr}, customerId: ${customerId}, subscriptionId: ${subscriptionId}, setupMode: ${setupMode}`);
+
+    if (setupMode === 'true' && setupIntentId && customerId) {
+      try {
+        const stripe = await getStripeClient();
+        const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+        const paymentMethodId = setupIntent.payment_method as string;
+        
+        if (paymentMethodId) {
+          await stripe.customers.update(customerId, {
+            invoice_settings: {
+              default_payment_method: paymentMethodId,
+            },
+          });
+          console.log(`[WebhookHandlers] Set payment method ${paymentMethodId} as default for customer ${customerId}`);
+        }
+      } catch (err) {
+        console.error('[WebhookHandlers] Error setting default payment method:', err);
+      }
+      return;
+    }
 
     if (!userId) {
       console.log('[WebhookHandlers] No userId in session metadata, skipping user update');
