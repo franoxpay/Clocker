@@ -272,6 +272,10 @@ export default function Subscription() {
     return `R$ ${(price / 100).toFixed(2).replace(".", ",")}`;
   };
 
+  const formatAmount = (amount: number) => {
+    return `R$ ${amount.toFixed(2).replace(".", ",")}`;
+  };
+
   const formatClicks = (clicks: number) => {
     if (clicks >= 1000000) return `${(clicks / 1000000).toFixed(0)}M`;
     if (clicks >= 1000) return `${(clicks / 1000).toFixed(0)}k`;
@@ -692,7 +696,7 @@ export default function Subscription() {
                     <TableCell>
                       {payment.date ? format(new Date(payment.date), "PP", { locale }) : "-"}
                     </TableCell>
-                    <TableCell>{formatPrice(payment.amount)}</TableCell>
+                    <TableCell>{formatAmount(payment.amount)}</TableCell>
                     <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
                     <TableCell>
                       {payment.pdfUrl && (
