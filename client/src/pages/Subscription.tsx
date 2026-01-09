@@ -60,8 +60,8 @@ interface Payment {
   id: string;
   amount: number;
   status: string;
-  created: number;
-  hostedInvoiceUrl?: string;
+  date: string | null;
+  pdfUrl?: string;
 }
 
 export default function Subscription() {
@@ -476,18 +476,18 @@ export default function Subscription() {
                 {payments.map((payment) => (
                   <TableRow key={payment.id} data-testid={`row-payment-${payment.id}`}>
                     <TableCell>
-                      {format(new Date(payment.created * 1000), "PP", { locale })}
+                      {payment.date ? format(new Date(payment.date), "PP", { locale }) : "-"}
                     </TableCell>
                     <TableCell>{formatPrice(payment.amount)}</TableCell>
                     <TableCell>{getPaymentStatusBadge(payment.status)}</TableCell>
                     <TableCell>
-                      {payment.hostedInvoiceUrl && (
+                      {payment.pdfUrl && (
                         <Button
                           variant="ghost"
                           size="icon"
                           asChild
                         >
-                          <a href={payment.hostedInvoiceUrl} target="_blank" rel="noopener noreferrer">
+                          <a href={payment.pdfUrl} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="w-4 h-4" />
                           </a>
                         </Button>

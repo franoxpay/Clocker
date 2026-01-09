@@ -34,8 +34,8 @@ interface Invoice {
   id: string;
   amount: number;
   status: string;
-  created: number;
-  hostedInvoiceUrl?: string;
+  date: string | null;
+  pdfUrl?: string;
 }
 
 interface Plan {
@@ -122,8 +122,9 @@ export default function Settings() {
 
   const currentPlan = plans.find((p) => p.id === user?.planId);
 
-  const formatDate = (timestamp: number) => {
-    return format(new Date(timestamp * 1000), "dd/MM/yyyy", {
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
+    return format(new Date(dateStr), "dd/MM/yyyy", {
       locale: language === "pt-BR" ? ptBR : enUS,
     });
   };
@@ -249,8 +250,8 @@ export default function Settings() {
                     <TableBody>
                       {invoices.map((invoice) => (
                         <TableRow key={invoice.id}>
-                          <TableCell>{formatDate(invoice.created)}</TableCell>
-                          <TableCell>R$ {(invoice.amount / 100).toFixed(2)}</TableCell>
+                          <TableCell>{formatDate(invoice.date)}</TableCell>
+                          <TableCell>R$ {invoice.amount.toFixed(2)}</TableCell>
                           <TableCell>
                             <Badge
                               variant={invoice.status === "paid" ? "default" : "secondary"}
@@ -266,10 +267,10 @@ export default function Settings() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            {invoice.hostedInvoiceUrl && (
+                            {invoice.pdfUrl && (
                               <Button variant="ghost" size="sm" asChild>
                                 <a
-                                  href={invoice.hostedInvoiceUrl}
+                                  href={invoice.pdfUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >
