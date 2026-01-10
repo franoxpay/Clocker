@@ -1691,6 +1691,32 @@ export async function registerRoutes(
       const userId = (req.user as any).id;
       const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
+      // Check if user can create more offers
+      const canCreate = await storage.canUserCreateOffer(userId);
+      if (!canCreate.allowed) {
+        if (canCreate.reason === 'user_suspended') {
+          return res.status(403).json({ 
+            message: "Your account is suspended. Please upgrade your plan to continue.",
+            code: "USER_SUSPENDED"
+          });
+        }
+        if (canCreate.reason === 'no_active_plan') {
+          return res.status(403).json({ 
+            message: "You need an active plan to create offers.",
+            code: "NO_ACTIVE_PLAN"
+          });
+        }
+        if (canCreate.reason === 'limit_reached') {
+          return res.status(403).json({ 
+            message: `You have reached the maximum number of offers (${canCreate.limit}) for your plan. Please upgrade to create more.`,
+            code: "OFFER_LIMIT_REACHED",
+            currentCount: canCreate.currentCount,
+            limit: canCreate.limit
+          });
+        }
+        return res.status(403).json({ message: "Cannot create offer", code: canCreate.reason });
+      }
+
       console.log("[Offer Create] Received domainId:", domainId, "type:", typeof domainId);
 
       let parsedDomainId: number | null = null;
@@ -1951,6 +1977,32 @@ export async function registerRoutes(
     try {
       const userId = (req.user as any).id;
       const { subdomain } = req.body;
+
+      // Check if user can create more domains
+      const canCreate = await storage.canUserCreateDomain(userId);
+      if (!canCreate.allowed) {
+        if (canCreate.reason === 'user_suspended') {
+          return res.status(403).json({ 
+            message: "Your account is suspended. Please upgrade your plan to continue.",
+            code: "USER_SUSPENDED"
+          });
+        }
+        if (canCreate.reason === 'no_active_plan') {
+          return res.status(403).json({ 
+            message: "You need an active plan to add domains.",
+            code: "NO_ACTIVE_PLAN"
+          });
+        }
+        if (canCreate.reason === 'limit_reached') {
+          return res.status(403).json({ 
+            message: `You have reached the maximum number of domains (${canCreate.limit}) for your plan. Please upgrade to add more.`,
+            code: "DOMAIN_LIMIT_REACHED",
+            currentCount: canCreate.currentCount,
+            limit: canCreate.limit
+          });
+        }
+        return res.status(403).json({ message: "Cannot create domain", code: canCreate.reason });
+      }
 
       const existing = await storage.getDomainBySubdomain(subdomain);
       if (existing) {
@@ -3345,33 +3397,71 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      const owner = await storage.getUser(offer.userId);
-      if (!owner) {
+      let currentOwner = await storage.getUser(offer.userId);
+      if (!currentOwner) {
         return res.status(404).send("Not found");
       }
 
-      const isSuspended = owner.suspendedAt !== null;
-      if (isSuspended) {
-        console.log(`[Cloak] User suspended: ${offer.userId}`);
-        return res.redirect(302, offer.whitePageUrl);
+      // ==========================================
+      // PLAN LIMITS AND SUSPENSION CHECK
+      // ==========================================
+      
+      // Get plan limits first (needed for reset logic)
+      const planForLimits = currentOwner.planId ? await storage.getPlan(currentOwner.planId) : null;
+      if (!planForLimits) {
+        // No active plan - return 404
+        console.log(`[Cloak] User ${currentOwner.id} has no active plan - returning 404`);
+        return res.status(404).send("Not found");
       }
 
-      // Check click limits
-      const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-      if (plan && !plan.isUnlimited) {
-        const userOffers = await storage.getOffersByUserId(offer.userId);
-        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+      // Check if monthly clicks should be reset (subscription anniversary)
+      // This MUST happen BEFORE suspension check so users can be reactivated
+      const nowForReset = new Date();
+      let clicksUsed = currentOwner.clicksUsedThisMonth || 0;
+      
+      if (currentOwner.clicksResetDate && nowForReset >= currentOwner.clicksResetDate) {
+        console.log(`[Cloak] User ${currentOwner.id} monthly reset triggered - resetting clicks and clearing suspension`);
+        await storage.resetUserMonthlyClicks(currentOwner.id);
+        // Also unsuspend the user if they were suspended due to click limits
+        if (currentOwner.suspendedAt || currentOwner.gracePeriodEndsAt) {
+          await storage.unsuspendUser(currentOwner.id);
+        }
+        // Reset local counters to reflect the database state
+        clicksUsed = 0;
+        // Refresh owner to get updated state
+        currentOwner = await storage.getUser(offer.userId);
+        if (!currentOwner) {
+          return res.status(404).send("Not found");
+        }
+      }
+
+      // Now check if user is suspended (after potential reset/unsuspend)
+      if (currentOwner.suspendedAt) {
+        console.log(`[Cloak] User ${currentOwner.id} is suspended - returning 404`);
+        return res.status(404).send("Not found");
+      }
+
+      // Check grace period expiration
+      if (currentOwner.gracePeriodEndsAt && new Date() > currentOwner.gracePeriodEndsAt) {
+        // Grace period has expired - suspend user
+        console.log(`[Cloak] User ${currentOwner.id} grace period expired - suspending`);
+        await storage.suspendUser(currentOwner.id, 'grace_period_expired');
+        return res.status(404).send("Not found");
+      }
+
+      // Check clicks limit (only for non-unlimited plans)
+      if (!planForLimits.isUnlimited) {
+        const clicksLimit = planForLimits.maxClicks;
         
-        // If over limit (after 3-day grace period), redirect to white
-        if (totalClicks >= plan.maxClicks) {
-          const gracePeriodEnd = owner.subscriptionEndDate 
-            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-            : null;
-          
-          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-            return res.redirect(302, offer.whitePageUrl);
+        if (clicksUsed >= clicksLimit) {
+          // User has exceeded their click limit
+          if (!currentOwner.gracePeriodEndsAt) {
+            // Start grace period (48 hours)
+            console.log(`[Cloak] User ${currentOwner.id} exceeded clicks limit - starting grace period`);
+            await storage.startGracePeriod(currentOwner.id);
           }
+          // During grace period, continue processing clicks
+          // (The check above handles expired grace periods)
         }
       }
 

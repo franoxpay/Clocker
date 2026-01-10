@@ -232,6 +232,27 @@ export const adminImpersonations = pgTable("admin_impersonations", {
   expiresAt: timestamp("expires_at").notNull(),
 });
 
+// Suspension history table - tracks all suspension/unsuspension events
+export const suspensionHistory = pgTable(
+  "suspension_history",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    event: varchar("event").notNull(), // 'suspended' | 'unsuspended' | 'grace_started' | 'admin_override'
+    reason: text("reason"), // e.g., 'clicks_exceeded', 'grace_period_expired', 'payment_failed'
+    details: text("details"), // Additional context
+    actorId: varchar("actor_id").references(() => users.id, { onDelete: "set null" }), // Admin who performed action (null for system)
+    actorType: varchar("actor_type").notNull().default("system"), // 'system' | 'admin' | 'user'
+    clicksAtEvent: integer("clicks_at_event"), // Clicks count at time of event
+    planIdAtEvent: integer("plan_id_at_event"), // Plan at time of event
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("suspension_history_user_idx").on(table.userId),
+    index("suspension_history_created_idx").on(table.createdAt),
+  ]
+);
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   plan: one(plans, {
@@ -449,3 +470,10 @@ export type AdminImpersonation = typeof adminImpersonations.$inferSelect;
 
 export type Tiktok2Telemetry = typeof tiktok2Telemetry.$inferSelect;
 export type InsertTiktok2Telemetry = z.infer<typeof insertTiktok2TelemetrySchema>;
+
+export const insertSuspensionHistorySchema = createInsertSchema(suspensionHistory).omit({
+  id: true,
+  createdAt: true,
+});
+export type SuspensionHistory = typeof suspensionHistory.$inferSelect;
+export type InsertSuspensionHistory = z.infer<typeof insertSuspensionHistorySchema>;

@@ -85,6 +85,23 @@ Key entities defined in `shared/schema.ts`:
 
 ## Recent Changes
 
+### January 10, 2026 (Update 2)
+- **Plan Limits Enforcement - Offer Creation**: POST `/api/offers` now validates before creating:
+  - Checks if user is suspended → returns 403 with `USER_SUSPENDED` code
+  - Checks if user has active plan → returns 403 with `NO_ACTIVE_PLAN` code
+  - Checks offer count against plan limit → returns 403 with `OFFER_LIMIT_REACHED` code
+- **Plan Limits Enforcement - Domain Creation**: POST `/api/domains` now validates before creating:
+  - Same checks as offers: suspended status, active plan, domain limit
+  - Shared domains don't count toward user's limit (only user-owned domains)
+- **Click Tracking with Grace Period**: Click endpoint (`/r/:slug`) now enforces limits:
+  - Monthly reset happens BEFORE suspension check (allows auto-reactivation on anniversary)
+  - Suspended users get 404 (not redirect to white page)
+  - Grace period (48h) starts when clicks exceed limit
+  - After grace period expires, user is suspended
+  - On monthly reset: clicks reset to 0, suspension/grace period cleared
+- **Auto-Increment Monthly Clicks**: `createClickLog` now auto-increments `clicksUsedThisMonth` for "black" redirects only
+- **User State Refresh**: After monthly reset, code refreshes owner record to ensure accurate limit evaluation
+
 ### January 10, 2026
 - **Immediate Payment Fix**: Changed `payment_behavior` from `'default_incomplete'` to `'error_if_incomplete'` to charge immediately when user has saved cards
 - **Card Selector Dialog**: When subscribing with multiple saved cards:

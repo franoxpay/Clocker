@@ -12,6 +12,7 @@ import {
   adminSettings,
   passwordResetTokens,
   adminImpersonations,
+  suspensionHistory,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -28,6 +29,8 @@ import {
   type Notification,
   type InsertNotification,
   type AdminSettings,
+  type SuspensionHistory,
+  type InsertSuspensionHistory,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -192,6 +195,34 @@ export interface IStorage {
     }>;
     total: number;
   }>;
+
+  // Plan limits and suspension management
+  getUserOffersCount(userId: string): Promise<number>;
+  getUserDomainsCount(userId: string): Promise<number>;
+  getMonthlyClicksForUser(userId: string): Promise<number>;
+  
+  incrementUserMonthlyClicks(userId: string): Promise<{
+    clicksUsed: number;
+    clicksLimit: number | null;
+    isOverLimit: boolean;
+    gracePeriodEndsAt: Date | null;
+    isSuspended: boolean;
+  }>;
+
+  startGracePeriod(userId: string): Promise<void>;
+  suspendUser(userId: string, reason: string): Promise<void>;
+  unsuspendUser(userId: string, actorId?: string): Promise<void>;
+  resetUserMonthlyClicks(userId: string): Promise<void>;
+  
+  // Suspension history
+  createSuspensionHistoryEntry(entry: InsertSuspensionHistory): Promise<SuspensionHistory>;
+  getSuspensionHistory(userId: string, limit?: number): Promise<SuspensionHistory[]>;
+  getAllSuspensionHistory(page: number, limit: number): Promise<{ entries: SuspensionHistory[]; total: number }>;
+
+  // Check if user can create offer/domain
+  canUserCreateOffer(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }>;
+  canUserCreateDomain(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }>;
+  canUserDowngradeToPlan(userId: string, newPlanId: number): Promise<{ allowed: boolean; reason?: string; offersExcess?: number; domainsExcess?: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -531,6 +562,13 @@ export class DatabaseStorage implements IStorage {
 
   async createClickLog(log: InsertClickLog): Promise<ClickLog> {
     const [created] = await db.insert(clickLogs).values(log).returning();
+    
+    // Increment monthly clicks counter for the user
+    // Only count "black" redirects as they represent real advertiser traffic
+    if (log.userId && log.redirectedTo === 'black') {
+      await this.incrementUserMonthlyClicks(log.userId);
+    }
+    
     return created;
   }
 
@@ -1224,6 +1262,334 @@ export class DatabaseStorage implements IStorage {
       })),
       total: Number(countResult?.count || 0),
     };
+  }
+
+  // ==========================================
+  // PLAN LIMITS AND SUSPENSION MANAGEMENT
+  // ==========================================
+
+  async getUserOffersCount(userId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(offers)
+      .where(eq(offers.userId, userId));
+    return result?.count || 0;
+  }
+
+  async getUserDomainsCount(userId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(domains)
+      .where(eq(domains.userId, userId));
+    return result?.count || 0;
+  }
+
+  async getMonthlyClicksForUser(userId: string): Promise<number> {
+    const user = await this.getUser(userId);
+    return user?.clicksUsedThisMonth || 0;
+  }
+
+  async incrementUserMonthlyClicks(userId: string): Promise<{
+    clicksUsed: number;
+    clicksLimit: number | null;
+    isOverLimit: boolean;
+    gracePeriodEndsAt: Date | null;
+    isSuspended: boolean;
+  }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { clicksUsed: 0, clicksLimit: null, isOverLimit: false, gracePeriodEndsAt: null, isSuspended: false };
+    }
+
+    const plan = user.planId ? await this.getPlan(user.planId) : null;
+    const now = new Date();
+
+    // Check if we need to reset the monthly clicks
+    // Reset happens on the subscription anniversary date
+    let clicksUsed = user.clicksUsedThisMonth || 0;
+    let shouldReset = false;
+
+    if (user.clicksResetDate) {
+      if (now >= user.clicksResetDate) {
+        shouldReset = true;
+        clicksUsed = 0;
+      }
+    } else if (user.subscriptionStartDate) {
+      // Initialize clicksResetDate based on subscription start date
+      const resetDate = new Date(user.subscriptionStartDate);
+      resetDate.setMonth(resetDate.getMonth() + 1);
+      if (now >= resetDate) {
+        shouldReset = true;
+        clicksUsed = 0;
+      }
+    }
+
+    // Increment clicks
+    clicksUsed += 1;
+
+    // Determine the next reset date
+    let nextResetDate = user.clicksResetDate;
+    if (shouldReset && user.subscriptionStartDate) {
+      const subStart = new Date(user.subscriptionStartDate);
+      const today = new Date();
+      // Find the next anniversary
+      let nextReset = new Date(subStart);
+      while (nextReset <= today) {
+        nextReset.setMonth(nextReset.getMonth() + 1);
+      }
+      nextResetDate = nextReset;
+    } else if (!nextResetDate && user.subscriptionStartDate) {
+      const subStart = new Date(user.subscriptionStartDate);
+      nextResetDate = new Date(subStart);
+      nextResetDate.setMonth(nextResetDate.getMonth() + 1);
+    }
+
+    // Update user
+    const updateData: any = {
+      clicksUsedThisMonth: clicksUsed,
+    };
+    if (nextResetDate) {
+      updateData.clicksResetDate = nextResetDate;
+    }
+
+    await this.updateUser(userId, updateData);
+
+    const clicksLimit = plan?.isUnlimited ? null : (plan?.maxClicks ?? null);
+    const isOverLimit = clicksLimit !== null && clicksUsed > clicksLimit;
+    const isSuspended = user.suspendedAt !== null;
+
+    return {
+      clicksUsed,
+      clicksLimit,
+      isOverLimit,
+      gracePeriodEndsAt: user.gracePeriodEndsAt,
+      isSuspended,
+    };
+  }
+
+  async startGracePeriod(userId: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+
+    const gracePeriodEndsAt = new Date();
+    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 48);
+
+    await this.updateUser(userId, { gracePeriodEndsAt });
+
+    // Log the event
+    await this.createSuspensionHistoryEntry({
+      userId,
+      event: 'grace_started',
+      reason: 'clicks_exceeded',
+      details: `Monthly click limit exceeded. Grace period until ${gracePeriodEndsAt.toISOString()}`,
+      actorType: 'system',
+      clicksAtEvent: user.clicksUsedThisMonth,
+      planIdAtEvent: user.planId,
+    });
+  }
+
+  async suspendUser(userId: string, reason: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+
+    const now = new Date();
+    await this.updateUser(userId, {
+      suspendedAt: now,
+      suspensionReason: reason,
+      gracePeriodEndsAt: null,
+    });
+
+    // Log the event
+    await this.createSuspensionHistoryEntry({
+      userId,
+      event: 'suspended',
+      reason,
+      details: `User suspended: ${reason}`,
+      actorType: 'system',
+      clicksAtEvent: user.clicksUsedThisMonth,
+      planIdAtEvent: user.planId,
+    });
+  }
+
+  async unsuspendUser(userId: string, actorId?: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) return;
+
+    await this.updateUser(userId, {
+      suspendedAt: null,
+      suspensionReason: null,
+      gracePeriodEndsAt: null,
+    });
+
+    // Log the event
+    await this.createSuspensionHistoryEntry({
+      userId,
+      event: actorId ? 'admin_override' : 'unsuspended',
+      reason: 'plan_upgrade',
+      details: actorId ? `Admin override by ${actorId}` : 'Automatic unsuspension due to plan upgrade',
+      actorId: actorId || null,
+      actorType: actorId ? 'admin' : 'system',
+      clicksAtEvent: user.clicksUsedThisMonth,
+      planIdAtEvent: user.planId,
+    });
+  }
+
+  async resetUserMonthlyClicks(userId: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user || !user.subscriptionStartDate) return;
+
+    // Calculate next reset date based on subscription anniversary
+    const subStart = new Date(user.subscriptionStartDate);
+    const today = new Date();
+    let nextReset = new Date(subStart);
+    while (nextReset <= today) {
+      nextReset.setMonth(nextReset.getMonth() + 1);
+    }
+
+    await this.updateUser(userId, {
+      clicksUsedThisMonth: 0,
+      clicksResetDate: nextReset,
+    });
+  }
+
+  // ==========================================
+  // SUSPENSION HISTORY
+  // ==========================================
+
+  async createSuspensionHistoryEntry(entry: InsertSuspensionHistory): Promise<SuspensionHistory> {
+    const [created] = await db.insert(suspensionHistory).values(entry).returning();
+    return created;
+  }
+
+  async getSuspensionHistory(userId: string, limitCount: number = 50): Promise<SuspensionHistory[]> {
+    return db
+      .select()
+      .from(suspensionHistory)
+      .where(eq(suspensionHistory.userId, userId))
+      .orderBy(desc(suspensionHistory.createdAt))
+      .limit(limitCount);
+  }
+
+  async getAllSuspensionHistory(page: number, limitCount: number): Promise<{ entries: SuspensionHistory[]; total: number }> {
+    const offset = (page - 1) * limitCount;
+
+    const entries = await db
+      .select()
+      .from(suspensionHistory)
+      .orderBy(desc(suspensionHistory.createdAt))
+      .limit(limitCount)
+      .offset(offset);
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(suspensionHistory);
+
+    return {
+      entries,
+      total: Number(countResult?.count || 0),
+    };
+  }
+
+  // ==========================================
+  // LIMIT CHECKS
+  // ==========================================
+
+  async canUserCreateOffer(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { allowed: false, reason: 'user_not_found', currentCount: 0, limit: null };
+    }
+
+    // Check if user is suspended
+    if (user.suspendedAt) {
+      return { allowed: false, reason: 'user_suspended', currentCount: 0, limit: null };
+    }
+
+    const plan = user.planId ? await this.getPlan(user.planId) : null;
+    if (!plan) {
+      return { allowed: false, reason: 'no_active_plan', currentCount: 0, limit: null };
+    }
+
+    // Unlimited plan
+    if (plan.isUnlimited) {
+      const currentCount = await this.getUserOffersCount(userId);
+      return { allowed: true, currentCount, limit: null };
+    }
+
+    const currentCount = await this.getUserOffersCount(userId);
+    const limit = plan.maxOffers;
+
+    if (currentCount >= limit) {
+      return { allowed: false, reason: 'limit_reached', currentCount, limit };
+    }
+
+    return { allowed: true, currentCount, limit };
+  }
+
+  async canUserCreateDomain(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { allowed: false, reason: 'user_not_found', currentCount: 0, limit: null };
+    }
+
+    // Check if user is suspended
+    if (user.suspendedAt) {
+      return { allowed: false, reason: 'user_suspended', currentCount: 0, limit: null };
+    }
+
+    const plan = user.planId ? await this.getPlan(user.planId) : null;
+    if (!plan) {
+      return { allowed: false, reason: 'no_active_plan', currentCount: 0, limit: null };
+    }
+
+    // Unlimited plan
+    if (plan.isUnlimited) {
+      const currentCount = await this.getUserDomainsCount(userId);
+      return { allowed: true, currentCount, limit: null };
+    }
+
+    const currentCount = await this.getUserDomainsCount(userId);
+    const limit = plan.maxDomains;
+
+    if (currentCount >= limit) {
+      return { allowed: false, reason: 'limit_reached', currentCount, limit };
+    }
+
+    return { allowed: true, currentCount, limit };
+  }
+
+  async canUserDowngradeToPlan(userId: string, newPlanId: number): Promise<{ allowed: boolean; reason?: string; offersExcess?: number; domainsExcess?: number }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return { allowed: false, reason: 'user_not_found' };
+    }
+
+    const newPlan = await this.getPlan(newPlanId);
+    if (!newPlan) {
+      return { allowed: false, reason: 'plan_not_found' };
+    }
+
+    // Unlimited plan allows everything
+    if (newPlan.isUnlimited) {
+      return { allowed: true };
+    }
+
+    const offersCount = await this.getUserOffersCount(userId);
+    const domainsCount = await this.getUserDomainsCount(userId);
+
+    const offersExcess = Math.max(0, offersCount - newPlan.maxOffers);
+    const domainsExcess = Math.max(0, domainsCount - newPlan.maxDomains);
+
+    if (offersExcess > 0 || domainsExcess > 0) {
+      return {
+        allowed: false,
+        reason: 'usage_exceeds_limits',
+        offersExcess,
+        domainsExcess,
+      };
+    }
+
+    return { allowed: true };
   }
 }
 
