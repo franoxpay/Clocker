@@ -230,6 +230,12 @@ const translations: Record<Language, Record<string, string>> = {
     "error.slugExists": "Esta slug já existe neste domínio",
     "error.limitReached": "Limite atingido",
     "error.upgradeRequired": "Upgrade necessário",
+    "clickJourney.title": "JORNADA DE CLIQUES",
+    "clickJourney.totalClicks": "cliques totais",
+    "clickJourney.nextMilestone": "Próximo marco",
+    "clickJourney.complete": "completo",
+    "clickJourney.blackClicks": "Cliques black",
+    "clickJourney.whiteClicks": "Cliques white",
   },
   "en": {
     "nav.dashboard": "Dashboard",
@@ -452,6 +458,12 @@ const translations: Record<Language, Record<string, string>> = {
     "error.slugExists": "This slug already exists on this domain",
     "error.limitReached": "Limit reached",
     "error.upgradeRequired": "Upgrade required",
+    "clickJourney.title": "CLICK JOURNEY",
+    "clickJourney.totalClicks": "total clicks",
+    "clickJourney.nextMilestone": "Next milestone",
+    "clickJourney.complete": "complete",
+    "clickJourney.blackClicks": "Black clicks",
+    "clickJourney.whiteClicks": "White clicks",
   },
 };
 

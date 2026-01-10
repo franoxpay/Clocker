@@ -2523,6 +2523,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/user/click-stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const stats = await storage.getUserClickStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching click stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/subscription/checkout", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const configured = await isStripeConfigured();

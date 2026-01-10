@@ -1,4 +1,6 @@
 import { Link, useLocation } from "wouter";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -14,6 +16,12 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -31,6 +39,9 @@ import {
   ArrowLeft,
   Activity,
   Wallet,
+  Trophy,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 const logoPreta = "/images/logo-dark.png";
 const logoBranca = "/images/logo-light.png";
@@ -59,11 +70,61 @@ interface AppSidebarProps {
   isAdmin?: boolean;
 }
 
+const MILESTONES = [
+  { target: 1000, label: "1K" },
+  { target: 10000, label: "10K" },
+  { target: 50000, label: "50K" },
+  { target: 100000, label: "100K" },
+  { target: 250000, label: "250K" },
+  { target: 500000, label: "500K" },
+  { target: 1000000, label: "1M" },
+  { target: 5000000, label: "5M" },
+  { target: 10000000, label: "10M" },
+];
+
+function formatClickCount(count: number): string {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+  }
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  }
+  return count.toLocaleString();
+}
+
+function getNextMilestone(clicks: number) {
+  for (const milestone of MILESTONES) {
+    if (clicks < milestone.target) {
+      return milestone;
+    }
+  }
+  return { target: clicks * 2, label: formatClickCount(clicks * 2) };
+}
+
+function getPreviousMilestone(clicks: number) {
+  let prev = { target: 0, label: "0" };
+  for (const milestone of MILESTONES) {
+    if (clicks >= milestone.target) {
+      prev = milestone;
+    } else {
+      break;
+    }
+  }
+  return prev;
+}
+
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const { t } = useLanguage();
   const { user } = useAuth();
   const { theme } = useTheme();
   const [location] = useLocation();
+  const [isJourneyOpen, setIsJourneyOpen] = useState(false);
+
+  const { data: clickStats } = useQuery<{ totalClicks: number; blackClicks: number; whiteClicks: number }>({
+    queryKey: ["/api/user/click-stats"],
+    enabled: !!user && !isAdmin,
+    refetchInterval: 60000,
+  });
 
   const navItems = isAdmin ? adminNavItems : userNavItems;
   const groupLabel = isAdmin ? t("nav.admin") : "Menu";
@@ -164,6 +225,85 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
+        {!isAdmin && clickStats && (
+          <Collapsible
+            open={isJourneyOpen}
+            onOpenChange={setIsJourneyOpen}
+            className="mb-3"
+          >
+            <CollapsibleTrigger asChild>
+              <button
+                className="w-full flex items-center gap-2 p-2 rounded-md hover-elevate text-left"
+                data-testid="button-click-journey"
+              >
+                <div className="p-1.5 rounded-md bg-primary/10">
+                  <Trophy className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("clickJourney.title")}
+                  </p>
+                  <p className="text-sm font-bold" data-testid="text-total-clicks">
+                    {formatClickCount(clickStats.totalClicks)} cliques
+                  </p>
+                </div>
+                {isJourneyOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-2 px-2">
+              {(() => {
+                const total = clickStats.totalClicks;
+                const nextMilestone = getNextMilestone(total);
+                const prevMilestone = getPreviousMilestone(total);
+                const progressRange = nextMilestone.target - prevMilestone.target;
+                const progressCurrent = total - prevMilestone.target;
+                const progressPercent = progressRange > 0 ? Math.min(100, (progressCurrent / progressRange) * 100) : 0;
+
+                return (
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold" data-testid="text-clicks-expanded">
+                        {formatClickCount(total)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("clickJourney.totalClicks")}
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{prevMilestone.label}</span>
+                        <span>{nextMilestone.label}</span>
+                      </div>
+                      <Progress value={progressPercent} className="h-2" />
+                      <p className="text-xs text-center text-primary" data-testid="text-progress">
+                        {prevMilestone.label} - {nextMilestone.label} · {Math.round(progressPercent)}% {t("clickJourney.complete")}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 rounded-md bg-muted/50">
+                        <p className="text-muted-foreground">{t("clickJourney.blackClicks")}</p>
+                        <p className="font-semibold" data-testid="text-black-clicks">
+                          {formatClickCount(clickStats.blackClicks)}
+                        </p>
+                      </div>
+                      <div className="p-2 rounded-md bg-muted/50">
+                        <p className="text-muted-foreground">{t("clickJourney.whiteClicks")}</p>
+                        <p className="font-semibold" data-testid="text-white-clicks">
+                          {formatClickCount(clickStats.whiteClicks)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="w-9 h-9">
             <AvatarImage
