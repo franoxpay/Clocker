@@ -75,6 +75,10 @@ export default function Domains() {
   const createMutation = useMutation({
     mutationFn: async (subdomain: string) => {
       const res = await apiRequest("POST", "/api/domains", { subdomain });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Error adding domain");
+      }
       return res.json();
     },
     onSuccess: () => {
@@ -87,10 +91,34 @@ export default function Domains() {
         description: language === "pt-BR" ? "Domínio adicionado" : "Domain added",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
+      let errorMessage = language === "pt-BR" ? "Erro ao adicionar domínio" : "Error adding domain";
+      let errorTitle = t("common.error");
+      
+      if (error.message.includes("already exists")) {
+        errorMessage = language === "pt-BR" 
+          ? "Este domínio já está cadastrado." 
+          : "This domain already exists.";
+      } else if (error.message.includes("suspended") || error.message.includes("USER_SUSPENDED")) {
+        errorTitle = language === "pt-BR" ? "Conta Suspensa" : "Account Suspended";
+        errorMessage = language === "pt-BR" 
+          ? "Sua conta está suspensa. Atualize seu plano para continuar." 
+          : "Your account is suspended. Please upgrade your plan to continue.";
+      } else if (error.message.includes("active plan") || error.message.includes("NO_ACTIVE_PLAN")) {
+        errorTitle = language === "pt-BR" ? "Plano Necessário" : "Plan Required";
+        errorMessage = language === "pt-BR" 
+          ? "Você precisa de um plano ativo para adicionar domínios." 
+          : "You need an active plan to add domains.";
+      } else if (error.message.includes("maximum number of domains") || error.message.includes("DOMAIN_LIMIT_REACHED")) {
+        errorTitle = language === "pt-BR" ? "Limite de Domínios Atingido" : "Domain Limit Reached";
+        errorMessage = language === "pt-BR" 
+          ? "Você atingiu o limite máximo de domínios do seu plano. Atualize seu plano para adicionar mais domínios." 
+          : "You have reached the maximum domain limit for your plan. Upgrade your plan to add more domains.";
+      }
+      
       toast({
-        title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao adicionar domínio" : "Error adding domain",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive",
       });
     },

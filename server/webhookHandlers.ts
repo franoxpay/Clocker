@@ -164,11 +164,37 @@ export class WebhookHandlers {
       updateData.subscriptionStartDate = new Date(subscription.current_period_start * 1000);
     }
 
+    let newPlan = null;
     if (subscription.items?.data?.[0]?.price?.id) {
       const priceId = subscription.items.data[0].price.id;
-      const plan = await storage.getPlanByStripePriceId(priceId);
-      if (plan) {
-        updateData.planId = plan.id;
+      newPlan = await storage.getPlanByStripePriceId(priceId);
+      if (newPlan) {
+        updateData.planId = newPlan.id;
+      }
+    }
+
+    // Auto-unsuspend if user upgraded and new plan accommodates their usage
+    if (status === 'active' && user.suspendedAt && newPlan) {
+      const clicksThisMonth = user.clicksUsedThisMonth || 0;
+      
+      // Check if new plan can accommodate the user's current click usage
+      if (newPlan.isUnlimited || clicksThisMonth <= newPlan.maxClicks) {
+        updateData.suspendedAt = null;
+        updateData.suspensionReason = null;
+        updateData.gracePeriodEndsAt = null;
+        
+        // Log the unsuspension
+        await storage.createSuspensionHistoryEntry({
+          userId: user.id,
+          event: 'unsuspended',
+          reason: 'plan_upgrade',
+          details: `User upgraded to plan ${newPlan.name} which accommodates their usage`,
+          actorType: 'system',
+          clicksAtEvent: clicksThisMonth,
+          planIdAtEvent: newPlan.id,
+        });
+        
+        console.log(`[WebhookHandlers] Auto-unsuspended user ${user.id} due to plan upgrade to ${newPlan.name}`);
       }
     }
 

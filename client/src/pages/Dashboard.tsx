@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
 import { 
   LineChart, 
   Line, 
@@ -14,8 +18,8 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { MousePointerClick, Link as LinkIcon, Globe, TrendingUp } from "lucide-react";
-import { format } from "date-fns";
+import { MousePointerClick, Link as LinkIcon, Globe, TrendingUp, AlertTriangle, AlertCircle, Clock } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 
 interface DashboardStats {
@@ -39,13 +43,51 @@ interface DashboardStats {
   }>;
 }
 
+interface UserUsage {
+  offersCount: number;
+  offersLimit: number | null;
+  domainsCount: number;
+  domainsLimit: number | null;
+  clicksThisMonth: number;
+  clicksLimit: number | null;
+  isUnlimited: boolean;
+  gracePeriodEndsAt: string | null;
+  isSuspended: boolean;
+  clicksResetDate: string | null;
+}
+
 export default function Dashboard() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
+  const [, navigate] = useLocation();
 
   const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/dashboard/stats"],
   });
+
+  const { data: usage } = useQuery<UserUsage>({
+    queryKey: ["/api/user/usage"],
+    refetchInterval: 30000,
+  });
+
+  const getClicksPercent = () => {
+    if (!usage || usage.isUnlimited || !usage.clicksLimit) return 0;
+    return Math.min((usage.clicksThisMonth / usage.clicksLimit) * 100, 100);
+  };
+
+  const getProgressColor = () => {
+    const percent = getClicksPercent();
+    if (percent >= 100) return "bg-destructive";
+    if (percent >= 95) return "bg-orange-500";
+    if (percent >= 80) return "bg-yellow-500";
+    return "bg-primary";
+  };
+
+  const formatClicks = (num: number) => {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(0)}k`;
+    return num.toString();
+  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -85,15 +127,100 @@ export default function Dashboard() {
         <h1 className="text-3xl font-semibold" data-testid="title-dashboard">
           {t("dashboard.title")}
         </h1>
-        {user?.clicksUsedThisMonth !== undefined && user?.planId && (
-          <div className="text-sm text-muted-foreground">
-            {language === "pt-BR" ? "Clicks usados: " : "Clicks used: "}
-            <span className="font-medium text-foreground">
-              {user.clicksUsedThisMonth.toLocaleString()}
-            </span>
-          </div>
-        )}
       </div>
+
+      {usage?.isSuspended && (
+        <Alert variant="destructive" data-testid="alert-suspended">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>{language === "pt-BR" ? "Conta Suspensa" : "Account Suspended"}</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <span>
+              {language === "pt-BR" 
+                ? "Sua conta foi suspensa por exceder o limite de cliques. Suas ofertas não estão funcionando." 
+                : "Your account has been suspended for exceeding the click limit. Your offers are not working."}
+            </span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => navigate("/subscription")}
+              data-testid="button-upgrade-suspended"
+            >
+              {language === "pt-BR" ? "Fazer Upgrade" : "Upgrade Now"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {usage?.gracePeriodEndsAt && !usage?.isSuspended && (
+        <Alert variant="destructive" className="border-orange-500 bg-orange-500/10" data-testid="alert-grace-period">
+          <Clock className="h-4 w-4 text-orange-500" />
+          <AlertTitle className="text-orange-600 dark:text-orange-400">
+            {language === "pt-BR" ? "Período de Tolerância" : "Grace Period"}
+          </AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <span>
+              {language === "pt-BR" 
+                ? `Você excedeu seu limite de cliques. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.` 
+                : `You have exceeded your click limit. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`}
+            </span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => navigate("/subscription")}
+              data-testid="button-upgrade-grace"
+            >
+              {language === "pt-BR" ? "Fazer Upgrade Agora" : "Upgrade Now"}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {usage && !usage.isUnlimited && usage.clicksLimit && getClicksPercent() >= 80 && getClicksPercent() < 100 && !usage.gracePeriodEndsAt && (
+        <Alert variant="default" className={getClicksPercent() >= 95 ? "border-orange-500 bg-orange-500/10" : "border-yellow-500 bg-yellow-500/10"} data-testid="alert-clicks-warning">
+          <AlertTriangle className={`h-4 w-4 ${getClicksPercent() >= 95 ? "text-orange-500" : "text-yellow-500"}`} />
+          <AlertTitle className={getClicksPercent() >= 95 ? "text-orange-600 dark:text-orange-400" : "text-yellow-600 dark:text-yellow-400"}>
+            {getClicksPercent() >= 95 
+              ? (language === "pt-BR" ? "Limite Quase Atingido!" : "Almost at Limit!")
+              : (language === "pt-BR" ? "Atenção ao Limite de Cliques" : "Click Limit Warning")}
+          </AlertTitle>
+          <AlertDescription>
+            {language === "pt-BR" 
+              ? `Você usou ${getClicksPercent().toFixed(0)}% do seu limite mensal de cliques. Considere fazer upgrade do seu plano.` 
+              : `You have used ${getClicksPercent().toFixed(0)}% of your monthly click limit. Consider upgrading your plan.`}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {usage && !usage.isUnlimited && usage.clicksLimit && (
+        <Card data-testid="card-clicks-usage">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center justify-between gap-2">
+              <span>{language === "pt-BR" ? "Uso de Cliques Mensal" : "Monthly Click Usage"}</span>
+              <span className="text-muted-foreground font-normal">
+                {formatClicks(usage.clicksThisMonth)} / {formatClicks(usage.clicksLimit)}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="relative h-3 w-full rounded-full bg-secondary overflow-hidden">
+              <div 
+                className={`h-full rounded-full ${getProgressColor()}`} 
+                style={{ width: `${getClicksPercent()}%`, transition: 'width 0.3s ease' }}
+                data-testid="progress-clicks"
+              />
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>{getClicksPercent().toFixed(1)}%</span>
+              {usage.clicksResetDate && (
+                <span>
+                  {language === "pt-BR" ? "Renova em: " : "Resets: "}
+                  {format(new Date(usage.clicksResetDate), "dd/MM/yyyy", { locale: language === "pt-BR" ? ptBR : enUS })}
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (

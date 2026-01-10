@@ -2501,11 +2501,21 @@ export async function registerRoutes(
   app.get("/api/user/usage", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
       const usage = await storage.getUserUsage(userId);
+      const plan = user?.planId ? await storage.getPlan(user.planId) : null;
+      
       res.json({
         offersCount: usage.offers.used,
+        offersLimit: plan?.isUnlimited ? null : (usage.offers.limit ?? null),
         domainsCount: usage.domains.used,
-        clicksThisMonth: usage.clicks.used,
+        domainsLimit: plan?.isUnlimited ? null : (usage.domains.limit ?? null),
+        clicksThisMonth: user?.clicksUsedThisMonth ?? 0,
+        clicksLimit: plan?.isUnlimited ? null : (plan?.maxClicks ?? null),
+        isUnlimited: plan?.isUnlimited ?? false,
+        gracePeriodEndsAt: user?.gracePeriodEndsAt ?? null,
+        isSuspended: user?.suspendedAt !== null,
+        clicksResetDate: user?.clicksResetDate ?? null,
       });
     } catch (error) {
       console.error("Error fetching user usage:", error);
@@ -2559,6 +2569,30 @@ export async function registerRoutes(
       
       if (!plan) {
         return res.status(404).json({ message: "Plan not found" });
+      }
+
+      // Check if this is a downgrade and if usage exceeds new plan limits
+      if (!plan.isUnlimited) {
+        const offersCount = await storage.getUserOffersCount(userId);
+        const domainsCount = await storage.getUserDomainsCount(userId);
+
+        if (offersCount > plan.maxOffers) {
+          return res.status(400).json({ 
+            message: `You have ${offersCount} offers but this plan only allows ${plan.maxOffers}. Please delete some offers before downgrading.`,
+            code: "DOWNGRADE_OFFERS_EXCEEDED",
+            currentOffers: offersCount,
+            planLimit: plan.maxOffers
+          });
+        }
+
+        if (domainsCount > plan.maxDomains) {
+          return res.status(400).json({ 
+            message: `You have ${domainsCount} domains but this plan only allows ${plan.maxDomains}. Please delete some domains before downgrading.`,
+            code: "DOWNGRADE_DOMAINS_EXCEEDED",
+            currentDomains: domainsCount,
+            planLimit: plan.maxDomains
+          });
+        }
       }
 
       const paymentMethods = await stripe.paymentMethods.list({
@@ -2761,14 +2795,50 @@ export async function registerRoutes(
   app.post("/api/admin/users/:id/suspend", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.params.id;
-      const { suspend } = req.body;
-      await storage.updateUser(userId, {
-        suspendedAt: suspend ? new Date() : null,
-        suspensionReason: suspend ? "Admin suspended" : null,
-      });
+      const adminId = (req.user as any).id;
+      const { suspend, reason } = req.body;
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      if (suspend) {
+        await storage.suspendUser(userId, reason || 'admin_action', adminId);
+      } else {
+        await storage.unsuspendUser(userId, adminId);
+      }
+      
       res.json({ success: true });
     } catch (error) {
       console.error("Error suspending user:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/users/:id/suspension-history", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const history = await storage.getSuspensionHistory(userId, 100);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching suspension history:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/reset-clicks", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      await storage.resetUserMonthlyClicks(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resetting clicks:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

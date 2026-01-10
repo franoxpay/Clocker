@@ -133,15 +133,31 @@ export default function Offers() {
     },
     onError: (error: Error) => {
       let errorMessage = language === "pt-BR" ? "Erro ao criar oferta" : "Error creating offer";
+      let errorTitle = t("common.error");
       
       if (error.message.includes("Slug already exists")) {
         errorMessage = language === "pt-BR" 
           ? "Este slug já existe neste domínio. Escolha outro slug." 
           : "This slug already exists on this domain. Choose a different slug.";
+      } else if (error.message.includes("suspended") || error.message.includes("USER_SUSPENDED")) {
+        errorTitle = language === "pt-BR" ? "Conta Suspensa" : "Account Suspended";
+        errorMessage = language === "pt-BR" 
+          ? "Sua conta está suspensa. Atualize seu plano para continuar." 
+          : "Your account is suspended. Please upgrade your plan to continue.";
+      } else if (error.message.includes("active plan") || error.message.includes("NO_ACTIVE_PLAN")) {
+        errorTitle = language === "pt-BR" ? "Plano Necessário" : "Plan Required";
+        errorMessage = language === "pt-BR" 
+          ? "Você precisa de um plano ativo para criar ofertas." 
+          : "You need an active plan to create offers.";
+      } else if (error.message.includes("maximum number of offers") || error.message.includes("OFFER_LIMIT_REACHED")) {
+        errorTitle = language === "pt-BR" ? "Limite de Ofertas Atingido" : "Offer Limit Reached";
+        errorMessage = language === "pt-BR" 
+          ? "Você atingiu o limite máximo de ofertas do seu plano. Atualize seu plano para criar mais ofertas." 
+          : "You have reached the maximum offer limit for your plan. Upgrade your plan to create more offers.";
       }
       
       toast({
-        title: t("common.error"),
+        title: errorTitle,
         description: errorMessage,
         variant: "destructive",
       });
