@@ -85,6 +85,19 @@ Key entities defined in `shared/schema.ts`:
 
 ## Recent Changes
 
+### January 10, 2026
+- **Immediate Payment Fix**: Changed `payment_behavior` from `'default_incomplete'` to `'error_if_incomplete'` to charge immediately when user has saved cards
+- **Card Selector Dialog**: When subscribing with multiple saved cards:
+  - Shows Dialog with RadioGroup to select which card to use
+  - If only 1 card exists, uses it directly without dialog
+  - If no cards exist, redirects to Stripe checkout to add card
+  - Uses `paymentMethodId` parameter in checkout request
+- **Payment Method Validation**: Backend validates ownership via `stripe.paymentMethods.retrieve()` and checks `pm.customer === customerId`
+- **Fallback Card Retry**: On invoice.payment_failed:
+  - Lists all customer cards and filters out the failed one
+  - If other cards exist and invoice is open, updates invoice default_payment_method and retries payment
+  - Only marks user as past_due if all attempts fail
+
 ### January 9, 2026 (Update 2)
 - **Setup Mode Default Card**: When adding a card via setup checkout:
   - Checkout session now includes metadata (userId, setupMode: 'true')
