@@ -1,10 +1,10 @@
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { LanguageProvider } from "@/contexts/LanguageContext";
+import { LanguageProvider, useLanguage } from "@/contexts/LanguageContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { useAuth } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -13,6 +13,9 @@ import { LanguageToggle } from "@/components/LanguageToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, X } from "lucide-react";
+import { useState } from "react";
 
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
@@ -62,9 +65,29 @@ function AdminRoutes() {
   );
 }
 
+interface UserUsage {
+  clicksThisMonth: number;
+  clicksLimit: number | null;
+  isUnlimited: boolean;
+  gracePeriodEndsAt: string | null;
+  isSuspended: boolean;
+}
+
 function AuthenticatedLayout() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { language } = useLanguage();
+  const { user } = useAuth();
   const isAdminRoute = location.startsWith("/confg-admin");
+  const [dismissedAlert, setDismissedAlert] = useState(false);
+
+  const { data: usage } = useQuery<UserUsage>({
+    queryKey: ["/api/user/usage"],
+    refetchInterval: 60000,
+    enabled: !user?.isAdmin,
+  });
+
+  const isOverLimit = usage && !usage.isUnlimited && usage.clicksLimit && usage.clicksThisMonth >= usage.clicksLimit;
+  const showLimitAlert = isOverLimit && !dismissedAlert && !isAdminRoute;
 
   const style = {
     "--sidebar-width": "16rem",
@@ -86,6 +109,37 @@ function AuthenticatedLayout() {
                 <ThemeToggle />
               </div>
             </header>
+            {showLimitAlert && (
+              <div className="flex items-center justify-between gap-3 px-4 py-2 bg-destructive/10 border-b border-destructive/20" data-testid="alert-click-limit-exceeded">
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-destructive font-medium">
+                    {language === "pt-BR" 
+                      ? "Você atingiu o limite de cliques do seu plano." 
+                      : "You have reached your plan's click limit."}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="destructive"
+                    onClick={() => navigate("/subscription")}
+                    data-testid="button-upgrade-limit"
+                  >
+                    {language === "pt-BR" ? "Fazer Upgrade" : "Upgrade Now"}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => setDismissedAlert(true)}
+                    data-testid="button-dismiss-limit-alert"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
             <main className="flex-1 overflow-auto">
               {isAdminRoute ? <AdminRoutes /> : <UserRoutes />}
             </main>

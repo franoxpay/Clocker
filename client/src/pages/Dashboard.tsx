@@ -191,37 +191,6 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {usage && !usage.isUnlimited && usage.clicksLimit && (
-        <Card data-testid="card-clicks-usage">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center justify-between gap-2">
-              <span>{language === "pt-BR" ? "Uso de Cliques Mensal" : "Monthly Click Usage"}</span>
-              <span className="text-muted-foreground font-normal">
-                {formatClicks(usage.clicksThisMonth)} / {formatClicks(usage.clicksLimit)}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="relative h-3 w-full rounded-full bg-secondary overflow-hidden">
-              <div 
-                className={`h-full rounded-full ${getProgressColor()}`} 
-                style={{ width: `${getClicksPercent()}%`, transition: 'width 0.3s ease' }}
-                data-testid="progress-clicks"
-              />
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{getClicksPercent().toFixed(1)}%</span>
-              {usage.clicksResetDate && (
-                <span>
-                  {language === "pt-BR" ? "Renova em: " : "Resets: "}
-                  {format(new Date(usage.clicksResetDate), "dd/MM/yyyy", { locale: language === "pt-BR" ? ptBR : enUS })}
-                </span>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card, index) => (
           <Card key={index}>
