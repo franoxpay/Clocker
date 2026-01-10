@@ -244,7 +244,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                     {t("clickJourney.title")}
                   </p>
                   <p className="text-sm font-bold" data-testid="text-total-clicks">
-                    {formatClickCount(clickStats.totalClicks)} cliques
+                    {formatClickCount(clickStats.totalClicks)} {t("clickJourney.totalClicks")}
                   </p>
                 </div>
                 {isJourneyOpen ? (
