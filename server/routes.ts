@@ -2512,17 +2512,33 @@ export async function registerRoutes(
       const paymentMethods = await stripe.paymentMethods.list({
         customer: customerId,
         type: 'card',
+        limit: 100,
       });
 
       if (paymentMethods.data.length > 0) {
-        const customer = await stripe.customers.retrieve(customerId) as any;
-        const defaultPaymentMethod = customer.invoice_settings?.default_payment_method || paymentMethods.data[0].id;
+        const { paymentMethodId } = req.body;
+        
+        let selectedPaymentMethod: string;
+        if (paymentMethodId) {
+          try {
+            const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+            if (pm.customer !== customerId) {
+              return res.status(400).json({ message: "Invalid payment method selected" });
+            }
+            selectedPaymentMethod = paymentMethodId;
+          } catch (err) {
+            return res.status(400).json({ message: "Invalid payment method selected" });
+          }
+        } else {
+          const customer = await stripe.customers.retrieve(customerId) as any;
+          selectedPaymentMethod = customer.invoice_settings?.default_payment_method || paymentMethods.data[0].id;
+        }
 
         const trialDays = plan.hasTrial ? plan.trialDays : undefined;
         
         let subscriptionConfig: any = {
           customer: customerId,
-          default_payment_method: defaultPaymentMethod,
+          default_payment_method: selectedPaymentMethod,
           metadata: { userId, planId: String(plan.id) },
         };
 
@@ -2550,24 +2566,31 @@ export async function registerRoutes(
 
         const subscription = await stripe.subscriptions.create({
           ...subscriptionConfig,
-          payment_behavior: 'default_incomplete',
+          payment_behavior: 'error_if_incomplete',
+          payment_settings: {
+            payment_method_options: {
+              card: {
+                request_three_d_secure: 'automatic',
+              },
+            },
+            save_default_payment_method: 'on_subscription',
+          },
           expand: ['latest_invoice.payment_intent'],
         });
         
         const subscriptionStatus = subscription.status;
+        const invoice = subscription.latest_invoice as any;
+        const paymentIntent = invoice?.payment_intent;
         
-        if (subscriptionStatus === 'incomplete') {
-          const invoice = subscription.latest_invoice as any;
-          const paymentIntent = invoice?.payment_intent;
-          
-          if (paymentIntent?.status === 'requires_action') {
-            return res.json({ 
-              requiresAction: true, 
-              clientSecret: paymentIntent.client_secret,
-              subscriptionId: subscription.id 
-            });
-          }
-          
+        if (paymentIntent?.status === 'requires_action' || paymentIntent?.status === 'requires_confirmation') {
+          return res.json({ 
+            requiresAction: true, 
+            clientSecret: paymentIntent.client_secret,
+            subscriptionId: subscription.id 
+          });
+        }
+        
+        if (subscriptionStatus === 'incomplete' || subscriptionStatus === 'incomplete_expired') {
           return res.status(400).json({ 
             message: "Payment failed. Please try again or use a different card." 
           });

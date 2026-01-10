@@ -8,6 +8,16 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import {
   Table,
   TableBody,
   TableCell,
@@ -91,6 +101,9 @@ export default function Subscription() {
   const searchParams = new URLSearchParams(searchString);
   const checkoutStatus = searchParams.get("checkout");
   const [checkoutError, setCheckoutError] = useState<{ message: string; showAddCard: boolean } | null>(null);
+  const [cardSelectorOpen, setCardSelectorOpen] = useState(false);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
 
   useEffect(() => {
     if (checkoutStatus === "success") {
@@ -157,7 +170,7 @@ export default function Subscription() {
   const activePlans = plans.filter(p => p.isActive);
 
   const checkoutMutation = useMutation({
-    mutationFn: async (payload: { priceId?: string; planId?: number }) => {
+    mutationFn: async (payload: { priceId?: string; planId?: number; paymentMethodId?: string }) => {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -356,11 +369,47 @@ export default function Subscription() {
   };
 
   const handleSelectPlan = (plan: Plan) => {
-    if (plan.stripePriceId) {
-      checkoutMutation.mutate({ priceId: plan.stripePriceId });
+    const paymentMethods = paymentMethodsData?.paymentMethods || [];
+    
+    if (paymentMethods.length > 1) {
+      setPendingPlan(plan);
+      const defaultCard = paymentMethods.find(pm => pm.isDefault) || paymentMethods[0];
+      setSelectedCardId(defaultCard?.id || null);
+      setCardSelectorOpen(true);
+    } else if (paymentMethods.length === 1) {
+      const payload: { priceId?: string; planId?: number; paymentMethodId?: string } = {
+        paymentMethodId: paymentMethods[0].id,
+      };
+      if (plan.stripePriceId) {
+        payload.priceId = plan.stripePriceId;
+      } else {
+        payload.planId = plan.id;
+      }
+      checkoutMutation.mutate(payload);
     } else {
-      checkoutMutation.mutate({ planId: plan.id });
+      if (plan.stripePriceId) {
+        checkoutMutation.mutate({ priceId: plan.stripePriceId });
+      } else {
+        checkoutMutation.mutate({ planId: plan.id });
+      }
     }
+  };
+
+  const handleConfirmSubscription = () => {
+    if (!pendingPlan || !selectedCardId) return;
+    
+    const payload: { priceId?: string; planId?: number; paymentMethodId?: string } = {
+      paymentMethodId: selectedCardId,
+    };
+    if (pendingPlan.stripePriceId) {
+      payload.priceId = pendingPlan.stripePriceId;
+    } else {
+      payload.planId = pendingPlan.id;
+    }
+    
+    setCardSelectorOpen(false);
+    setPendingPlan(null);
+    checkoutMutation.mutate(payload);
   };
 
   const isCurrentPlan = (planId: number) => user?.planId === planId;
@@ -792,6 +841,76 @@ export default function Subscription() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={cardSelectorOpen} onOpenChange={setCardSelectorOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {language === "pt-BR" ? "Selecionar Cartão" : "Select Card"}
+            </DialogTitle>
+            <DialogDescription>
+              {language === "pt-BR" 
+                ? "Escolha qual cartão usar para esta assinatura."
+                : "Choose which card to use for this subscription."}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <RadioGroup
+            value={selectedCardId || ""}
+            onValueChange={(value) => setSelectedCardId(value)}
+            className="space-y-3"
+          >
+            {(paymentMethodsData?.paymentMethods || []).map((pm) => (
+              <div 
+                key={pm.id} 
+                className="flex items-center space-x-3 p-3 border rounded-lg hover-elevate cursor-pointer"
+                onClick={() => setSelectedCardId(pm.id)}
+                data-testid={`radio-card-${pm.id}`}
+              >
+                <RadioGroupItem value={pm.id} id={pm.id} />
+                <Label htmlFor={pm.id} className="flex-1 cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="font-medium capitalize">{pm.brand}</span>
+                    <span className="text-muted-foreground">**** {pm.last4}</span>
+                    <span className="text-muted-foreground text-sm">
+                      {pm.expMonth.toString().padStart(2, '0')}/{pm.expYear.toString().slice(-2)}
+                    </span>
+                    {pm.isDefault && (
+                      <Badge variant="secondary" className="text-xs">
+                        {language === "pt-BR" ? "Padrão" : "Default"}
+                      </Badge>
+                    )}
+                  </div>
+                </Label>
+              </div>
+            ))}
+          </RadioGroup>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCardSelectorOpen(false);
+                setPendingPlan(null);
+              }}
+              data-testid="button-cancel-card-selection"
+            >
+              {language === "pt-BR" ? "Cancelar" : "Cancel"}
+            </Button>
+            <Button
+              onClick={handleConfirmSubscription}
+              disabled={!selectedCardId || checkoutMutation.isPending}
+              data-testid="button-confirm-card-selection"
+            >
+              {checkoutMutation.isPending && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              {language === "pt-BR" ? "Confirmar Assinatura" : "Confirm Subscription"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

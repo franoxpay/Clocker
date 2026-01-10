@@ -200,13 +200,45 @@ export class WebhookHandlers {
 
   private static async handlePaymentFailed(invoice: any): Promise<void> {
     const customerId = invoice.customer;
+    const invoiceId = invoice.id;
+    const failedPaymentMethodId = invoice.default_payment_method || invoice.payment_intent?.payment_method;
 
-    console.log(`[WebhookHandlers] invoice.payment_failed - customerId: ${customerId}`);
+    console.log(`[WebhookHandlers] invoice.payment_failed - customerId: ${customerId}, invoiceId: ${invoiceId}, failedPM: ${failedPaymentMethodId}`);
 
     const user = await storage.getUserByStripeCustomerId(customerId);
     if (!user) {
       console.log(`[WebhookHandlers] User with stripeCustomerId ${customerId} not found, skipping update`);
       return;
+    }
+
+    try {
+      const stripe = await getStripeClient();
+      
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: customerId,
+        type: 'card',
+      });
+
+      const otherCards = paymentMethods.data.filter(pm => pm.id !== failedPaymentMethodId);
+      
+      if (otherCards.length > 0 && invoice.status === 'open') {
+        const nextCard = otherCards[0];
+        console.log(`[WebhookHandlers] Trying fallback card ${nextCard.id} for invoice ${invoiceId}`);
+        
+        await stripe.invoices.update(invoiceId, {
+          default_payment_method: nextCard.id,
+        });
+        
+        try {
+          await stripe.invoices.pay(invoiceId);
+          console.log(`[WebhookHandlers] Fallback payment successful with card ${nextCard.id}`);
+          return;
+        } catch (payError: any) {
+          console.log(`[WebhookHandlers] Fallback payment failed with card ${nextCard.id}: ${payError.message}`);
+        }
+      }
+    } catch (err: any) {
+      console.error(`[WebhookHandlers] Error during fallback payment attempt: ${err.message}`);
     }
 
     await storage.updateUser(user.id, {
