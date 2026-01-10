@@ -3334,8 +3334,8 @@ export async function registerRoutes(
 
   // Rate limiting for bot detection - track clicks per IP
   const ipClickTracker = new Map<string, { count: number; firstClick: number; lastClick: number }>();
-  const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window
-  const RATE_LIMIT_MAX_CLICKS = 5; // Max 5 clicks per IP per minute (real users click once)
+  const RATE_LIMIT_WINDOW_MS = 180000; // 3 minute window
+  const RATE_LIMIT_MAX_CLICKS = 15; // Max 15 clicks per IP per 3 minutes
   const RATE_LIMIT_CLEANUP_INTERVAL = 300000; // Clean up every 5 minutes
 
   // Clean up old entries periodically

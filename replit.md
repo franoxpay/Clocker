@@ -85,6 +85,14 @@ Key entities defined in `shared/schema.ts`:
 
 ## Recent Changes
 
+### January 10, 2026 (Update 3)
+- **Rate Limit Fix**: Changed anti-bot rate limit from 5 clicks/minute to 15 clicks per 3 minutes
+  - Previous aggressive setting was incorrectly blocking real users during testing
+  - When rate limited, users were sent to WHITE page and logs stopped appearing
+- **Click Logs Preservation**: Changed `click_logs.offer_id` foreign key from `CASCADE` to `SET NULL`
+  - Now when an offer is deleted, the click logs are preserved with `offer_id = null`
+  - Historical data is maintained for analytics and billing verification
+
 ### January 10, 2026 (Update 2)
 - **Plan Limits Enforcement - Offer Creation**: POST `/api/offers` now validates before creating:
   - Checks if user is suspended → returns 403 with `USER_SUSPENDED` code
