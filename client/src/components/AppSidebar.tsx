@@ -309,37 +309,21 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                         {prevMilestone.label} - {nextMilestone.label} · {Math.round(progressPercent)}% {t("clickJourney.complete")}
                       </p>
                     </div>
-                    <div className="p-3 rounded-md bg-muted/50 space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium">
-                        {t("clickJourney.monthlyUsage")}
-                      </p>
-                      <div className="flex items-baseline gap-1">
-                        <span className={`text-lg font-bold ${getUsageColor()}`} data-testid="text-monthly-used">
-                          {formatClickCount(monthlyUsed)}
-                        </span>
-                        {!isUnlimited && monthlyLimit && (
-                          <>
-                            <span className="text-xs text-muted-foreground">{t("clickJourney.of")}</span>
-                            <span className="text-sm font-semibold">{formatClickCount(monthlyLimit)}</span>
-                          </>
-                        )}
-                        {isUnlimited && (
-                          <span className="text-xs text-green-500 font-medium">
-                            ({t("clickJourney.unlimited")})
-                          </span>
-                        )}
+                    <div className="p-3 rounded-md bg-muted/50">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                        <span>{t("clickJourney.monthlyUsage")}</span>
+                        <span>/</span>
+                        <span className="font-medium text-foreground">{t("clickJourney.limit")}</span>
                       </div>
-                      {!isUnlimited && monthlyLimit && (
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all ${getProgressColor()}`}
-                            style={{ width: `${Math.min(100, usagePercent)}%` }}
-                          />
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {t("clickJourney.usedThisMonth")}
-                      </p>
+                      <div className="flex items-center gap-2 text-xl font-bold">
+                        <span className={getUsageColor()} data-testid="text-monthly-used">
+                          {monthlyUsed.toLocaleString()}
+                        </span>
+                        <span className="text-muted-foreground">/</span>
+                        <span>
+                          {isUnlimited ? t("clickJourney.unlimited") : (monthlyLimit?.toLocaleString() ?? "0")}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -352,14 +336,16 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           <Avatar className="w-9 h-9">
             <AvatarImage
               src={user?.profileImageUrl || undefined}
-              alt={user?.email || "User"}
+              alt={user?.firstName || user?.email || "User"}
               className="object-cover"
             />
             <AvatarFallback>{getUserInitials()}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate" data-testid="text-user-email">
-              {user?.email}
+            <p className="text-sm font-medium truncate" data-testid="text-user-name">
+              {user?.firstName && user?.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : user?.email}
             </p>
             {getPlanBadge() && (
               <Badge variant="secondary" className="text-xs" data-testid="badge-user-plan">

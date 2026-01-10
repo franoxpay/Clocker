@@ -236,8 +236,7 @@ const translations: Record<Language, Record<string, string>> = {
     "clickJourney.complete": "completo",
     "clickJourney.monthlyUsage": "Uso mensal",
     "clickJourney.unlimited": "Ilimitado",
-    "clickJourney.of": "de",
-    "clickJourney.usedThisMonth": "usados este mês",
+    "clickJourney.limit": "limite",
   },
   "en": {
     "nav.dashboard": "Dashboard",
@@ -466,8 +465,7 @@ const translations: Record<Language, Record<string, string>> = {
     "clickJourney.complete": "complete",
     "clickJourney.monthlyUsage": "Monthly usage",
     "clickJourney.unlimited": "Unlimited",
-    "clickJourney.of": "of",
-    "clickJourney.usedThisMonth": "used this month",
+    "clickJourney.limit": "limit",
   },
 };
 
