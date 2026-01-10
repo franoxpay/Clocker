@@ -145,7 +145,7 @@ export const clickLogs = pgTable(
   "click_logs",
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-    offerId: integer("offer_id").notNull().references(() => offers.id, { onDelete: "cascade" }),
+    offerId: integer("offer_id").references(() => offers.id, { onDelete: "set null" }),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     ipAddress: varchar("ip_address"),
     userAgent: text("user_agent"),

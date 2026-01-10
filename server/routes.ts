@@ -2505,8 +2505,6 @@ export async function registerRoutes(
       const usage = await storage.getUserUsage(userId);
       const plan = user?.planId ? await storage.getPlan(user.planId) : null;
       
-      console.log(`[DEBUG /api/user/usage] userId=${userId}, email=${user?.email}, clicksUsedThisMonth=${user?.clicksUsedThisMonth}, planId=${user?.planId}`);
-      
       res.json({
         offersCount: usage.offers.used,
         offersLimit: plan?.isUnlimited ? null : (usage.offers.limit ?? null),
