@@ -291,14 +291,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
                 return (
                   <div className="space-y-3">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold" data-testid="text-clicks-expanded">
-                        {formatClickCount(total)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t("clickJourney.totalClicks")}
-                      </p>
-                    </div>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>{prevMilestone.label}</span>
@@ -347,11 +339,6 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 ? `${user.firstName} ${user.lastName}` 
                 : user?.email}
             </p>
-            {getPlanBadge() && (
-              <Badge variant="secondary" className="text-xs" data-testid="badge-user-plan">
-                {getPlanBadge()}
-              </Badge>
-            )}
           </div>
         </div>
         <Button
