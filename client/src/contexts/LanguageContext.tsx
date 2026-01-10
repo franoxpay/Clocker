@@ -234,8 +234,10 @@ const translations: Record<Language, Record<string, string>> = {
     "clickJourney.totalClicks": "cliques totais",
     "clickJourney.nextMilestone": "Próximo marco",
     "clickJourney.complete": "completo",
-    "clickJourney.blackClicks": "Cliques black",
-    "clickJourney.whiteClicks": "Cliques white",
+    "clickJourney.monthlyUsage": "Uso mensal",
+    "clickJourney.unlimited": "Ilimitado",
+    "clickJourney.of": "de",
+    "clickJourney.usedThisMonth": "usados este mês",
   },
   "en": {
     "nav.dashboard": "Dashboard",
@@ -462,8 +464,10 @@ const translations: Record<Language, Record<string, string>> = {
     "clickJourney.totalClicks": "total clicks",
     "clickJourney.nextMilestone": "Next milestone",
     "clickJourney.complete": "complete",
-    "clickJourney.blackClicks": "Black clicks",
-    "clickJourney.whiteClicks": "White clicks",
+    "clickJourney.monthlyUsage": "Monthly usage",
+    "clickJourney.unlimited": "Unlimited",
+    "clickJourney.of": "of",
+    "clickJourney.usedThisMonth": "used this month",
   },
 };
 

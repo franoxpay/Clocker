@@ -651,20 +651,27 @@ export class DatabaseStorage implements IStorage {
     await db.delete(clickLogs).where(lte(clickLogs.createdAt, sevenDaysAgo));
   }
 
-  async getUserClickStats(userId: string): Promise<{ totalClicks: number; blackClicks: number; whiteClicks: number }> {
+  async getUserClickStats(userId: string): Promise<{ 
+    totalClicks: number; 
+    monthlyClicksUsed: number; 
+    monthlyClicksLimit: number | null;
+    isUnlimited: boolean;
+  }> {
     const result = await db
       .select({
         totalClicks: sql<number>`COUNT(*)`,
-        blackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
-        whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
       })
       .from(clickLogs)
       .where(eq(clickLogs.userId, userId));
 
+    const user = await this.getUser(userId);
+    const plan = user?.planId ? await this.getPlan(user.planId) : null;
+
     return {
       totalClicks: Number(result[0]?.totalClicks || 0),
-      blackClicks: Number(result[0]?.blackClicks || 0),
-      whiteClicks: Number(result[0]?.whiteClicks || 0),
+      monthlyClicksUsed: user?.clicksUsedThisMonth ?? 0,
+      monthlyClicksLimit: plan?.isUnlimited ? null : (plan?.maxClicks ?? null),
+      isUnlimited: plan?.isUnlimited ?? false,
     };
   }
 

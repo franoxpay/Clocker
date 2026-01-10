@@ -87,11 +87,15 @@ Key entities defined in `shared/schema.ts`:
 
 ### January 10, 2026 (Update 4)
 - **Click Journey Feature**: Added gamification element to sidebar showing lifetime click statistics
-  - New endpoint `GET /api/user/click-stats` returns `{ totalClicks, blackClicks, whiteClicks }`
+  - New endpoint `GET /api/user/click-stats` returns `{ totalClicks, monthlyClicksUsed, monthlyClicksLimit, isUnlimited }`
   - Collapsible component in sidebar footer showing total clicks with Trophy icon
   - Milestone tracking system: 1K, 10K, 50K, 100K, 250K, 500K, 1M, 5M, 10M
   - Progress bar showing progress toward next milestone
-  - Click breakdown showing black vs white clicks
+  - Monthly plan usage with color-coded indicator:
+    - Green: under 50% usage or unlimited plan
+    - Yellow: 50-80% usage
+    - Orange: 80-100% usage
+    - Red: at or over limit
   - Auto-refresh every 60 seconds
   - Bilingual translations (pt-BR: "JORNADA DE CLIQUES", en: "CLICK JOURNEY")
 

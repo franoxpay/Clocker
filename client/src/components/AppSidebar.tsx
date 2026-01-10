@@ -120,7 +120,12 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const [location] = useLocation();
   const [isJourneyOpen, setIsJourneyOpen] = useState(false);
 
-  const { data: clickStats } = useQuery<{ totalClicks: number; blackClicks: number; whiteClicks: number }>({
+  const { data: clickStats } = useQuery<{ 
+    totalClicks: number; 
+    monthlyClicksUsed: number; 
+    monthlyClicksLimit: number | null;
+    isUnlimited: boolean;
+  }>({
     queryKey: ["/api/user/click-stats"],
     enabled: !!user && !isAdmin,
     refetchInterval: 60000,
@@ -263,6 +268,27 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 const progressCurrent = total - prevMilestone.target;
                 const progressPercent = progressRange > 0 ? Math.min(100, (progressCurrent / progressRange) * 100) : 0;
 
+                const monthlyUsed = clickStats.monthlyClicksUsed;
+                const monthlyLimit = clickStats.monthlyClicksLimit;
+                const isUnlimited = clickStats.isUnlimited;
+                const usagePercent = monthlyLimit ? Math.min(100, (monthlyUsed / monthlyLimit) * 100) : 0;
+                
+                const getUsageColor = () => {
+                  if (isUnlimited) return "text-green-500";
+                  if (usagePercent >= 100) return "text-red-500";
+                  if (usagePercent >= 80) return "text-orange-500";
+                  if (usagePercent >= 50) return "text-yellow-500";
+                  return "text-green-500";
+                };
+
+                const getProgressColor = () => {
+                  if (isUnlimited) return "bg-green-500";
+                  if (usagePercent >= 100) return "bg-red-500";
+                  if (usagePercent >= 80) return "bg-orange-500";
+                  if (usagePercent >= 50) return "bg-yellow-500";
+                  return "bg-green-500";
+                };
+
                 return (
                   <div className="space-y-3">
                     <div className="text-center">
@@ -283,19 +309,37 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                         {prevMilestone.label} - {nextMilestone.label} · {Math.round(progressPercent)}% {t("clickJourney.complete")}
                       </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="p-2 rounded-md bg-muted/50">
-                        <p className="text-muted-foreground">{t("clickJourney.blackClicks")}</p>
-                        <p className="font-semibold" data-testid="text-black-clicks">
-                          {formatClickCount(clickStats.blackClicks)}
-                        </p>
+                    <div className="p-3 rounded-md bg-muted/50 space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {t("clickJourney.monthlyUsage")}
+                      </p>
+                      <div className="flex items-baseline gap-1">
+                        <span className={`text-lg font-bold ${getUsageColor()}`} data-testid="text-monthly-used">
+                          {formatClickCount(monthlyUsed)}
+                        </span>
+                        {!isUnlimited && monthlyLimit && (
+                          <>
+                            <span className="text-xs text-muted-foreground">{t("clickJourney.of")}</span>
+                            <span className="text-sm font-semibold">{formatClickCount(monthlyLimit)}</span>
+                          </>
+                        )}
+                        {isUnlimited && (
+                          <span className="text-xs text-green-500 font-medium">
+                            ({t("clickJourney.unlimited")})
+                          </span>
+                        )}
                       </div>
-                      <div className="p-2 rounded-md bg-muted/50">
-                        <p className="text-muted-foreground">{t("clickJourney.whiteClicks")}</p>
-                        <p className="font-semibold" data-testid="text-white-clicks">
-                          {formatClickCount(clickStats.whiteClicks)}
-                        </p>
-                      </div>
+                      {!isUnlimited && monthlyLimit && (
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full transition-all ${getProgressColor()}`}
+                            style={{ width: `${Math.min(100, usagePercent)}%` }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        {t("clickJourney.usedThisMonth")}
+                      </p>
                     </div>
                   </div>
                 );
