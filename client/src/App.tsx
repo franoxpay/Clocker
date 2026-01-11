@@ -87,7 +87,8 @@ function AuthenticatedLayout() {
   });
 
   const isOverLimit = usage && !usage.isUnlimited && usage.clicksLimit && usage.clicksThisMonth >= usage.clicksLimit;
-  const showLimitAlert = isOverLimit && !dismissedAlert && !isAdminRoute;
+  const isSuspended = usage?.isSuspended;
+  const showLimitAlert = (isOverLimit || isSuspended) && !dismissedAlert && !isAdminRoute;
 
   const style = {
     "--sidebar-width": "16rem",
@@ -114,9 +115,13 @@ function AuthenticatedLayout() {
                 <div className="flex items-center gap-2 text-sm">
                   <AlertTriangle className="h-4 w-4 text-destructive" />
                   <span className="text-destructive font-medium">
-                    {language === "pt-BR" 
-                      ? "Você atingiu o limite de cliques do seu plano." 
-                      : "You have reached your plan's click limit."}
+                    {isSuspended 
+                      ? (language === "pt-BR" 
+                          ? "Sua conta foi suspensa. Faça upgrade para reativar suas ofertas." 
+                          : "Your account has been suspended. Upgrade to reactivate your offers.")
+                      : (language === "pt-BR" 
+                          ? "Você atingiu o limite de cliques do seu plano." 
+                          : "You have reached your plan's click limit.")}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -128,15 +133,17 @@ function AuthenticatedLayout() {
                   >
                     {language === "pt-BR" ? "Fazer Upgrade" : "Upgrade Now"}
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => setDismissedAlert(true)}
-                    data-testid="button-dismiss-limit-alert"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  {!isSuspended && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => setDismissedAlert(true)}
+                      data-testid="button-dismiss-limit-alert"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
