@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Globe, Trash2, Search, History, AlertTriangle, User, Share2 } from "lucide-react";
+import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 import {
@@ -78,6 +78,11 @@ export default function AdminDomains() {
   const [confirmInput, setConfirmInput] = useState("");
   const [removalReason, setRemovalReason] = useState<string>("admin_action");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [newDomain, setNewDomain] = useState("");
+  const [showDnsInfo, setShowDnsInfo] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const DNS_DESTINATION = "cleryon.com";
 
   const { data: domains, isLoading } = useQuery<SystemDomain[]>({
     queryKey: ["/api/admin/domains", typeFilter, searchTerm],
@@ -96,11 +101,57 @@ export default function AdminDomains() {
     enabled: historyDialogOpen,
   });
 
+  const createSharedDomainMutation = useMutation({
+    mutationFn: async (subdomain: string) => {
+      return apiRequest("POST", "/api/admin/shared-domains", { subdomain });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
+      setNewDomain("");
+      setShowDnsInfo(false);
+      toast({
+        title: language === "pt-BR" ? "Sucesso" : "Success",
+        description: language === "pt-BR" ? "Domínio compartilhado criado com sucesso" : "Shared domain created successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: language === "pt-BR" ? "Erro" : "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const verifyDomainMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("POST", `/api/admin/shared-domains/${id}/verify`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
+      toast({
+        title: language === "pt-BR" ? "Verificação concluída" : "Verification complete",
+        description: language === "pt-BR" ? "Status do domínio atualizado" : "Domain status updated",
+      });
+    },
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
+      toast({
+        title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async ({ id, type, reason }: { id: number; type: 'user' | 'shared'; reason: string }) => {
-      return apiRequest("DELETE", `/api/admin/domains/${id}?type=${type}&reason=${encodeURIComponent(reason)}`);
+      const res = await apiRequest("DELETE", `/api/admin/domains/${id}?type=${type}&reason=${encodeURIComponent(reason)}`);
+      return res.json() as Promise<{ affectedUsersCount: number; affectedOffersCount: number }>;
     },
-    onSuccess: (data: { affectedUsersCount: number; affectedOffersCount: number }) => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains/history"] });
       setDeleteDialogOpen(false);
@@ -136,6 +187,17 @@ export default function AdminDomains() {
     }
   };
 
+  const handleCreateSharedDomain = () => {
+    if (!newDomain.trim()) return;
+    createSharedDomainMutation.mutate(newDomain.trim().toLowerCase());
+  };
+
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   const formatDate = (dateStr: string) => {
     return format(new Date(dateStr), "dd/MM/yyyy HH:mm", { 
       locale: language === "pt-BR" ? ptBR : enUS 
@@ -157,6 +219,102 @@ export default function AdminDomains() {
           {language === "pt-BR" ? "Histórico" : "History"}
         </Button>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            {language === "pt-BR" ? "Adicionar Domínio Compartilhado" : "Add Shared Domain"}
+          </CardTitle>
+          <CardDescription>
+            {language === "pt-BR"
+              ? "Configure o apontamento DNS antes de adicionar o domínio"
+              : "Configure DNS pointing before adding the domain"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="example.yourdomain.com"
+              value={newDomain}
+              onChange={(e) => {
+                setNewDomain(e.target.value);
+                if (e.target.value.trim()) setShowDnsInfo(true);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateSharedDomain()}
+              data-testid="input-new-shared-domain"
+            />
+            <Button
+              onClick={handleCreateSharedDomain}
+              disabled={createSharedDomainMutation.isPending || !newDomain.trim()}
+              data-testid="button-add-shared-domain"
+            >
+              {createSharedDomainMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          
+          {showDnsInfo && newDomain.trim() && (
+            <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+              <h4 className="font-medium text-sm">
+                {language === "pt-BR" ? "Configuração de DNS Necessária" : "Required DNS Configuration"}
+              </h4>
+              <p className="text-sm text-muted-foreground">
+                {language === "pt-BR"
+                  ? "Adicione o seguinte registro DNS no seu provedor de domínio:"
+                  : "Add the following DNS record in your domain provider:"}
+              </p>
+              <div className="rounded-md border bg-background">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[120px]">{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Nome / Host" : "Name / Host"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Destino / Valor" : "Destination / Value"}</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <Badge variant="secondary">CNAME</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {newDomain.trim().split('.')[0] || 'subdomain'}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {DNS_DESTINATION}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleCopy(DNS_DESTINATION, 'destination')}
+                          data-testid="button-copy-destination"
+                        >
+                          {copiedField === 'destination' ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {language === "pt-BR"
+                  ? "Após configurar o DNS, a propagação pode levar até 24 horas. O domínio será verificado automaticamente."
+                  : "After configuring DNS, propagation can take up to 24 hours. The domain will be verified automatically."}
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -256,15 +414,32 @@ export default function AdminDomains() {
                         {formatDate(domain.createdAt)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteClick(domain)}
-                          className="text-destructive hover:text-destructive"
-                          data-testid={`button-delete-domain-${domain.id}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {domain.type === 'shared' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => verifyDomainMutation.mutate(domain.id)}
+                              disabled={verifyDomainMutation.isPending}
+                              data-testid={`button-verify-domain-${domain.id}`}
+                            >
+                              {verifyDomainMutation.isPending ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-4 h-4" />
+                              )}
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteClick(domain)}
+                            className="text-destructive hover:text-destructive"
+                            data-testid={`button-delete-domain-${domain.id}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
