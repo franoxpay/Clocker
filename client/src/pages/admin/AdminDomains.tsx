@@ -163,9 +163,18 @@ export default function AdminDomains() {
     onError: (error: Error) => {
       setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
+      let errorMsg = error.message;
+      try {
+        const match = error.message.match(/"message"\s*:\s*"([^"]+)"/);
+        if (match) {
+          errorMsg = match[1];
+        }
+      } catch {}
       toast({
         title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
-        description: error.message,
+        description: language === "pt-BR" 
+          ? (errorMsg.includes("Domain not found") ? "Domínio não encontrado - verifique se o DNS está apontando corretamente" : errorMsg)
+          : errorMsg,
         variant: "destructive",
       });
     },
