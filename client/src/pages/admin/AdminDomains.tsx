@@ -55,6 +55,8 @@ interface SystemDomain {
   ownerName: string | null;
   offersCount: number;
   createdAt: string;
+  isActive: boolean;
+  isVerified: boolean;
 }
 
 interface RemovedDomain {
@@ -81,15 +83,19 @@ export default function AdminDomains() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [newDomain, setNewDomain] = useState("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [verifyingDomainId, setVerifyingDomainId] = useState<number | null>(null);
 
   const DNS_DESTINATION = "cleryon.com";
 
   const { data: domains, isLoading } = useQuery<SystemDomain[]>({
-    queryKey: ["/api/admin/domains", typeFilter, searchTerm],
+    queryKey: ["/api/admin/domains", typeFilter, searchTerm, statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (typeFilter !== "all") params.set("type", typeFilter);
       if (searchTerm) params.set("search", searchTerm);
+      if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/admin/domains?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch domains");
       return res.json();
@@ -109,6 +115,7 @@ export default function AdminDomains() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       setNewDomain("");
+      setAddDialogOpen(false);
       toast({
         title: language === "pt-BR" ? "Sucesso" : "Success",
         description: language === "pt-BR" ? "Domínio compartilhado criado. Verifique o DNS para ativar." : "Shared domain created. Verify DNS to activate.",
@@ -124,10 +131,15 @@ export default function AdminDomains() {
   });
 
   const verifyDomainMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return apiRequest("POST", `/api/admin/shared-domains/${id}/verify`);
+    mutationFn: async ({ id, type }: { id: number; type: 'user' | 'shared' }) => {
+      setVerifyingDomainId(id);
+      const endpoint = type === 'shared' 
+        ? `/api/admin/shared-domains/${id}/verify`
+        : `/api/admin/domains/${id}/verify`;
+      return apiRequest("POST", endpoint);
     },
     onSuccess: () => {
+      setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       toast({
@@ -136,6 +148,7 @@ export default function AdminDomains() {
       });
     },
     onError: (error: Error) => {
+      setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       toast({
         title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
@@ -219,49 +232,6 @@ export default function AdminDomains() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
-        <Input
-          placeholder={language === "pt-BR" ? "Adicionar domínio compartilhado (ex: app.seudominio.com)" : "Add shared domain (e.g., app.yourdomain.com)"}
-          value={newDomain}
-          onChange={(e) => setNewDomain(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCreateSharedDomain()}
-          className="flex-1"
-          data-testid="input-new-shared-domain"
-        />
-        <Button
-          onClick={handleCreateSharedDomain}
-          disabled={createSharedDomainMutation.isPending || !newDomain.trim()}
-          data-testid="button-add-shared-domain"
-        >
-          {createSharedDomainMutation.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Plus className="h-4 w-4 mr-2" />
-          )}
-          {language === "pt-BR" ? "Adicionar" : "Add"}
-        </Button>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => handleCopy(DNS_DESTINATION, 'dns-tip')} data-testid="button-dns-info">
-                {copiedField === 'dns-tip' ? (
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                ) : (
-                  <Info className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="max-w-xs">
-              <p className="text-xs">
-                {language === "pt-BR" 
-                  ? `Configure CNAME apontando para ${DNS_DESTINATION}. O domínio ficará ativo após validação do SSL.`
-                  : `Configure CNAME pointing to ${DNS_DESTINATION}. Domain will be active after SSL validation.`}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">
@@ -269,7 +239,7 @@ export default function AdminDomains() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex gap-4 flex-wrap">
+          <div className="flex gap-4 flex-wrap items-center">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -296,6 +266,26 @@ export default function AdminDomains() {
                 </SelectItem>
               </SelectContent>
             </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {language === "pt-BR" ? "Todos Status" : "All Status"}
+                </SelectItem>
+                <SelectItem value="active">
+                  {language === "pt-BR" ? "Ativos" : "Active"}
+                </SelectItem>
+                <SelectItem value="inactive">
+                  {language === "pt-BR" ? "Inativos" : "Inactive"}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={() => setAddDialogOpen(true)} data-testid="button-open-add-domain">
+              <Plus className="w-4 h-4 mr-2" />
+              {language === "pt-BR" ? "Adicionar Domínio" : "Add Domain"}
+            </Button>
           </div>
 
           {isLoading ? (
@@ -311,6 +301,7 @@ export default function AdminDomains() {
                   <TableRow>
                     <TableHead>{language === "pt-BR" ? "Domínio" : "Domain"}</TableHead>
                     <TableHead>{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                    <TableHead>{language === "pt-BR" ? "Status" : "Status"}</TableHead>
                     <TableHead>{language === "pt-BR" ? "Proprietário" : "Owner"}</TableHead>
                     <TableHead className="text-center">{language === "pt-BR" ? "Ofertas" : "Offers"}</TableHead>
                     <TableHead>{language === "pt-BR" ? "Criado em" : "Created"}</TableHead>
@@ -342,6 +333,14 @@ export default function AdminDomains() {
                         </Badge>
                       </TableCell>
                       <TableCell>
+                        <Badge variant={domain.isActive ? 'default' : 'secondary'}>
+                          {domain.isActive 
+                            ? (language === "pt-BR" ? "Ativo" : "Active")
+                            : (language === "pt-BR" ? "Inativo" : "Inactive")
+                          }
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
                         {domain.type === 'shared' ? (
                           <span className="text-muted-foreground">-</span>
                         ) : (
@@ -361,21 +360,28 @@ export default function AdminDomains() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {domain.type === 'shared' && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => verifyDomainMutation.mutate(domain.id)}
-                              disabled={verifyDomainMutation.isPending}
-                              data-testid={`button-verify-domain-${domain.id}`}
-                            >
-                              {verifyDomainMutation.isPending ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="w-4 h-4" />
-                              )}
-                            </Button>
-                          )}
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => verifyDomainMutation.mutate({ id: domain.id, type: domain.type })}
+                                  disabled={verifyingDomainId === domain.id}
+                                  data-testid={`button-verify-domain-${domain.id}`}
+                                >
+                                  {verifyingDomainId === domain.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <RefreshCw className="w-4 h-4" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {language === "pt-BR" ? "Verificar conexão" : "Verify connection"}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -477,6 +483,104 @@ export default function AdminDomains() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={addDialogOpen} onOpenChange={(open) => { setAddDialogOpen(open); if (!open) setNewDomain(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {language === "pt-BR" ? "Adicionar Domínio Compartilhado" : "Add Shared Domain"}
+            </DialogTitle>
+            <DialogDescription>
+              {language === "pt-BR" 
+                ? "Configure o apontamento DNS antes de adicionar o domínio" 
+                : "Configure DNS pointing before adding the domain"}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                {language === "pt-BR" ? "Domínio" : "Domain"}
+              </label>
+              <Input
+                placeholder="app.yourdomain.com"
+                value={newDomain}
+                onChange={(e) => setNewDomain(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleCreateSharedDomain()}
+                data-testid="input-new-shared-domain"
+              />
+            </div>
+            
+            <div className="p-4 bg-muted/50 rounded-lg space-y-3">
+              <h4 className="font-medium text-sm">
+                {language === "pt-BR" ? "Configuração de DNS" : "DNS Configuration"}
+              </h4>
+              <div className="rounded-md border bg-background">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[80px]">{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Nome / Host" : "Name / Host"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Apontamento" : "Points To"}</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>
+                        <Badge variant="secondary">CNAME</Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {newDomain.trim().split('.')[0] || 'subdomain'}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {DNS_DESTINATION}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleCopy(DNS_DESTINATION, 'dns-destination')}
+                          data-testid="button-copy-dns"
+                        >
+                          {copiedField === 'dns-destination' ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {language === "pt-BR"
+                  ? "O domínio ficará ativo após a verificação do DNS e validação do SSL."
+                  : "Domain will be active after DNS verification and SSL validation."}
+              </p>
+            </div>
+            
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setAddDialogOpen(false)} data-testid="button-cancel-add-domain">
+                {language === "pt-BR" ? "Cancelar" : "Cancel"}
+              </Button>
+              <Button 
+                onClick={handleCreateSharedDomain} 
+                disabled={createSharedDomainMutation.isPending || !newDomain.trim()}
+                data-testid="button-confirm-add-domain"
+              >
+                {createSharedDomainMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Plus className="h-4 w-4 mr-2" />
+                )}
+                {language === "pt-BR" ? "Adicionar" : "Add"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">

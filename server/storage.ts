@@ -228,7 +228,7 @@ export interface IStorage {
   canUserDowngradeToPlan(userId: string, newPlanId: number): Promise<{ allowed: boolean; reason?: string; offersExcess?: number; domainsExcess?: number }>;
 
   // Admin domain management
-  getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string }): Promise<Array<{
+  getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string; status?: 'active' | 'inactive' }): Promise<Array<{
     id: number;
     subdomain: string;
     type: 'user' | 'shared';
@@ -237,6 +237,8 @@ export interface IStorage {
     ownerName: string | null;
     offersCount: number;
     createdAt: Date;
+    isActive: boolean;
+    isVerified: boolean;
   }>>;
 
   removeDomainByAdmin(
@@ -1651,7 +1653,7 @@ export class DatabaseStorage implements IStorage {
     return { allowed: true };
   }
 
-  async getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string }): Promise<Array<{
+  async getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string; status?: 'active' | 'inactive' }): Promise<Array<{
     id: number;
     subdomain: string;
     type: 'user' | 'shared';
@@ -1660,6 +1662,8 @@ export class DatabaseStorage implements IStorage {
     ownerName: string | null;
     offersCount: number;
     createdAt: Date;
+    isActive: boolean;
+    isVerified: boolean;
   }>> {
     const results: Array<{
       id: number;
@@ -1670,6 +1674,8 @@ export class DatabaseStorage implements IStorage {
       ownerName: string | null;
       offersCount: number;
       createdAt: Date;
+      isActive: boolean;
+      isVerified: boolean;
     }> = [];
 
     // Get user domains if not filtered to shared only
@@ -1680,6 +1686,8 @@ export class DatabaseStorage implements IStorage {
           subdomain: domains.subdomain,
           userId: domains.userId,
           createdAt: domains.createdAt,
+          isActive: domains.isActive,
+          isVerified: domains.isVerified,
           ownerEmail: users.email,
           ownerFirstName: users.firstName,
           ownerLastName: users.lastName,
@@ -1692,6 +1700,9 @@ export class DatabaseStorage implements IStorage {
         if (filters?.search && !d.subdomain.toLowerCase().includes(filters.search.toLowerCase())) {
           continue;
         }
+        if (filters?.status === 'active' && !d.isActive) continue;
+        if (filters?.status === 'inactive' && d.isActive) continue;
+        
         const [offersCountResult] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(offers)
@@ -1708,6 +1719,8 @@ export class DatabaseStorage implements IStorage {
             : d.ownerFirstName || d.ownerLastName || null,
           offersCount: offersCountResult?.count || 0,
           createdAt: d.createdAt,
+          isActive: d.isActive ?? true,
+          isVerified: d.isVerified ?? true,
         });
       }
     }
@@ -1723,6 +1736,9 @@ export class DatabaseStorage implements IStorage {
         if (filters?.search && !sd.subdomain.toLowerCase().includes(filters.search.toLowerCase())) {
           continue;
         }
+        if (filters?.status === 'active' && !sd.isActive) continue;
+        if (filters?.status === 'inactive' && sd.isActive) continue;
+        
         const [offersCountResult] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(offers)
@@ -1737,6 +1753,8 @@ export class DatabaseStorage implements IStorage {
           ownerName: null,
           offersCount: offersCountResult?.count || 0,
           createdAt: sd.createdAt,
+          isActive: sd.isActive ?? false,
+          isVerified: sd.isVerified ?? false,
         });
       }
     }

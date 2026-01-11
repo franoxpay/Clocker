@@ -3349,11 +3349,46 @@ export async function registerRoutes(
     try {
       const type = req.query.type as 'user' | 'shared' | undefined;
       const search = req.query.search as string | undefined;
+      const status = req.query.status as 'active' | 'inactive' | undefined;
 
-      const domains = await storage.getAllSystemDomains({ type, search });
+      const domains = await storage.getAllSystemDomains({ type, search, status });
       res.json(domains);
     } catch (error) {
       console.error("Error fetching all domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin - Verify user domain connection
+  app.post("/api/admin/domains/:id/verify", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domainId = parseInt(req.params.id);
+      const domain = await storage.getDomain(domainId);
+      
+      if (!domain) {
+        return res.status(404).json({ message: "Domain not found" });
+      }
+      
+      const dnsResult = await verifyDomainDNS(domain.subdomain);
+      
+      const updated = await storage.updateDomain(domainId, {
+        isVerified: dnsResult.verified,
+        isActive: dnsResult.verified,
+        lastCheckedAt: new Date(),
+        lastVerificationError: dnsResult.error || null,
+        sslStatus: dnsResult.verified ? "active" : "pending",
+      });
+      
+      if (!dnsResult.verified) {
+        return res.status(400).json({ 
+          message: dnsResult.error || "DNS verification failed",
+          domain: updated
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error verifying user domain:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
