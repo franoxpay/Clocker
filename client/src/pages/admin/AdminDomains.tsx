@@ -453,6 +453,36 @@ export default function AdminDomains() {
                   </SelectContent>
                 </Select>
               </div>
+              {domainToDelete && domainToDelete.offersCount > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Info className="w-4 h-4" />
+                    {language === "pt-BR" ? "Prévia da notificação:" : "Notification preview:"}
+                  </div>
+                  <div className="p-3 bg-muted/50 rounded-md text-sm border">
+                    {removalReason === 'phishing' && (
+                      language === "pt-BR" 
+                        ? `Olá [Nome], identificamos que o domínio ${domainToDelete.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
+                        : `Hello [Name], we identified that the domain ${domainToDelete.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: [offer list]. Please access your account to configure a new domain.`
+                    )}
+                    {removalReason === 'abuse' && (
+                      language === "pt-BR" 
+                        ? `Olá [Nome], o domínio ${domainToDelete.subdomain} foi removido da plataforma devido a violações dos nossos termos de uso. Esta ação foi necessária para manter a integridade da plataforma. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
+                        : `Hello [Name], the domain ${domainToDelete.subdomain} was removed from the platform due to violations of our terms of use. This action was necessary to maintain platform integrity. Affected offers: [offer list]. Please access your account to configure a new domain.`
+                    )}
+                    {removalReason === 'admin_action' && (
+                      language === "pt-BR" 
+                        ? `Olá [Nome], o domínio ${domainToDelete.subdomain} foi removido da plataforma por decisão administrativa. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
+                        : `Hello [Name], the domain ${domainToDelete.subdomain} was removed from the platform by administrative decision. Affected offers: [offer list]. Please access your account to configure a new domain.`
+                    )}
+                    {removalReason === 'user_request' && (
+                      language === "pt-BR" 
+                        ? `Olá [Nome], conforme sua solicitação, o domínio ${domainToDelete.subdomain} foi removido da plataforma. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio se necessário.`
+                        : `Hello [Name], as per your request, the domain ${domainToDelete.subdomain} was removed from the platform. Affected offers: [offer list]. Please access your account to configure a new domain if needed.`
+                    )}
+                  </div>
+                </div>
+              )}
               <p className="text-sm">
                 {language === "pt-BR" 
                   ? "Digite o nome do domínio para confirmar:" 

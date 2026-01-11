@@ -3421,13 +3421,26 @@ export async function registerRoutes(
           // Customize message based on reason
           let messagePt: string;
           let messageEn: string;
+          const offerNames = affectedOffers.map(o => o.offerName).join(", ");
           
-          if (removalReason === 'phishing') {
-            messagePt = `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${affectedOffers.map(o => o.offerName).join(", ")}. Acesse sua conta para configurar um novo domínio.`;
-            messageEn = `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${affectedOffers.map(o => o.offerName).join(", ")}. Please access your account to configure a new domain.`;
-          } else {
-            messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma. As ofertas afetadas: ${affectedOffers.map(o => o.offerName).join(", ")}. Acesse sua conta para configurar um novo domínio.`;
-            messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform. Affected offers: ${affectedOffers.map(o => o.offerName).join(", ")}. Please access your account to configure a new domain.`;
+          switch (removalReason) {
+            case 'phishing':
+              messagePt = `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
+              messageEn = `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
+              break;
+            case 'abuse':
+              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma devido a violações dos nossos termos de uso. Esta ação foi necessária para manter a integridade da plataforma. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
+              messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform due to violations of our terms of use. This action was necessary to maintain platform integrity. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
+              break;
+            case 'user_request':
+              messagePt = `Olá ${firstName}, conforme sua solicitação, o domínio ${result.subdomain} foi removido da plataforma. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio se necessário.`;
+              messageEn = `Hello ${firstName}, as per your request, the domain ${result.subdomain} was removed from the platform. Affected offers: ${offerNames}. Please access your account to configure a new domain if needed.`;
+              break;
+            case 'admin_action':
+            default:
+              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma por decisão administrativa. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
+              messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform by administrative decision. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
+              break;
           }
 
           await storage.createNotification({
