@@ -3212,6 +3212,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/shared-domains/inactive", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domains = await storage.getInactiveSharedDomains();
+      res.json(domains);
+    } catch (error) {
+      console.error("Error fetching inactive shared domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/shared-domains", isAdmin, async (req: Request, res: Response) => {
     try {
       let { subdomain } = req.body;

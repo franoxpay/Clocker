@@ -107,6 +107,18 @@ export default function AdminDomains() {
     enabled: historyDialogOpen,
   });
 
+  interface InactiveSharedDomain {
+    id: number;
+    subdomain: string;
+    lastCheckedAt: string | null;
+    lastVerificationError: string | null;
+    updatedAt: string;
+  }
+
+  const { data: inactiveSharedDomains } = useQuery<InactiveSharedDomain[]>({
+    queryKey: ["/api/admin/shared-domains/inactive"],
+  });
+
   const createSharedDomainMutation = useMutation({
     mutationFn: async (subdomain: string) => {
       return apiRequest("POST", "/api/admin/shared-domains", { subdomain });
@@ -142,6 +154,7 @@ export default function AdminDomains() {
       setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains/inactive"] });
       toast({
         title: language === "pt-BR" ? "Verificação concluída" : "Verification complete",
         description: language === "pt-BR" ? "Status do domínio atualizado" : "Domain status updated",
@@ -231,6 +244,71 @@ export default function AdminDomains() {
           {language === "pt-BR" ? "Histórico" : "History"}
         </Button>
       </div>
+
+      {inactiveSharedDomains && inactiveSharedDomains.length > 0 && (
+        <Card className="border-amber-500/50 bg-amber-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2 text-amber-600 dark:text-amber-500">
+              <AlertTriangle className="w-5 h-5" />
+              {language === "pt-BR" 
+                ? `${inactiveSharedDomains.length} Domínio${inactiveSharedDomains.length > 1 ? 's' : ''} Compartilhado${inactiveSharedDomains.length > 1 ? 's' : ''} Inativo${inactiveSharedDomains.length > 1 ? 's' : ''}`
+                : `${inactiveSharedDomains.length} Inactive Shared Domain${inactiveSharedDomains.length > 1 ? 's' : ''}`}
+            </CardTitle>
+            <CardDescription>
+              {language === "pt-BR" 
+                ? "Estes domínios foram detectados como inativos durante as verificações automáticas"
+                : "These domains were detected as inactive during automatic checks"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {inactiveSharedDomains.map((domain) => (
+                <div 
+                  key={domain.id} 
+                  className="flex items-center justify-between p-3 rounded-md bg-background border"
+                  data-testid={`inactive-shared-domain-${domain.id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Globe className="w-4 h-4 text-amber-500" />
+                    <div>
+                      <span className="font-medium">{domain.subdomain}</span>
+                      {domain.lastVerificationError && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {domain.lastVerificationError}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {domain.lastCheckedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {language === "pt-BR" ? "Verificado: " : "Checked: "}
+                        {formatDate(domain.lastCheckedAt)}
+                      </span>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => verifyDomainMutation.mutate({ id: domain.id, type: 'shared' })}
+                      disabled={verifyingDomainId === domain.id}
+                      data-testid={`button-verify-inactive-${domain.id}`}
+                    >
+                      {verifyingDomainId === domain.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3" />
+                      )}
+                      <span className="ml-1">
+                        {language === "pt-BR" ? "Verificar" : "Verify"}
+                      </span>
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

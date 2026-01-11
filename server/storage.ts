@@ -61,17 +61,24 @@ export interface IStorage {
   getDomain(id: number): Promise<Domain | undefined>;
   getDomainBySubdomain(subdomain: string): Promise<Domain | undefined>;
   getDomainsByUserId(userId: string): Promise<Domain[]>;
+  getAllUserDomains(): Promise<Domain[]>;
   createDomain(domain: InsertDomain): Promise<Domain>;
   updateDomain(id: number, data: Partial<InsertDomain>): Promise<Domain | undefined>;
+  updateDomainNotificationTimestamp(id: number, timestamp: Date): Promise<void>;
   deleteDomain(id: number): Promise<void>;
+  getOffersByDomainId(domainId: number): Promise<Offer[]>;
 
   getSharedDomain(id: number): Promise<SharedDomain | undefined>;
   getSharedDomainBySubdomain(subdomain: string): Promise<SharedDomain | undefined>;
   getAllSharedDomains(): Promise<SharedDomain[]>;
+  getAllSharedDomainsForMonitoring(): Promise<SharedDomain[]>;
   getActiveSharedDomains(): Promise<SharedDomain[]>;
+  getInactiveSharedDomains(): Promise<SharedDomain[]>;
   createSharedDomain(domain: InsertSharedDomain): Promise<SharedDomain>;
   updateSharedDomain(id: number, data: Partial<InsertSharedDomain>): Promise<SharedDomain | undefined>;
+  updateSharedDomainNotificationTimestamp(id: number, timestamp: Date): Promise<void>;
   deleteSharedDomain(id: number): Promise<void>;
+  getOffersBySharedDomainId(sharedDomainId: number): Promise<Offer[]>;
 
   getOffer(id: number): Promise<Offer | undefined>;
   getOfferBySlug(slug: string): Promise<Offer | undefined>;
@@ -446,6 +453,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(domains).where(eq(domains.userId, userId)).orderBy(desc(domains.createdAt));
   }
 
+  async getAllUserDomains(): Promise<Domain[]> {
+    return db.select().from(domains).orderBy(desc(domains.createdAt));
+  }
+
   async createDomain(domain: InsertDomain): Promise<Domain> {
     const [created] = await db.insert(domains).values(domain).returning();
     return created;
@@ -464,6 +475,16 @@ export class DatabaseStorage implements IStorage {
     await db.delete(domains).where(eq(domains.id, id));
   }
 
+  async updateDomainNotificationTimestamp(id: number, timestamp: Date): Promise<void> {
+    await db.update(domains)
+      .set({ lastInactiveNotificationAt: timestamp, updatedAt: new Date() })
+      .where(eq(domains.id, id));
+  }
+
+  async getOffersByDomainId(domainId: number): Promise<Offer[]> {
+    return db.select().from(offers).where(eq(offers.domainId, domainId));
+  }
+
   async getSharedDomain(id: number): Promise<SharedDomain | undefined> {
     const [domain] = await db.select().from(sharedDomains).where(eq(sharedDomains.id, id)).limit(1);
     return domain;
@@ -478,12 +499,22 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(sharedDomains).orderBy(desc(sharedDomains.createdAt));
   }
 
+  async getAllSharedDomainsForMonitoring(): Promise<SharedDomain[]> {
+    return db.select().from(sharedDomains).orderBy(sharedDomains.subdomain);
+  }
+
   async getActiveSharedDomains(): Promise<SharedDomain[]> {
     return db.select().from(sharedDomains).where(and(
       eq(sharedDomains.isActive, true), 
       eq(sharedDomains.isVerified, true),
       eq(sharedDomains.sslStatus, "active")
     )).orderBy(sharedDomains.subdomain);
+  }
+
+  async getInactiveSharedDomains(): Promise<SharedDomain[]> {
+    return db.select().from(sharedDomains).where(
+      eq(sharedDomains.isActive, false)
+    ).orderBy(desc(sharedDomains.updatedAt));
   }
 
   async createSharedDomain(domain: InsertSharedDomain): Promise<SharedDomain> {
@@ -502,6 +533,16 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSharedDomain(id: number): Promise<void> {
     await db.delete(sharedDomains).where(eq(sharedDomains.id, id));
+  }
+
+  async updateSharedDomainNotificationTimestamp(id: number, timestamp: Date): Promise<void> {
+    await db.update(sharedDomains)
+      .set({ lastInactiveNotificationAt: timestamp, updatedAt: new Date() })
+      .where(eq(sharedDomains.id, id));
+  }
+
+  async getOffersBySharedDomainId(sharedDomainId: number): Promise<Offer[]> {
+    return db.select().from(offers).where(eq(offers.sharedDomainId, sharedDomainId));
   }
 
   async getOffer(id: number): Promise<Offer | undefined> {

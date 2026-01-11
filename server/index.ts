@@ -8,6 +8,7 @@ import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
 import { initEasyPanel } from "./easypanel";
 import { storage } from "./storage";
+import { startDomainMonitor } from "./domainMonitor";
 
 const app = express();
 app.set('trust proxy', true);
@@ -337,6 +338,7 @@ app.use((req, res, next) => {
   await initStripe();
   initEasyPanel();
   setupWebSocket(httpServer);
+  startDomainMonitor();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
