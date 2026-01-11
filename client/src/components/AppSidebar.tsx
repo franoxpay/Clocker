@@ -62,6 +62,7 @@ const adminNavItems = [
   { key: "plans", path: "/confg-admin/plans", icon: CreditCard, label: "nav.admin.plans" },
   { key: "billing", path: "/confg-admin/billing", icon: Wallet, label: "nav.admin.billing" },
   { key: "shared-domains", path: "/confg-admin/shared-domains", icon: Globe, label: "nav.admin.sharedDomains" },
+  { key: "domains", path: "/confg-admin/domains", icon: Globe, label: "nav.admin.domains" },
   { key: "monitoring", path: "/confg-admin/monitoring", icon: Activity, label: "nav.admin.monitoring" },
   { key: "settings", path: "/confg-admin/settings", icon: Cog, label: "nav.admin.settings" },
 ];

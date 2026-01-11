@@ -60,7 +60,13 @@ import {
   Link2,
   Settings2,
   Eye,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface OfferWithDomain extends Offer {
   domain?: Domain;
@@ -745,7 +751,25 @@ export default function Offers() {
                           ? (offer.sharedDomain?.subdomain || sharedDomains.find(d => d.id === offer.sharedDomainId)?.subdomain || "-")
                           : offer.domainId
                             ? (offer.domain?.subdomain || "-")
-                            : "-"}
+                            : (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-1.5 text-destructive cursor-help">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span className="text-xs font-medium">
+                                      {language === "pt-BR" ? "Sem domínio" : "No domain"}
+                                    </span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="max-w-[200px] text-center">
+                                    {language === "pt-BR" 
+                                      ? "Esta oferta não está funcionando. Edite para adicionar um domínio."
+                                      : "This offer is not working. Edit to add a domain."}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={offer.isActive ? "default" : "secondary"}>

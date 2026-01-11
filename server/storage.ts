@@ -13,6 +13,7 @@ import {
   passwordResetTokens,
   adminImpersonations,
   suspensionHistory,
+  removedDomains,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -31,6 +32,8 @@ import {
   type AdminSettings,
   type SuspensionHistory,
   type InsertSuspensionHistory,
+  type RemovedDomain,
+  type InsertRemovedDomain,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -223,6 +226,34 @@ export interface IStorage {
   canUserCreateOffer(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }>;
   canUserCreateDomain(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }>;
   canUserDowngradeToPlan(userId: string, newPlanId: number): Promise<{ allowed: boolean; reason?: string; offersExcess?: number; domainsExcess?: number }>;
+
+  // Admin domain management
+  getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string }): Promise<Array<{
+    id: number;
+    subdomain: string;
+    type: 'user' | 'shared';
+    ownerId: string | null;
+    ownerEmail: string | null;
+    ownerName: string | null;
+    offersCount: number;
+    createdAt: Date;
+  }>>;
+
+  removeDomainByAdmin(
+    domainId: number,
+    domainType: 'user' | 'shared',
+    adminId: string,
+    removalReason?: string
+  ): Promise<{
+    subdomain: string;
+    affectedOffers: Array<{ offerId: number; userId: string; offerName: string }>;
+    originalOwner: { id: string; email: string; firstName: string | null } | null;
+  }>;
+
+  getRemovedDomainsHistory(page: number, limit: number): Promise<{
+    domains: RemovedDomain[];
+    total: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1614,6 +1645,202 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { allowed: true };
+  }
+
+  async getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string }): Promise<Array<{
+    id: number;
+    subdomain: string;
+    type: 'user' | 'shared';
+    ownerId: string | null;
+    ownerEmail: string | null;
+    ownerName: string | null;
+    offersCount: number;
+    createdAt: Date;
+  }>> {
+    const results: Array<{
+      id: number;
+      subdomain: string;
+      type: 'user' | 'shared';
+      ownerId: string | null;
+      ownerEmail: string | null;
+      ownerName: string | null;
+      offersCount: number;
+      createdAt: Date;
+    }> = [];
+
+    // Get user domains if not filtered to shared only
+    if (!filters?.type || filters.type === 'user') {
+      const userDomainsQuery = await db
+        .select({
+          id: domains.id,
+          subdomain: domains.subdomain,
+          userId: domains.userId,
+          createdAt: domains.createdAt,
+          ownerEmail: users.email,
+          ownerFirstName: users.firstName,
+          ownerLastName: users.lastName,
+        })
+        .from(domains)
+        .leftJoin(users, eq(domains.userId, users.id))
+        .orderBy(desc(domains.createdAt));
+
+      for (const d of userDomainsQuery) {
+        if (filters?.search && !d.subdomain.toLowerCase().includes(filters.search.toLowerCase())) {
+          continue;
+        }
+        const [offersCountResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(offers)
+          .where(eq(offers.domainId, d.id));
+
+        results.push({
+          id: d.id,
+          subdomain: d.subdomain,
+          type: 'user',
+          ownerId: d.userId,
+          ownerEmail: d.ownerEmail,
+          ownerName: d.ownerFirstName && d.ownerLastName 
+            ? `${d.ownerFirstName} ${d.ownerLastName}` 
+            : d.ownerFirstName || d.ownerLastName || null,
+          offersCount: offersCountResult?.count || 0,
+          createdAt: d.createdAt,
+        });
+      }
+    }
+
+    // Get shared domains if not filtered to user only
+    if (!filters?.type || filters.type === 'shared') {
+      const sharedDomainsQuery = await db
+        .select()
+        .from(sharedDomains)
+        .orderBy(desc(sharedDomains.createdAt));
+
+      for (const sd of sharedDomainsQuery) {
+        if (filters?.search && !sd.subdomain.toLowerCase().includes(filters.search.toLowerCase())) {
+          continue;
+        }
+        const [offersCountResult] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(offers)
+          .where(eq(offers.sharedDomainId, sd.id));
+
+        results.push({
+          id: sd.id,
+          subdomain: sd.subdomain,
+          type: 'shared',
+          ownerId: null,
+          ownerEmail: null,
+          ownerName: null,
+          offersCount: offersCountResult?.count || 0,
+          createdAt: sd.createdAt,
+        });
+      }
+    }
+
+    // Sort by createdAt descending
+    results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+    return results;
+  }
+
+  async removeDomainByAdmin(
+    domainId: number,
+    domainType: 'user' | 'shared',
+    adminId: string,
+    removalReason: string = 'admin_action'
+  ): Promise<{
+    subdomain: string;
+    affectedOffers: Array<{ offerId: number; userId: string; offerName: string }>;
+    originalOwner: { id: string; email: string; firstName: string | null } | null;
+  }> {
+    let subdomain: string;
+    let originalOwner: { id: string; email: string; firstName: string | null } | null = null;
+    let affectedOffers: Array<{ offerId: number; userId: string; offerName: string }> = [];
+
+    if (domainType === 'user') {
+      // Get domain info
+      const [domain] = await db.select().from(domains).where(eq(domains.id, domainId));
+      if (!domain) throw new Error('Domain not found');
+      
+      subdomain = domain.subdomain;
+      
+      // Get owner info
+      const [owner] = await db.select().from(users).where(eq(users.id, domain.userId));
+      if (owner) {
+        originalOwner = { id: owner.id, email: owner.email, firstName: owner.firstName };
+      }
+
+      // Get affected offers (before setting domainId to null)
+      const affectedOffersQuery = await db
+        .select({ id: offers.id, userId: offers.userId, name: offers.name })
+        .from(offers)
+        .where(eq(offers.domainId, domainId));
+
+      affectedOffers = affectedOffersQuery.map(o => ({ offerId: o.id, userId: o.userId, offerName: o.name }));
+
+      // Set domainId to null on offers (not cascade delete)
+      await db.update(offers).set({ domainId: null }).where(eq(offers.domainId, domainId));
+
+      // Delete the domain
+      await db.delete(domains).where(eq(domains.id, domainId));
+
+    } else {
+      // Get shared domain info
+      const [sharedDomain] = await db.select().from(sharedDomains).where(eq(sharedDomains.id, domainId));
+      if (!sharedDomain) throw new Error('Shared domain not found');
+      
+      subdomain = sharedDomain.subdomain;
+
+      // Get affected offers
+      const affectedOffersQuery = await db
+        .select({ id: offers.id, userId: offers.userId, name: offers.name })
+        .from(offers)
+        .where(eq(offers.sharedDomainId, domainId));
+
+      affectedOffers = affectedOffersQuery.map(o => ({ offerId: o.id, userId: o.userId, offerName: o.name }));
+
+      // Explicitly set sharedDomainId to null on offers BEFORE deleting
+      await db.update(offers).set({ sharedDomainId: null }).where(eq(offers.sharedDomainId, domainId));
+
+      // Now delete the shared domain
+      await db.delete(sharedDomains).where(eq(sharedDomains.id, domainId));
+    }
+
+    // Save to removed domains history
+    await db.insert(removedDomains).values({
+      subdomain,
+      domainType,
+      originalOwnerId: originalOwner?.id || null,
+      originalOwnerEmail: originalOwner?.email || null,
+      offersAffectedCount: affectedOffers.length,
+      removedBy: adminId,
+      removalReason,
+    });
+
+    return { subdomain, affectedOffers, originalOwner };
+  }
+
+  async getRemovedDomainsHistory(page: number, limit: number): Promise<{
+    domains: RemovedDomain[];
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(removedDomains);
+
+    const domainsResult = await db
+      .select()
+      .from(removedDomains)
+      .orderBy(desc(removedDomains.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      domains: domainsResult,
+      total: countResult?.count || 0,
+    };
   }
 }
 

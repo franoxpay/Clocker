@@ -3343,6 +3343,102 @@ export async function registerRoutes(
     }
   });
 
+  // Admin Domain Management - Get all system domains (user + shared)
+  app.get("/api/admin/domains", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const type = req.query.type as 'user' | 'shared' | undefined;
+      const search = req.query.search as string | undefined;
+
+      const domains = await storage.getAllSystemDomains({ type, search });
+      res.json(domains);
+    } catch (error) {
+      console.error("Error fetching all domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin Domain Management - Remove domain with notifications
+  app.delete("/api/admin/domains/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const domainId = parseInt(req.params.id);
+      const domainType = req.query.type as 'user' | 'shared';
+      const removalReason = (req.query.reason as string) || 'admin_action';
+      const adminId = req.user!.id;
+
+      if (!domainType || !['user', 'shared'].includes(domainType)) {
+        return res.status(400).json({ message: "Invalid domain type. Must be 'user' or 'shared'" });
+      }
+
+      const result = await storage.removeDomainByAdmin(domainId, domainType, adminId, removalReason);
+
+      // Only send notifications if there are affected offers
+      if (result.affectedOffers.length > 0) {
+        // Group affected offers by user
+        const userOffers = new Map<string, Array<{ offerId: number; offerName: string }>>();
+        for (const offer of result.affectedOffers) {
+          if (!userOffers.has(offer.userId)) {
+            userOffers.set(offer.userId, []);
+          }
+          userOffers.get(offer.userId)!.push({ offerId: offer.offerId, offerName: offer.offerName });
+        }
+
+        // Create notifications for affected users
+        for (const [userId, affectedOffers] of userOffers.entries()) {
+          const user = await storage.getUser(userId);
+          const firstName = user?.firstName || "Usuário";
+
+          const titlePt = "Domínio Removido";
+          const titleEn = "Domain Removed";
+          
+          // Customize message based on reason
+          let messagePt: string;
+          let messageEn: string;
+          
+          if (removalReason === 'phishing') {
+            messagePt = `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${affectedOffers.map(o => o.offerName).join(", ")}. Acesse sua conta para configurar um novo domínio.`;
+            messageEn = `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${affectedOffers.map(o => o.offerName).join(", ")}. Please access your account to configure a new domain.`;
+          } else {
+            messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma. As ofertas afetadas: ${affectedOffers.map(o => o.offerName).join(", ")}. Acesse sua conta para configurar um novo domínio.`;
+            messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform. Affected offers: ${affectedOffers.map(o => o.offerName).join(", ")}. Please access your account to configure a new domain.`;
+          }
+
+          await storage.createNotification({
+            userId,
+            type: "domain_removed",
+            titlePt,
+            titleEn,
+            messagePt,
+            messageEn,
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        subdomain: result.subdomain,
+        affectedUsersCount: result.affectedOffers.length > 0 ? new Set(result.affectedOffers.map(o => o.userId)).size : 0,
+        affectedOffersCount: result.affectedOffers.length,
+      });
+    } catch (error) {
+      console.error("Error removing domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin Domain Management - Get removed domains history
+  app.get("/api/admin/domains/history", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+
+      const result = await storage.getRemovedDomainsHistory(page, limit);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching removed domains history:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Rate limiting for bot detection - track clicks per IP
   const ipClickTracker = new Map<string, { count: number; firstClick: number; lastClick: number }>();
   const RATE_LIMIT_WINDOW_MS = 180000; // 3 minute window

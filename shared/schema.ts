@@ -253,6 +253,26 @@ export const suspensionHistory = pgTable(
   ]
 );
 
+// Removed domains history table - tracks domains removed by admin
+export const removedDomains = pgTable(
+  "removed_domains",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    subdomain: varchar("subdomain").notNull(),
+    domainType: varchar("domain_type").notNull(), // 'user' | 'shared'
+    originalOwnerId: varchar("original_owner_id").references(() => users.id, { onDelete: "set null" }), // null for shared domains
+    originalOwnerEmail: varchar("original_owner_email"), // stored for reference even if user deleted
+    offersAffectedCount: integer("offers_affected_count").default(0).notNull(),
+    removedBy: varchar("removed_by").notNull().references(() => users.id, { onDelete: "set null" }),
+    removalReason: text("removal_reason").default("phishing").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("removed_domains_subdomain_idx").on(table.subdomain),
+    index("removed_domains_created_idx").on(table.createdAt),
+  ]
+);
+
 // Relations
 export const usersRelations = relations(users, ({ one, many }) => ({
   plan: one(plans, {
@@ -477,3 +497,10 @@ export const insertSuspensionHistorySchema = createInsertSchema(suspensionHistor
 });
 export type SuspensionHistory = typeof suspensionHistory.$inferSelect;
 export type InsertSuspensionHistory = z.infer<typeof insertSuspensionHistorySchema>;
+
+export const insertRemovedDomainSchema = createInsertSchema(removedDomains).omit({
+  id: true,
+  createdAt: true,
+});
+export type RemovedDomain = typeof removedDomains.$inferSelect;
+export type InsertRemovedDomain = z.infer<typeof insertRemovedDomainSchema>;
