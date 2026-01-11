@@ -477,7 +477,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getActiveSharedDomains(): Promise<SharedDomain[]> {
-    return db.select().from(sharedDomains).where(and(eq(sharedDomains.isActive, true), eq(sharedDomains.isVerified, true))).orderBy(sharedDomains.subdomain);
+    return db.select().from(sharedDomains).where(and(
+      eq(sharedDomains.isActive, true), 
+      eq(sharedDomains.isVerified, true),
+      eq(sharedDomains.sslStatus, "active")
+    )).orderBy(sharedDomains.subdomain);
   }
 
   async createSharedDomain(domain: InsertSharedDomain): Promise<SharedDomain> {

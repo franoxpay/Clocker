@@ -8,7 +8,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw } from "lucide-react";
+import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw, Info } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 import {
@@ -79,7 +80,6 @@ export default function AdminDomains() {
   const [removalReason, setRemovalReason] = useState<string>("admin_action");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [newDomain, setNewDomain] = useState("");
-  const [showDnsInfo, setShowDnsInfo] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const DNS_DESTINATION = "cleryon.com";
@@ -109,10 +109,9 @@ export default function AdminDomains() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       setNewDomain("");
-      setShowDnsInfo(false);
       toast({
         title: language === "pt-BR" ? "Sucesso" : "Success",
-        description: language === "pt-BR" ? "Domínio compartilhado criado com sucesso" : "Shared domain created successfully",
+        description: language === "pt-BR" ? "Domínio compartilhado criado. Verifique o DNS para ativar." : "Shared domain created. Verify DNS to activate.",
       });
     },
     onError: (error: Error) => {
@@ -220,101 +219,48 @@ export default function AdminDomains() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            {language === "pt-BR" ? "Adicionar Domínio Compartilhado" : "Add Shared Domain"}
-          </CardTitle>
-          <CardDescription>
-            {language === "pt-BR"
-              ? "Configure o apontamento DNS antes de adicionar o domínio"
-              : "Configure DNS pointing before adding the domain"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="example.yourdomain.com"
-              value={newDomain}
-              onChange={(e) => {
-                setNewDomain(e.target.value);
-                if (e.target.value.trim()) setShowDnsInfo(true);
-              }}
-              onKeyDown={(e) => e.key === "Enter" && handleCreateSharedDomain()}
-              data-testid="input-new-shared-domain"
-            />
-            <Button
-              onClick={handleCreateSharedDomain}
-              disabled={createSharedDomainMutation.isPending || !newDomain.trim()}
-              data-testid="button-add-shared-domain"
-            >
-              {createSharedDomainMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          
-          {showDnsInfo && newDomain.trim() && (
-            <div className="p-4 bg-muted/50 rounded-lg space-y-3">
-              <h4 className="font-medium text-sm">
-                {language === "pt-BR" ? "Configuração de DNS Necessária" : "Required DNS Configuration"}
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                {language === "pt-BR"
-                  ? "Adicione o seguinte registro DNS no seu provedor de domínio:"
-                  : "Add the following DNS record in your domain provider:"}
-              </p>
-              <div className="rounded-md border bg-background">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[120px]">{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
-                      <TableHead>{language === "pt-BR" ? "Nome / Host" : "Name / Host"}</TableHead>
-                      <TableHead>{language === "pt-BR" ? "Destino / Valor" : "Destination / Value"}</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>
-                        <Badge variant="secondary">CNAME</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {newDomain.trim().split('.')[0] || 'subdomain'}
-                      </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {DNS_DESTINATION}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleCopy(DNS_DESTINATION, 'destination')}
-                          data-testid="button-copy-destination"
-                        >
-                          {copiedField === 'destination' ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {language === "pt-BR"
-                  ? "Após configurar o DNS, a propagação pode levar até 24 horas. O domínio será verificado automaticamente."
-                  : "After configuring DNS, propagation can take up to 24 hours. The domain will be verified automatically."}
-              </p>
-            </div>
+      <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/30">
+        <Input
+          placeholder={language === "pt-BR" ? "Adicionar domínio compartilhado (ex: app.seudominio.com)" : "Add shared domain (e.g., app.yourdomain.com)"}
+          value={newDomain}
+          onChange={(e) => setNewDomain(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleCreateSharedDomain()}
+          className="flex-1"
+          data-testid="input-new-shared-domain"
+        />
+        <Button
+          onClick={handleCreateSharedDomain}
+          disabled={createSharedDomainMutation.isPending || !newDomain.trim()}
+          data-testid="button-add-shared-domain"
+        >
+          {createSharedDomainMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Plus className="h-4 w-4 mr-2" />
           )}
-        </CardContent>
-      </Card>
+          {language === "pt-BR" ? "Adicionar" : "Add"}
+        </Button>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => handleCopy(DNS_DESTINATION, 'dns-tip')} data-testid="button-dns-info">
+                {copiedField === 'dns-tip' ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                ) : (
+                  <Info className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-xs">
+              <p className="text-xs">
+                {language === "pt-BR" 
+                  ? `Configure CNAME apontando para ${DNS_DESTINATION}. O domínio ficará ativo após validação do SSL.`
+                  : `Configure CNAME pointing to ${DNS_DESTINATION}. Domain will be active after SSL validation.`}
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
 
       <Card>
         <CardHeader>

@@ -3252,7 +3252,7 @@ export async function registerRoutes(
       
       let domain = await storage.createSharedDomain({
         subdomain,
-        isActive: true,
+        isActive: false,
         isVerified: false,
         sslStatus: "pending",
       });
@@ -3290,6 +3290,7 @@ export async function registerRoutes(
       
       const updated = await storage.updateSharedDomain(domainId, {
         isVerified: dnsResult.verified,
+        isActive: dnsResult.verified,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
         sslStatus: dnsResult.verified ? "active" : "pending",
