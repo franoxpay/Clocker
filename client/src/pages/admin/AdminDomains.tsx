@@ -444,11 +444,8 @@ export default function AdminDomains() {
                     <SelectItem value="phishing">
                       {language === "pt-BR" ? "Denúncia de phishing" : "Phishing complaint"}
                     </SelectItem>
-                    <SelectItem value="abuse">
-                      {language === "pt-BR" ? "Uso abusivo" : "Abuse"}
-                    </SelectItem>
-                    <SelectItem value="user_request">
-                      {language === "pt-BR" ? "Solicitação do usuário" : "User request"}
+                    <SelectItem value="inactive">
+                      {language === "pt-BR" ? "Inatividade do domínio" : "Domain inactivity"}
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -466,20 +463,15 @@ export default function AdminDomains() {
                           ? `Olá [Nome], identificamos que o domínio ${domainToDelete.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
                           : `Hello [Name], we identified that the domain ${domainToDelete.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: [offer list]. Please access your account to configure a new domain.`
                       )}
-                      {removalReason === 'abuse' && (
+                      {removalReason === 'inactive' && (
                         language === "pt-BR" 
-                          ? `Olá [Nome], o domínio ${domainToDelete.subdomain} foi removido da plataforma devido a violações dos nossos termos de uso. Esta ação foi necessária para manter a integridade da plataforma. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
-                          : `Hello [Name], the domain ${domainToDelete.subdomain} was removed from the platform due to violations of our terms of use. This action was necessary to maintain platform integrity. Affected offers: [offer list]. Please access your account to configure a new domain.`
+                          ? `Olá [Nome], o domínio ${domainToDelete.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`
+                          : `Hello [Name], the domain ${domainToDelete.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`
                       )}
                       {removalReason === 'admin_action' && (
                         language === "pt-BR" 
                           ? `Olá [Nome], o domínio ${domainToDelete.subdomain} foi removido da plataforma por decisão administrativa. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio.`
                           : `Hello [Name], the domain ${domainToDelete.subdomain} was removed from the platform by administrative decision. Affected offers: [offer list]. Please access your account to configure a new domain.`
-                      )}
-                      {removalReason === 'user_request' && (
-                        language === "pt-BR" 
-                          ? `Olá [Nome], conforme sua solicitação, o domínio ${domainToDelete.subdomain} foi removido da plataforma. As ofertas afetadas: [lista de ofertas]. Acesse sua conta para configurar um novo domínio se necessário.`
-                          : `Hello [Name], as per your request, the domain ${domainToDelete.subdomain} was removed from the platform. Affected offers: [offer list]. Please access your account to configure a new domain if needed.`
                       )}
                     </div>
                   ) : (

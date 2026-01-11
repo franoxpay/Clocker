@@ -3428,13 +3428,9 @@ export async function registerRoutes(
               messagePt = `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
               messageEn = `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
               break;
-            case 'abuse':
-              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma devido a violações dos nossos termos de uso. Esta ação foi necessária para manter a integridade da plataforma. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
-              messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform due to violations of our terms of use. This action was necessary to maintain platform integrity. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
-              break;
-            case 'user_request':
-              messagePt = `Olá ${firstName}, conforme sua solicitação, o domínio ${result.subdomain} foi removido da plataforma. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio se necessário.`;
-              messageEn = `Hello ${firstName}, as per your request, the domain ${result.subdomain} was removed from the platform. Affected offers: ${offerNames}. Please access your account to configure a new domain if needed.`;
+            case 'inactive':
+              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`;
+              messageEn = `Hello ${firstName}, the domain ${result.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`;
               break;
             case 'admin_action':
             default:
