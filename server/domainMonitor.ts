@@ -92,7 +92,6 @@ async function checkAllDomains() {
               
               if (owner) {
                 const firstName = owner.firstName || owner.email.split("@")[0];
-                const offerNames = offers.map(o => o.name).join(", ");
                 
                 const messagePt = `Olá ${firstName}, o domínio ${domain.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`;
                 const messageEn = `Hello ${firstName}, the domain ${domain.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`;
@@ -100,13 +99,10 @@ async function checkAllDomains() {
                 await storage.createNotification({
                   userId: domain.userId,
                   type: "domain_inactive",
-                  title: owner.language === "pt-BR" ? "Domínio Inativo Detectado" : "Inactive Domain Detected",
-                  message: owner.language === "pt-BR" ? messagePt : messageEn,
-                  metadata: { 
-                    domainId: domain.id, 
-                    subdomain: domain.subdomain,
-                    affectedOffers: offerNames 
-                  },
+                  titlePt: "Domínio Inativo Detectado",
+                  titleEn: "Inactive Domain Detected",
+                  messagePt: messagePt,
+                  messageEn: messageEn,
                 });
                 
                 console.log(`[DOMAIN MONITOR] Notification sent for domain: ${domain.subdomain}`);
@@ -187,13 +183,10 @@ async function checkAllDomains() {
                 await storage.createNotification({
                   userId,
                   type: "domain_inactive",
-                  title: owner.language === "pt-BR" ? "Domínio Compartilhado Inativo" : "Shared Domain Inactive",
-                  message: owner.language === "pt-BR" ? messagePt : messageEn,
-                  metadata: { 
-                    sharedDomainId: domain.id, 
-                    subdomain: domain.subdomain,
-                    affectedOffers: userOffers.map((o: { name: string }) => o.name).join(", ")
-                  },
+                  titlePt: "Domínio Compartilhado Inativo",
+                  titleEn: "Shared Domain Inactive",
+                  messagePt: messagePt,
+                  messageEn: messageEn,
                 });
                 
                 console.log(`[DOMAIN MONITOR] Notification sent to user ${userId} for shared domain: ${domain.subdomain}`);
