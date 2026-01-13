@@ -213,15 +213,32 @@ export class WebhookHandlers {
       return;
     }
 
-    const updateData = {
+    // Start 3-day grace period for renewal
+    const gracePeriodEndsAt = new Date();
+    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 72);
+
+    const updateData: any = {
       subscriptionStatus: 'canceled',
       subscriptionEndDate: subscription.ended_at 
         ? new Date(subscription.ended_at * 1000) 
         : new Date(),
+      gracePeriodEndsAt,
     };
 
     await storage.updateUser(user.id, updateData);
-    console.log(`[WebhookHandlers] Updated user ${user.id} - subscription canceled`);
+    
+    // Log the grace period start
+    await storage.createSuspensionHistoryEntry({
+      userId: user.id,
+      event: 'grace_started',
+      reason: 'subscription_canceled',
+      details: `Subscription canceled. Grace period for renewal until ${gracePeriodEndsAt.toISOString()} (3 days)`,
+      actorType: 'system',
+      clicksAtEvent: user.clicksUsedThisMonth,
+      planIdAtEvent: user.planId,
+    });
+    
+    console.log(`[WebhookHandlers] Updated user ${user.id} - subscription canceled, grace period until ${gracePeriodEndsAt.toISOString()}`);
   }
 
   private static async handlePaymentFailed(invoice: any): Promise<void> {
@@ -267,10 +284,27 @@ export class WebhookHandlers {
       console.error(`[WebhookHandlers] Error during fallback payment attempt: ${err.message}`);
     }
 
+    // Start 3-day grace period for renewal
+    const gracePeriodEndsAt = new Date();
+    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 72);
+    
     await storage.updateUser(user.id, {
       subscriptionStatus: 'past_due',
+      gracePeriodEndsAt,
     });
-    console.log(`[WebhookHandlers] Updated user ${user.id} - payment failed, status: past_due`);
+    
+    // Log the grace period start
+    await storage.createSuspensionHistoryEntry({
+      userId: user.id,
+      event: 'grace_started',
+      reason: 'payment_failed',
+      details: `Payment failed. Grace period for renewal until ${gracePeriodEndsAt.toISOString()} (3 days)`,
+      actorType: 'system',
+      clicksAtEvent: user.clicksUsedThisMonth,
+      planIdAtEvent: user.planId,
+    });
+    
+    console.log(`[WebhookHandlers] Updated user ${user.id} - payment failed, status: past_due, grace period until ${gracePeriodEndsAt.toISOString()}`);
   }
 
   private static async handlePaymentSucceeded(invoice: any): Promise<void> {
@@ -290,12 +324,13 @@ export class WebhookHandlers {
       return;
     }
 
-    if (user.subscriptionStatus !== 'active') {
+    if (user.subscriptionStatus !== 'active' || user.gracePeriodEndsAt) {
       await storage.updateUser(user.id, {
         subscriptionStatus: 'active',
         stripeSubscriptionId: subscriptionId,
+        gracePeriodEndsAt: null,
       });
-      console.log(`[WebhookHandlers] Updated user ${user.id} - payment succeeded, status: active`);
+      console.log(`[WebhookHandlers] Updated user ${user.id} - payment succeeded, status: active, grace period cleared`);
     }
   }
 }

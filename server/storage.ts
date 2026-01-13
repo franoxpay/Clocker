@@ -1474,7 +1474,7 @@ export class DatabaseStorage implements IStorage {
     if (!user) return;
 
     const gracePeriodEndsAt = new Date();
-    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 48);
+    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 72);
 
     await this.updateUser(userId, { gracePeriodEndsAt });
 

@@ -2861,6 +2861,9 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Plan not found" });
       }
       
+      const subscriptionEndDate = new Date();
+      subscriptionEndDate.setDate(subscriptionEndDate.getDate() + 30);
+      
       if (user.stripeSubscriptionId && newPlan.stripePriceId) {
         try {
           const stripe = await getStripeClient();
@@ -2887,9 +2890,54 @@ export async function registerRoutes(
           console.error(`[ADMIN] Failed to update Stripe subscription:`, stripeError.message);
           return res.status(500).json({ message: "Failed to update Stripe subscription: " + stripeError.message });
         }
+      } else if (!user.stripeSubscriptionId && newPlan.stripePriceId) {
+        try {
+          const stripe = await getStripeClient();
+          
+          let customerId = user.stripeCustomerId;
+          if (!customerId) {
+            const customer = await stripe.customers.create({
+              email: user.email,
+              name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+              metadata: { userId: user.id },
+            });
+            customerId = customer.id;
+            await storage.updateUser(userId, { stripeCustomerId: customerId });
+            console.log(`[ADMIN] Created Stripe customer ${customerId} for user ${userId}`);
+          }
+          
+          const trialEnd = Math.floor(subscriptionEndDate.getTime() / 1000);
+          const subscription = await stripe.subscriptions.create({
+            customer: customerId,
+            items: [{ price: newPlan.stripePriceId }],
+            trial_end: trialEnd,
+          });
+          
+          await storage.updateUser(userId, { 
+            stripeSubscriptionId: subscription.id,
+            subscriptionStatus: subscription.status,
+            subscriptionEndDate,
+          });
+          
+          console.log(`[ADMIN] Created Stripe subscription ${subscription.id} for user ${userId} with 30-day trial (status: ${subscription.status})`);
+        } catch (stripeError: any) {
+          console.error(`[ADMIN] Failed to create Stripe subscription:`, stripeError.message);
+          return res.status(500).json({ message: "Failed to create Stripe subscription: " + stripeError.message });
+        }
       }
       
-      await storage.updateUser(userId, { planId });
+      const updateData: any = { 
+        planId,
+        suspendedAt: null,
+        suspensionReason: null,
+        gracePeriodEndsAt: null,
+      };
+      
+      if (!user.stripeSubscriptionId) {
+        updateData.subscriptionEndDate = subscriptionEndDate;
+      }
+      
+      await storage.updateUser(userId, updateData);
       res.json({ success: true });
     } catch (error) {
       console.error("Error changing plan:", error);
