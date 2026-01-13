@@ -2850,6 +2850,45 @@ export async function registerRoutes(
     try {
       const userId = req.params.id;
       const { planId } = req.body;
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const newPlan = await storage.getPlan(planId);
+      if (!newPlan) {
+        return res.status(404).json({ message: "Plan not found" });
+      }
+      
+      if (user.stripeSubscriptionId && newPlan.stripePriceId) {
+        try {
+          const stripe = await getStripeClient();
+          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          
+          if (subscription && subscription.items?.data?.length > 0) {
+            const currentPriceId = subscription.items.data[0].price?.id;
+            
+            if (currentPriceId !== newPlan.stripePriceId) {
+              const subscriptionItemId = subscription.items.data[0].id;
+              
+              await stripe.subscriptions.update(user.stripeSubscriptionId, {
+                items: [{
+                  id: subscriptionItemId,
+                  price: newPlan.stripePriceId,
+                }],
+                proration_behavior: 'none',
+              });
+              
+              console.log(`[ADMIN] Updated Stripe subscription for user ${userId} to plan ${newPlan.name} (no charge)`);
+            }
+          }
+        } catch (stripeError: any) {
+          console.error(`[ADMIN] Failed to update Stripe subscription:`, stripeError.message);
+          return res.status(500).json({ message: "Failed to update Stripe subscription: " + stripeError.message });
+        }
+      }
+      
       await storage.updateUser(userId, { planId });
       res.json({ success: true });
     } catch (error) {
