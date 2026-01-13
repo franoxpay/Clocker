@@ -473,7 +473,7 @@ export default function AdminUsers() {
                 <SelectContent>
                   {plans.map((plan) => (
                     <SelectItem key={plan.id} value={String(plan.id)}>
-                      {language === "pt-BR" ? plan.name : plan.nameEn} - R${plan.price}
+                      {language === "pt-BR" ? plan.name : plan.nameEn} - R$ {(plan.price / 100).toFixed(2)}
                     </SelectItem>
                   ))}
                 </SelectContent>
