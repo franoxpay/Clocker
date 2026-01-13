@@ -2866,13 +2866,17 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const currentEnd = user.subscriptionEndDate || new Date();
-      const newEnd = new Date(currentEnd);
+      
+      const newEnd = new Date();
       newEnd.setDate(newEnd.getDate() + days);
+      
       await storage.updateUser(userId, { subscriptionEndDate: newEnd });
+      
+      console.log(`[ADMIN] Set subscription end date for user ${userId} to ${newEnd.toISOString()} (${days} days from now)`);
+      
       res.json({ success: true });
     } catch (error) {
-      console.error("Error adding days:", error);
+      console.error("Error setting days:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

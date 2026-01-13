@@ -396,11 +396,12 @@ export default function AdminUsers() {
                             <DropdownMenuItem
                               onClick={() => {
                                 setSelectedUser(user);
+                                setDaysToAdd("");
                                 setActionType("addDays");
                               }}
                             >
                               <Calendar className="w-4 h-4 mr-2" />
-                              {t("admin.users.addDays")}
+                              {language === "pt-BR" ? "Definir Dias" : "Set Days"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
@@ -523,18 +524,37 @@ export default function AdminUsers() {
       <Dialog open={actionType === "addDays"} onOpenChange={(open) => !open && setActionType(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("admin.users.addDays")}</DialogTitle>
+            <DialogTitle>{language === "pt-BR" ? "Definir Dias Restantes" : "Set Remaining Days"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <div className="text-sm text-muted-foreground">
+              {language === "pt-BR" 
+                ? `Usuário: ${selectedUser?.email}` 
+                : `User: ${selectedUser?.email}`}
+            </div>
+            {selectedUser?.subscriptionEndDate && (
+              <div className="text-sm">
+                {language === "pt-BR" ? "Dias restantes atuais: " : "Current remaining days: "}
+                <span className="font-medium">
+                  {Math.max(0, Math.ceil((new Date(selectedUser.subscriptionEndDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))}
+                </span>
+              </div>
+            )}
             <div className="space-y-2">
-              <Label>{language === "pt-BR" ? "Dias a adicionar" : "Days to add"}</Label>
+              <Label>{language === "pt-BR" ? "Novos dias restantes" : "New remaining days"}</Label>
               <Input
                 type="number"
-                min="1"
+                min="0"
                 value={daysToAdd}
                 onChange={(e) => setDaysToAdd(e.target.value)}
-                placeholder="7"
+                placeholder="30"
+                data-testid="input-set-days"
               />
+              <p className="text-xs text-muted-foreground">
+                {language === "pt-BR" 
+                  ? "Define quantos dias o usuário terá de acesso. A cobrança automática do Stripe continua no ciclo original." 
+                  : "Sets how many days the user will have access. Stripe automatic billing continues on the original cycle."}
+              </p>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setActionType(null)}>
@@ -548,7 +568,7 @@ export default function AdminUsers() {
                     days: parseInt(daysToAdd),
                   })
                 }
-                disabled={!daysToAdd || addDaysMutation.isPending}
+                disabled={daysToAdd === "" || addDaysMutation.isPending}
               >
                 {addDaysMutation.isPending ? t("common.loading") : t("common.save")}
               </Button>
