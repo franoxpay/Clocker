@@ -312,6 +312,7 @@ export default function AdminUsers() {
                   <TableRow>
                     <TableHead>{t("admin.users.email")}</TableHead>
                     <TableHead>{t("admin.users.plan")}</TableHead>
+                    <TableHead>{language === "pt-BR" ? "Dias Restantes" : "Days Left"}</TableHead>
                     <TableHead>{t("admin.users.clicks")}</TableHead>
                     <TableHead>{t("admin.users.status")}</TableHead>
                     <TableHead className="w-12">{t("admin.users.actions")}</TableHead>
@@ -327,6 +328,25 @@ export default function AdminUsers() {
                         )}
                       </TableCell>
                       <TableCell>{getPlanName(user.planId)}</TableCell>
+                      <TableCell>
+                        {user.subscriptionEndDate ? (
+                          (() => {
+                            const endDate = new Date(user.subscriptionEndDate);
+                            const now = new Date();
+                            const diffTime = endDate.getTime() - now.getTime();
+                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            if (diffDays < 0) {
+                              return <span className="text-destructive">{language === "pt-BR" ? "Expirado" : "Expired"}</span>;
+                            }
+                            if (diffDays <= 3) {
+                              return <span className="text-amber-500 font-medium">{diffDays} {language === "pt-BR" ? "dias" : "days"}</span>;
+                            }
+                            return <span>{diffDays} {language === "pt-BR" ? "dias" : "days"}</span>;
+                          })()
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {user.clicksBreakdown ? (
                           <Tooltip>
