@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,10 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, ImageIcon } from "lucide-react";
+import { Upload, ImageIcon, MessageCircle, Save } from "lucide-react";
 
 interface AdminConfig {
   logoUrl?: string;
+  supportWhatsapp?: string | null;
 }
 
 export default function AdminSettings() {
@@ -19,9 +20,37 @@ export default function AdminSettings() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
 
   const { data: config, isLoading } = useQuery<AdminConfig>({
     queryKey: ["/api/admin/config"],
+  });
+
+  useEffect(() => {
+    if (config?.supportWhatsapp) {
+      setWhatsappNumber(config.supportWhatsapp);
+    }
+  }, [config?.supportWhatsapp]);
+
+  const updateWhatsappMutation = useMutation({
+    mutationFn: async (supportWhatsapp: string) => {
+      return apiRequest("PATCH", "/api/admin/config", { supportWhatsapp });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/support-whatsapp"] });
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Número de WhatsApp atualizado" : "WhatsApp number updated",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: language === "pt-BR" ? "Erro ao atualizar WhatsApp" : "Error updating WhatsApp",
+        variant: "destructive",
+      });
+    },
   });
 
   const uploadLogoMutation = useMutation({
@@ -133,6 +162,51 @@ export default function AdminSettings() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageCircle className="w-5 h-5" />
+            {language === "pt-BR" ? "Suporte WhatsApp" : "WhatsApp Support"}
+          </CardTitle>
+          <CardDescription>
+            {language === "pt-BR" 
+              ? "Configure o número de WhatsApp que aparecerá no botão de suporte para os usuários." 
+              : "Configure the WhatsApp number that will appear in the support button for users."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="whatsapp">
+              {language === "pt-BR" ? "Número do WhatsApp" : "WhatsApp Number"}
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="whatsapp"
+                placeholder="+5511999999999"
+                value={whatsappNumber}
+                onChange={(e) => setWhatsappNumber(e.target.value)}
+                data-testid="input-whatsapp-number"
+              />
+              <Button
+                onClick={() => updateWhatsappMutation.mutate(whatsappNumber)}
+                disabled={updateWhatsappMutation.isPending}
+                data-testid="button-save-whatsapp"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {updateWhatsappMutation.isPending 
+                  ? t("common.loading") 
+                  : (language === "pt-BR" ? "Salvar" : "Save")}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {language === "pt-BR" 
+                ? "Inclua o código do país (ex: +55 para Brasil). Se vazio, o botão de suporte não aparecerá." 
+                : "Include country code (e.g., +1 for US). If empty, the support button won't appear."}
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>

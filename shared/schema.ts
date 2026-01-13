@@ -210,6 +210,7 @@ export const adminSettings = pgTable("admin_settings", {
   logoPath: text("logo_path"),
   logoWidth: integer("logo_width"),
   logoHeight: integer("logo_height"),
+  supportWhatsapp: text("support_whatsapp"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

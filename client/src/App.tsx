@@ -14,7 +14,7 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, X } from "lucide-react";
+import { AlertTriangle, X, MessageCircle } from "lucide-react";
 import { useState } from "react";
 
 import Landing from "@/pages/Landing";
@@ -86,6 +86,10 @@ function AuthenticatedLayout() {
     enabled: !user?.isAdmin,
   });
 
+  const { data: supportConfig } = useQuery<{ whatsapp: string | null }>({
+    queryKey: ["/api/support-whatsapp"],
+  });
+
   const isOverLimit = usage && !usage.isUnlimited && usage.clicksLimit && usage.clicksThisMonth >= usage.clicksLimit;
   const isSuspended = usage?.isSuspended;
   const showLimitAlert = (isOverLimit || isSuspended) && !dismissedAlert && !isAdminRoute;
@@ -105,6 +109,17 @@ function AuthenticatedLayout() {
             <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="flex items-center gap-1">
+                {supportConfig?.whatsapp && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(`https://wa.me/${supportConfig.whatsapp!.replace(/\D/g, '')}`, '_blank')}
+                    data-testid="button-support-whatsapp"
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    {language === "pt-BR" ? "Suporte" : "Support"}
+                  </Button>
+                )}
                 <NotificationBell />
                 <LanguageToggle />
                 <ThemeToggle />

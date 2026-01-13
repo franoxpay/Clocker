@@ -3084,9 +3084,36 @@ export async function registerRoutes(
   app.get("/api/admin/config", isAdmin, async (req: Request, res: Response) => {
     try {
       const settings = await storage.getAdminSettings();
-      res.json({ logoUrl: settings?.logoPath || null });
+      res.json({ 
+        logoUrl: settings?.logoPath || null,
+        supportWhatsapp: settings?.supportWhatsapp || null,
+      });
     } catch (error) {
       console.error("Error fetching admin config:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.patch("/api/admin/config", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { supportWhatsapp } = req.body;
+      const settings = await storage.updateAdminSettings({ supportWhatsapp });
+      res.json({ 
+        logoUrl: settings?.logoPath || null,
+        supportWhatsapp: settings?.supportWhatsapp || null,
+      });
+    } catch (error) {
+      console.error("Error updating admin config:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/support-whatsapp", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const settings = await storage.getAdminSettings();
+      res.json({ whatsapp: settings?.supportWhatsapp || null });
+    } catch (error) {
+      console.error("Error fetching support whatsapp:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
