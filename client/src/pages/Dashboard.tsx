@@ -54,6 +54,7 @@ interface UserUsage {
   gracePeriodEndsAt: string | null;
   isSuspended: boolean;
   clicksResetDate: string | null;
+  subscriptionStatus: string | null;
 }
 
 export default function Dashboard() {
@@ -155,13 +156,17 @@ export default function Dashboard() {
         <Alert variant="destructive" className="border-orange-500 bg-orange-500/10" data-testid="alert-grace-period">
           <Clock className="h-4 w-4 text-orange-500" />
           <AlertTitle className="text-orange-600 dark:text-orange-400">
-            {language === "pt-BR" ? "Período de Tolerância" : "Grace Period"}
+            {language === "pt-BR" ? "Atenção: Conta Será Suspensa" : "Warning: Account Will Be Suspended"}
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
-              {language === "pt-BR" 
-                ? `Você excedeu seu limite de cliques. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.` 
-                : `You have exceeded your click limit. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`}
+              {(usage?.subscriptionStatus === 'past_due' || usage?.subscriptionStatus === 'canceled')
+                ? (language === "pt-BR" 
+                    ? `Sua assinatura está pendente. Renove para continuar usando o serviço. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.`
+                    : `Your subscription is pending. Renew to continue using the service. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`)
+                : (language === "pt-BR" 
+                    ? `Você excedeu seu limite de cliques. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.` 
+                    : `You have exceeded your click limit. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`)}
             </span>
             <Button 
               variant="outline" 
@@ -169,7 +174,9 @@ export default function Dashboard() {
               onClick={() => navigate("/subscription")}
               data-testid="button-upgrade-grace"
             >
-              {language === "pt-BR" ? "Fazer Upgrade Agora" : "Upgrade Now"}
+              {(usage?.subscriptionStatus === 'past_due' || usage?.subscriptionStatus === 'canceled')
+                ? (language === "pt-BR" ? "Renovar Assinatura" : "Renew Subscription")
+                : (language === "pt-BR" ? "Fazer Upgrade Agora" : "Upgrade Now")}
             </Button>
           </AlertDescription>
         </Alert>

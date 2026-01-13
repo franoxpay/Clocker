@@ -2508,6 +2508,7 @@ export async function registerRoutes(
         gracePeriodEndsAt: user?.gracePeriodEndsAt ?? null,
         isSuspended: user?.suspendedAt !== null,
         clicksResetDate: user?.clicksResetDate ?? null,
+        subscriptionStatus: user?.subscriptionStatus ?? null,
       });
     } catch (error) {
       console.error("Error fetching user usage:", error);
