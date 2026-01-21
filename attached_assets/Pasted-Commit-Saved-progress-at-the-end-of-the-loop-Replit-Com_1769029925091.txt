@@ -1,0 +1,252 @@
+Commit: Saved progress at the end of the loop
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: 5eec02e7-eee3-4f63-b612-039e0fc4d9bb
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: 72c4d3f4-e0b7-4f1b-b2ef-46dd8d55fd7f
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/7d57dd38-94a8-448c-b556-edb65fb58da5/5eec02e7-eee3-4f63-b612-039e0fc4d9bb/CiBCLi2 
+##########################################
+### Download Github Archive Started...
+### Wed, 21 Jan 2026 21:10:34 GMT
+##########################################
+
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 358B done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 0.2s
+
+#3 [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:3960ed74dfe320a67bf8da9555b6bade25ebda2b22b6081d2f60fd7d5d430e9c
+#3 resolve docker.io/library/node:20-alpine@sha256:3960ed74dfe320a67bf8da9555b6bade25ebda2b22b6081d2f60fd7d5d430e9c 0.0s done
+#3 sha256:1b3a22d17cb67849eb8a0f8c775b3287b6d8616f1f41ad227658ff6d0c8167c3 6.52kB / 6.52kB done
+#3 sha256:3960ed74dfe320a67bf8da9555b6bade25ebda2b22b6081d2f60fd7d5d430e9c 7.67kB / 7.67kB done
+#3 sha256:2dd4425a1528b0c47e065c88b3d4b73830c8fe68132726cd8485453059774468 1.72kB / 1.72kB done
+#3 sha256:41b3afaea3b1b1ab04a268431e10dcace7883019a5da7d326aa35dc9713fcbb5 445B / 445B 0.3s done
+#3 sha256:3dcec91425079e7b455efc5f2a18d026450c47c9382c41897620afc6b1424e44 1.26MB / 1.26MB 0.4s done
+#3 sha256:c2b4197efb6ccd7f8b482ae7800f1c9c78c044ea192587887300080bcff6b2c9 42.78MB / 42.78MB 2.1s done
+#3 extracting sha256:c2b4197efb6ccd7f8b482ae7800f1c9c78c044ea192587887300080bcff6b2c9 5.7s done
+#3 extracting sha256:3dcec91425079e7b455efc5f2a18d026450c47c9382c41897620afc6b1424e44 0.2s done
+#3 extracting sha256:41b3afaea3b1b1ab04a268431e10dcace7883019a5da7d326aa35dc9713fcbb5 0.0s done
+#3 DONE 8.9s
+
+#4 [builder 2/6] WORKDIR /app
+#4 DONE 0.3s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 126B done
+#5 DONE 0.1s
+
+#6 [internal] load build context
+#6 transferring context: 1.37MB 0.3s done
+#6 DONE 0.4s
+
+#7 [builder 3/6] COPY package*.json ./
+#7 DONE 0.1s
+
+#8 [builder 4/6] RUN npm ci
+#8 16.84 npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+#8 16.91 npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+#8 ...
+
+#9 [runner 4/5] RUN npm ci --only=production
+#9 0.625 npm warn config only Use `--omit=dev` to omit dev dependencies from the install.
+#9 36.54 
+#9 36.54 added 490 packages, and audited 491 packages in 36s
+#9 36.54 
+#9 36.54 59 packages are looking for funding
+#9 36.54   run `npm fund` for details
+#9 36.56 
+#9 36.56 7 vulnerabilities (3 low, 4 high)
+#9 36.56 
+#9 36.56 To address all issues, run:
+#9 36.56   npm audit fix
+#9 36.56 
+#9 36.56 Run `npm audit` for details.
+#9 36.56 npm notice
+#9 36.56 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+#9 36.56 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+#9 36.56 npm notice To update run: npm install -g npm@11.7.0
+#9 36.56 npm notice
+#9 DONE 37.3s
+
+#8 [builder 4/6] RUN npm ci
+#8 39.11 
+#8 39.11 added 599 packages, and audited 600 packages in 39s
+#8 39.11 
+#8 39.11 71 packages are looking for funding
+#8 39.11   run `npm fund` for details
+#8 39.17 
+#8 39.17 12 vulnerabilities (3 low, 5 moderate, 4 high)
+#8 39.17 
+#8 39.17 To address issues that do not require attention, run:
+#8 39.17   npm audit fix
+#8 39.17 
+#8 39.17 To address all issues (including breaking changes), run:
+#8 39.17   npm audit fix --force
+#8 39.17 
+#8 39.17 Run `npm audit` for details.
+#8 39.17 npm notice
+#8 39.17 npm notice New major version of npm available! 10.8.2 -> 11.7.0
+#8 39.17 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.7.0
+#8 39.17 npm notice To update run: npm install -g npm@11.7.0
+#8 39.17 npm notice
+#8 DONE 39.4s
+
+#10 [builder 5/6] COPY . .
+#10 DONE 0.2s
+
+#11 [builder 6/6] RUN npm run build
+#11 0.442 
+#11 0.442 > rest-express@1.0.0 build
+#11 0.442 > tsx script/build.ts
+#11 0.442 
+#11 2.432 building client...
+#11 2.753 vite v5.4.20 building for production...
+#11 5.608 transforming...
+#11 8.977 
+#11 8.977 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+#11 16.30 ✓ 1638 modules transformed.
+#11 17.18 x Build failed in 11.66s
+#11 17.18 [vite:asset] Could not load /app/attached_assets/Design_sem_nome_(8)_1769001400686.png (imported by client/src/pages/Landing.tsx): ENOENT: no such file or directory, open '/app/attached_assets/Design_sem_nome_(8)_1769001400686.png'
+#11 17.18     at async open (node:internal/fs/promises:634:25)
+#11 17.18     at async Object.readFile (node:internal/fs/promises:1236:14)
+#11 17.18     at async fileToBuiltUrl (/app/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:20428:19)
+#11 17.18     at async Object.load (/app/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:20328:17)
+#11 17.18     at async PluginDriver.hookFirstAndGetPlugin (/app/node_modules/rollup/dist/es/shared/node-entry.js:20689:28)
+#11 17.18     at async <anonymous> (/app/node_modules/rollup/dist/es/shared/node-entry.js:19809:33)
+#11 17.18     at async Queue.work (/app/node_modules/rollup/dist/es/shared/node-entry.js:20899:32) {
+#11 17.18   errno: -2,
+#11 17.18   code: 'PLUGIN_ERROR',
+#11 17.18   syscall: 'open',
+#11 17.18   path: '/app/attached_assets/Design_sem_nome_(8)_1769001400686.png',
+#11 17.18   pluginCode: 'ENOENT',
+#11 17.18   plugin: 'vite:asset',
+#11 17.18   hook: 'load',
+#11 17.18   watchFiles: [
+#11 17.18     '/app/client/index.html',
+#11 17.18     '/app/client/src/main.tsx',
+#11 17.18     '/app/package.json',
+#11 17.18     '/app/client/src/App.tsx',
+#11 17.18     '/app/client/src/index.css',
+#11 17.18     '/app/node_modules/react-dom/client.js',
+#11 17.18     '/app/node_modules/react/jsx-runtime.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/index.js',
+#11 17.18     '/app/node_modules/react/cjs/react-jsx-runtime.production.min.js',
+#11 17.18     '/app/node_modules/react-dom/index.js',
+#11 17.18     '/app/node_modules/lucide-react/dist/esm/lucide-react.js',
+#11 17.18     '/app/client/src/components/ui/tooltip.tsx',
+#11 17.18     '/app/client/src/components/ui/sidebar.tsx',
+#11 17.18     '/app/client/src/contexts/LanguageContext.tsx',
+#11 17.18     '/app/client/src/contexts/ThemeContext.tsx',
+#11 17.18     '/app/client/src/hooks/useAuth.ts',
+#11 17.18     '/app/client/src/components/AppSidebar.tsx',
+#11 17.18     '/app/client/src/hooks/use-toast.ts',
+#11 17.18     '/app/client/src/hooks/use-websocket.ts',
+#11 17.18     '/app/client/src/lib/authUtils.ts',
+#11 17.18     '/app/client/src/lib/countries.ts',
+#11 17.18     '/app/client/src/lib/queryClient.ts',
+#11 17.18     '/app/client/src/lib/utils.ts',
+#11 17.18     '/app/client/src/components/ErrorBoundary.tsx',
+#11 17.18     '/app/client/src/components/ImpersonationBanner.tsx',
+#11 17.18     '/app/client/src/components/LanguageToggle.tsx',
+#11 17.18     '/app/client/src/components/NotificationBell.tsx',
+#11 17.18     '/app/client/src/components/ThemeToggle.tsx',
+#11 17.18     '/app/client/src/hooks/use-mobile.tsx',
+#11 17.18     '/app/client/src/pages/Analytics.tsx',
+#11 17.18     '/app/client/src/pages/Auth.tsx',
+#11 17.18     '/app/client/src/pages/Dashboard.tsx',
+#11 17.18     '/app/client/src/pages/Domains.tsx',
+#11 17.18     '/app/client/src/pages/Landing.tsx',
+#11 17.18     '/app/client/src/pages/Logs.tsx',
+#11 17.18     '/app/client/src/pages/Offers.tsx',
+#11 17.18     '/app/client/src/pages/Settings.tsx',
+#11 17.18     '/app/client/src/pages/Subscription.tsx',
+#11 17.18     '/app/client/src/pages/not-found.tsx',
+#11 17.18     '/app/client/src/components/ui/accordion.tsx',
+#11 17.18     '/app/client/src/components/ui/alert-dialog.tsx',
+#11 17.18     '/app/client/src/components/ui/alert.tsx',
+#11 17.18     '/app/client/src/components/ui/aspect-ratio.tsx',
+#11 17.18     '/app/client/src/components/ui/avatar.tsx',
+#11 17.18     '/app/client/src/components/ui/badge.tsx',
+#11 17.18     '/app/client/src/components/ui/breadcrumb.tsx',
+#11 17.18     '/app/client/src/components/ui/button.tsx',
+#11 17.18     '/app/client/src/components/ui/calendar.tsx',
+#11 17.18     '/app/client/src/components/ui/card.tsx',
+#11 17.18     '/app/client/src/components/ui/carousel.tsx',
+#11 17.18     '/app/client/src/components/ui/chart.tsx',
+#11 17.18     '/app/client/src/components/ui/checkbox.tsx',
+#11 17.18     '/app/client/src/components/ui/collapsible.tsx',
+#11 17.18     '/app/client/src/components/ui/command.tsx',
+#11 17.18     '/app/client/src/components/ui/context-menu.tsx',
+#11 17.18     '/app/client/src/components/ui/dialog.tsx',
+#11 17.18     '/app/client/src/components/ui/drawer.tsx',
+#11 17.18     '/app/client/src/components/ui/dropdown-menu.tsx',
+#11 17.18     '/app/client/src/components/ui/form.tsx',
+#11 17.18     '/app/client/src/components/ui/hover-card.tsx',
+#11 17.18     '/app/client/src/components/ui/input-otp.tsx',
+#11 17.18     '/app/client/src/components/ui/input.tsx',
+#11 17.18     '/app/client/src/components/ui/label.tsx',
+#11 17.18     '/app/client/src/components/ui/menubar.tsx',
+#11 17.18     '/app/client/src/components/ui/navigation-menu.tsx',
+#11 17.18     '/app/client/src/components/ui/pagination.tsx',
+#11 17.18     '/app/client/src/components/ui/popover.tsx',
+#11 17.18     '/app/client/src/components/ui/progress.tsx',
+#11 17.18     '/app/client/src/components/ui/radio-group.tsx',
+#11 17.18     '/app/client/src/components/ui/resizable.tsx',
+#11 17.18     '/app/client/src/components/ui/scroll-area.tsx',
+#11 17.18     '/app/client/src/components/ui/select.tsx',
+#11 17.18     '/app/client/src/components/ui/separator.tsx',
+#11 17.18     '/app/client/src/components/ui/sheet.tsx',
+#11 17.18     '/app/client/src/components/ui/skeleton.tsx',
+#11 17.18     '/app/client/src/components/ui/slider.tsx',
+#11 17.18     '/app/client/src/components/ui/switch.tsx',
+#11 17.18     '/app/client/src/components/ui/table.tsx',
+#11 17.18     '/app/client/src/components/ui/tabs.tsx',
+#11 17.18     '/app/client/src/components/ui/textarea.tsx',
+#11 17.18     '/app/client/src/components/ui/toast.tsx',
+#11 17.18     '/app/client/src/components/ui/toaster.tsx',
+#11 17.18     '/app/client/src/components/ui/toggle-group.tsx',
+#11 17.18     '/app/client/src/components/ui/toggle.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminBilling.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminDashboard.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminDomains.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminMonitoring.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminPlans.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminSettings.tsx',
+#11 17.18     '/app/client/src/pages/admin/AdminUsers.tsx',
+#11 17.18     '/app/tailwind.config.ts',
+#11 17.18     '/app/node_modules/wouter/esm/index.js',
+#11 17.18     '/app/node_modules/react/index.js',
+#11 17.18     '/app/node_modules/@tanstack/query-core/build/modern/index.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/types.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/useQueries.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/useQuery.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js',
+#11 17.18     '/app/node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js',
+#11 17.18     ... 1580 more items
+#11 17.18   ]
+#11 17.18 }
+#11 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [builder 6/6] RUN npm run build:
+17.18     '/app/node_modules/react/index.js',
+17.18     '/app/node_modules/@tanstack/query-core/build/modern/index.js',
+17.18     '/app/node_modules/@tanstack/react-query/build/modern/types.js',
+17.18     '/app/node_modules/@tanstack/react-query/build/modern/useQueries.js',
+17.18     '/app/node_modules/@tanstack/react-query/build/modern/useQuery.js',
+17.18     '/app/node_modules/@tanstack/react-query/build/modern/useSuspenseQuery.js',
+17.18     '/app/node_modules/@tanstack/react-query/build/modern/useSuspenseInfiniteQuery.js',
+17.18     ... 1580 more items
+17.18   ]
+17.18 }
+------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+##########################################
+### Error
+### Wed, 21 Jan 2026 21:11:15 GMT
+##########################################
+
+Command failed with exit code 1: docker buildx build --network host -f /etc/easypanel/projects/cleryon-clocker/clerion-app/code/Dockerfile -t easypanel/cleryon-clocker/clerion-app --label 'keep=true' --build-arg 'SESSION_SECRET=byXhS2YHeI8OrvrNwdWbF6uYMNxh51dgF6A2NQi9ZZ5MprbqvBqHZh/u5+pgNhLlIwnkmUPvdT+XsQWPEMXk0w==' --build-arg 'DEFAULT_OBJECT_STORAGE_BUCKET_ID=replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78' --build-arg 'PUBLIC_OBJECT_SEARCH_PATHS=/replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78/public' --build-arg 'PRIVATE_OBJECT_DIR=/replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78/.private' --build-arg 'STRIPE_SECRET_KEY=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' --build-arg 'STRIPE_PUBLISHABLE_KEY=pk_live_51Q4ZfaHfNJep3ys3cOTsCorTFTbEVhClQL57AJwkXBFXRp3xyaoK2utVLGEnAy43GZU3UJDWUVdMLSCKHchD7pPu001is90JCo' --build-arg 'DATABASE_URL=postgres://postgres:aeb14aed87adcfaa8283@easypanel.ed-servidor.top:5000/clerion-db?sslmode=disable' --build-arg 'MAIN_DOMAIN=cleryon.com' --build-arg 'EASYPANEL_URL=https://easypanel.ed-servidor.top' --build-arg 'EASYPANEL_PROJECT_NAME=cleryon-clocker' --build-arg 'EASYPANEL_SERVICE_NAME=clerion-app' --build-arg 'EASYPANEL_TOKEN=ff584ef1eb3a5b53f978bc7b0c5598aaab6467a484ea58820ad3855e49f845c8' --build-arg 'ADMIN_EMAIL=ggthiago30@gmail.com' --build-arg 'GIT_SHA=d7e675378c0227daf611c81e25f3ab1af01b1e64' /etc/easypanel/projects/cleryon-clocker/clerion-app/code/

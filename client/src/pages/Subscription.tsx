@@ -49,9 +49,9 @@ import {
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 
-import facebookLogo from "@assets/Design_sem_nome_(8)_1769001400686.png";
-import instagramLogo from "@assets/Instagram_icon_1768998868062.png";
-import tiktokLogo from "@assets/Design_sem_nome_(7)_1769001400686.png";
+import facebookLogo from "../assets/facebook-logo.png";
+import instagramLogo from "../assets/instagram-logo.png";
+import tiktokLogo from "../assets/tiktok-logo.png";
 
 const trafficSourceLogos: Record<string, string> = {
   facebook: facebookLogo,
