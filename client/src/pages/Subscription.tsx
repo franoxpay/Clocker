@@ -43,7 +43,8 @@ import {
   Plus,
   Trash2,
   Loader2,
-  Headphones
+  Headphones,
+  Gift
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -769,6 +770,14 @@ export default function Subscription() {
                   <Badge className="gap-1">
                     <Star className="w-3 h-3" />
                     {t("subscription.mostPopular")}
+                  </Badge>
+                </div>
+              )}
+              {plan.isUnlimited && !plan.isPopular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                  <Badge className="gap-1 bg-gradient-to-r from-amber-500 to-orange-500 border-0">
+                    <Gift className="w-3 h-3" />
+                    {language === "pt-BR" ? "Bônus" : "Bonus"}
                   </Badge>
                 </div>
               )}

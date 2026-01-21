@@ -6,7 +6,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { Shield, Zap, Globe, BarChart3, Check, Headphones } from "lucide-react";
+import { Shield, Zap, Globe, BarChart3, Check, Headphones, Gift } from "lucide-react";
 import Auth from "./Auth";
 
 import facebookLogo from "@assets/facebook-logo-facebook-icon-transparent-free-png_1768998868063.webp";
@@ -72,6 +72,7 @@ const plans = [
     support: "vip",
     trafficSources: ["facebook", "instagram", "tiktok"],
     hasTrial: false,
+    bonus: true,
   },
 ];
 
@@ -216,7 +217,13 @@ export default function Landing() {
                       {language === "pt-BR" ? "Mais Popular" : "Most Popular"}
                     </Badge>
                   )}
-                  <CardHeader className={`text-center pb-2 flex-shrink-0 ${plan.popular ? "pt-6" : ""}`}>
+                  {plan.bonus && (
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 gap-1 bg-gradient-to-r from-amber-500 to-orange-500 border-0" variant="default">
+                      <Gift className="w-3 h-3" />
+                      {language === "pt-BR" ? "Bônus" : "Bonus"}
+                    </Badge>
+                  )}
+                  <CardHeader className={`text-center pb-2 flex-shrink-0 ${plan.popular || plan.bonus ? "pt-6" : ""}`}>
                     <CardTitle className="text-lg">{t(plan.nameKey)}</CardTitle>
                     <div className="mt-3">
                       <span className="text-3xl font-bold">R${plan.price}</span>
