@@ -38,6 +38,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -539,18 +544,23 @@ export default function Domains() {
         <Card>
           <CardHeader className="flex flex-row items-center gap-2 pb-2">
             <Share2 className="w-5 h-5" />
-            <CardTitle className="text-lg">
+            <CardTitle className="text-lg flex items-center gap-2">
               {language === "pt-BR" ? "Domínios Compartilhados" : "Shared Domains"}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-4 h-4 text-muted-foreground cursor-help" data-testid="icon-shared-domains-info" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="text-sm">
+                    {language === "pt-BR"
+                      ? "Domínios compartilhados são domínios disponibilizados pela plataforma que você pode ativar e usar nas suas ofertas sem precisar configurar seu próprio domínio. Eles contam no limite de domínios do seu plano."
+                      : "Shared domains are domains provided by the platform that you can activate and use in your offers without needing to set up your own domain. They count towards your plan's domain limit."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="p-4 pb-2">
-              <p className="text-sm text-muted-foreground">
-                {language === "pt-BR"
-                  ? "Ative domínios compartilhados para usar nas suas ofertas. Domínios compartilhados contam no seu limite de domínios do plano."
-                  : "Activate shared domains to use in your offers. Shared domains count towards your plan's domain limit."}
-              </p>
-            </div>
             {isLoadingShared || isLoadingActivated ? (
               <div className="p-6 space-y-4">
                 {[...Array(3)].map((_, i) => (
