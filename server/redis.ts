@@ -60,6 +60,7 @@ export const CacheKeys = {
   offerBySlug: (slug: string, domainId?: number, sharedDomainId?: number) => 
     `offer:slug:${slug}:d${domainId || 0}:s${sharedDomainId || 0}`,
   geoIp: (ip: string) => `geoip:${ip}`,
+  ipInfo: (ip: string) => `ipinfo:${ip}`,
   dashboardStats: (userId: string) => `dashboard:${userId}`,
   adminDashboard: () => "admin:dashboard",
   clickStats: (userId: string) => `clicks:${userId}`,
@@ -155,6 +156,25 @@ export async function cacheGeoIp(ip: string, country: string): Promise<void> {
 export async function getCachedGeoIp(ip: string): Promise<string | null> {
   const data = await cacheGet<{ country: string }>(CacheKeys.geoIp(ip));
   return data?.country || null;
+}
+
+// IP Info cache for datacenter detection
+export interface IpInfoData {
+  country: string;
+  isp: string;
+  org: string;
+  as: string;
+  hosting: boolean;
+  proxy: boolean;
+  mobile: boolean;
+}
+
+export async function cacheIpInfo(ip: string, data: IpInfoData): Promise<void> {
+  await cacheSet(CacheKeys.ipInfo(ip), data, LONG_TTL);
+}
+
+export async function getCachedIpInfo(ip: string): Promise<IpInfoData | null> {
+  return await cacheGet<IpInfoData>(CacheKeys.ipInfo(ip));
 }
 
 export { DEFAULT_TTL, SHORT_TTL, LONG_TTL };

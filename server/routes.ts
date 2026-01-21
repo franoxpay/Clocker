@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { tiktok2Telemetry } from "@shared/schema";
 import { promises as dns } from "dns";
-import { getCachedGeoIp, cacheGeoIp, getRedisClient } from "./redis";
+import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 
 // ==========================================
 // ANTI-BOT CHALLENGE SYSTEM
@@ -673,6 +673,111 @@ function generateChallengeHTML(token: string, honeypotId: string, baseUrl?: stri
         ${varNames.checks}.audio = false;
       }
       
+      // 10. Browser plugins detection (headless browsers have no plugins)
+      try {
+        ${varNames.checks}.pluginCount = navigator.plugins ? navigator.plugins.length : 0;
+        ${varNames.checks}.hasPlugins = ${varNames.checks}.pluginCount > 0;
+        // Real browsers typically have at least PDF viewer or Chrome PDF
+        ${varNames.checks}.pluginNames = [];
+        if (navigator.plugins && navigator.plugins.length > 0) {
+          for (var i = 0; i < Math.min(navigator.plugins.length, 5); i++) {
+            ${varNames.checks}.pluginNames.push(navigator.plugins[i].name);
+          }
+        }
+      } catch(e) {
+        ${varNames.checks}.hasPlugins = false;
+        ${varNames.checks}.pluginCount = 0;
+      }
+      
+      // 11. WebRTC detection (detect VPN/proxy by comparing IPs)
+      ${varNames.checks}.webrtcSupported = false;
+      ${varNames.checks}.webrtcIPs = [];
+      try {
+        if (window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection) {
+          ${varNames.checks}.webrtcSupported = true;
+          var pc = new (window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection)({
+            iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+          });
+          pc.createDataChannel('');
+          pc.createOffer().then(function(offer) {
+            pc.setLocalDescription(offer);
+          });
+          pc.onicecandidate = function(e) {
+            if (e.candidate) {
+              var candidate = e.candidate.candidate;
+              var ipRegex = /([0-9]{1,3}(\\.[0-9]{1,3}){3})/;
+              var match = candidate.match(ipRegex);
+              if (match && ${varNames.checks}.webrtcIPs.indexOf(match[1]) === -1) {
+                ${varNames.checks}.webrtcIPs.push(match[1]);
+              }
+            }
+          };
+          setTimeout(function() { pc.close(); }, 1000);
+        }
+      } catch(e) {
+        ${varNames.checks}.webrtcSupported = false;
+      }
+      
+      // 12. Enhanced Canvas fingerprint (more complex drawing for better detection)
+      try {
+        var canvas3 = document.createElement('canvas');
+        canvas3.width = 200;
+        canvas3.height = 50;
+        var ctx3 = canvas3.getContext('2d');
+        // Complex drawing pattern
+        ctx3.textBaseline = 'alphabetic';
+        ctx3.fillStyle = '#f60';
+        ctx3.fillRect(125, 1, 62, 20);
+        ctx3.fillStyle = '#069';
+        ctx3.font = '11pt Arial';
+        ctx3.fillText('Cwm fjordbank glyphs vext quiz', 2, 15);
+        ctx3.fillStyle = 'rgba(102, 204, 0, 0.7)';
+        ctx3.font = '18pt Arial';
+        ctx3.fillText('Cwm fjordbank', 4, 45);
+        // Get data and compute hash length as fingerprint indicator
+        var canvasData = canvas3.toDataURL();
+        ${varNames.checks}.canvasHash = canvasData.length;
+        ${varNames.checks}.canvasValid = canvasData.length > 3000;
+        // Check for known headless patterns (very short canvas data)
+        ${varNames.checks}.canvasSuspicious = canvasData.length < 1000;
+      } catch(e) {
+        ${varNames.checks}.canvasValid = false;
+        ${varNames.checks}.canvasSuspicious = true;
+      }
+      
+      // 13. Enhanced WebGL fingerprint (get renderer info)
+      try {
+        var canvas4 = document.createElement('canvas');
+        var gl2 = canvas4.getContext('webgl') || canvas4.getContext('experimental-webgl');
+        if (gl2) {
+          ${varNames.checks}.webglVendor = gl2.getParameter(gl2.VENDOR);
+          ${varNames.checks}.webglRenderer = gl2.getParameter(gl2.RENDERER);
+          var debugInfo2 = gl2.getExtension('WEBGL_debug_renderer_info');
+          if (debugInfo2) {
+            ${varNames.checks}.webglUnmaskedVendor = gl2.getParameter(debugInfo2.UNMASKED_VENDOR_WEBGL);
+            ${varNames.checks}.webglUnmaskedRenderer = gl2.getParameter(debugInfo2.UNMASKED_RENDERER_WEBGL);
+            // Check for headless indicators
+            var renderer = ${varNames.checks}.webglUnmaskedRenderer || '';
+            ${varNames.checks}.webglHeadless = /SwiftShader|llvmpipe|softpipe|Mesa|Microsoft Basic|Google Inc/i.test(renderer);
+          }
+        }
+      } catch(e) {
+        ${varNames.checks}.webglVendor = null;
+      }
+      
+      // 14. Check for common bot frameworks
+      ${varNames.checks}.hasCDP = !!window.cdc_adoQpoasnfa76pfcZLmcfl_Symbol;
+      ${varNames.checks}.hasAwesomium = !!window.awesomium;
+      ${varNames.checks}.hasCefSharp = !!window.CefSharp;
+      ${varNames.checks}.hasPhantom = !!window.__phantomas;
+      
+      // 15. Permission API check (bots often don't implement this)
+      try {
+        ${varNames.checks}.hasPermissions = 'permissions' in navigator;
+      } catch(e) {
+        ${varNames.checks}.hasPermissions = false;
+      }
+      
       // Calculate score
       if (${varNames.checks}.hasWindow && ${varNames.checks}.hasDocument && ${varNames.checks}.hasNavigator) ${varNames.score} += 10;
       if (!${varNames.checks}.webdriver) ${varNames.score} += 15;
@@ -680,10 +785,17 @@ function generateChallengeHTML(token: string, honeypotId: string, baseUrl?: stri
       if (!${varNames.checks}.phantom && !${varNames.checks}.nightmare) ${varNames.score} += 10;
       if (!${varNames.checks}.selenium && !${varNames.checks}.seleniumIDE) ${varNames.score} += 10;
       if (!${varNames.checks}.domAutomation && !${varNames.checks}.cdc) ${varNames.score} += 10;
-      if (${varNames.checks}.canvas) ${varNames.score} += 10;
-      if (${varNames.checks}.webgl && !${varNames.checks}.swiftShader) ${varNames.score} += 10;
+      if (${varNames.checks}.canvas) ${varNames.score} += 5;
+      if (${varNames.checks}.webgl && !${varNames.checks}.swiftShader) ${varNames.score} += 5;
       if (${varNames.checks}.audio) ${varNames.score} += 5;
       if (${varNames.checks}.screenOk && ${varNames.checks}.outerOk) ${varNames.score} += 5;
+      // New scoring for advanced checks
+      if (${varNames.checks}.hasPlugins && ${varNames.checks}.pluginCount >= 1) ${varNames.score} += 10;
+      if (${varNames.checks}.webrtcSupported) ${varNames.score} += 5;
+      if (${varNames.checks}.canvasValid && !${varNames.checks}.canvasSuspicious) ${varNames.score} += 10;
+      if (!${varNames.checks}.webglHeadless) ${varNames.score} += 10;
+      if (!${varNames.checks}.hasCDP && !${varNames.checks}.hasAwesomium && !${varNames.checks}.hasCefSharp && !${varNames.checks}.hasPhantom) ${varNames.score} += 5;
+      if (${varNames.checks}.hasPermissions) ${varNames.score} += 5;
       
       // Wait for minimum human time then submit
       function submitResult() {
@@ -844,6 +956,188 @@ async function getCountryFromIP(ip: string): Promise<string> {
   } catch (error) {
     console.log(`[GeoIP] Error for IP: ${error}`);
     return "XX";
+  }
+}
+
+// Known datacenter/hosting ASN patterns (major cloud providers and VPS)
+const DATACENTER_ASN_PATTERNS = [
+  // Major Cloud Providers
+  'AMAZON', 'AWS', 'GOOGLE', 'MICROSOFT', 'AZURE', 'DIGITALOCEAN', 'LINODE',
+  'VULTR', 'OVH', 'HETZNER', 'CLOUDFLARE', 'AKAMAI', 'FASTLY',
+  // VPS/Hosting Providers
+  'HOSTINGER', 'GODADDY', 'NAMECHEAP', 'BLUEHOST', 'HOSTGATOR', 'SITEGROUND',
+  'CONTABO', 'SCALEWAY', 'UPCLOUD', 'RACKSPACE', 'LEASEWEB', 'CHOOPA',
+  // Data Centers
+  'DATACENTER', 'HOSTING', 'COLOCATION', 'CLOUD', 'SERVER', 'VPS', 'DEDICATED',
+  // Proxy/VPN Providers
+  'NORDVPN', 'EXPRESSVPN', 'SURFSHARK', 'MULLVAD', 'CYBERGHOST', 'PROTONVPN',
+  // Bot Networks / Known Crawlers
+  'TIKTOK', 'BYTEDANCE', 'FACEBOOK', 'META PLATFORMS'
+];
+
+// Known datacenter ISP patterns
+const DATACENTER_ISP_PATTERNS = [
+  'AMAZON', 'GOOGLE', 'MICROSOFT', 'DIGITALOCEAN', 'LINODE', 'VULTR', 'OVH',
+  'HETZNER', 'CLOUDFLARE', 'FACEBOOK', 'TIKTOK', 'BYTEDANCE', 'META'
+];
+
+interface IpAnalysis {
+  country: string;
+  isDatacenter: boolean;
+  isProxy: boolean;
+  isMobile: boolean;
+  isp: string;
+  org: string;
+  as: string;
+  reason?: string;
+}
+
+// Cache for IP analysis
+const ipAnalysisCache = new Map<string, { data: IpAnalysis; timestamp: number }>();
+const IP_ANALYSIS_CACHE_TTL = 3600000; // 1 hour
+
+async function analyzeIP(ip: string): Promise<IpAnalysis> {
+  try {
+    const cleanIp = ip.replace(/^::ffff:/, "");
+    
+    // Local IPs are not datacenters
+    if (cleanIp === "127.0.0.1" || cleanIp === "::1" || cleanIp.startsWith("192.168.") || cleanIp.startsWith("10.")) {
+      return {
+        country: "BR",
+        isDatacenter: false,
+        isProxy: false,
+        isMobile: false,
+        isp: "Local",
+        org: "Local",
+        as: "Local"
+      };
+    }
+    
+    // Check memory cache first
+    const cached = ipAnalysisCache.get(cleanIp);
+    if (cached && Date.now() - cached.timestamp < IP_ANALYSIS_CACHE_TTL) {
+      return cached.data;
+    }
+    
+    // Check Redis cache
+    const redisCached = await getCachedIpInfo(cleanIp);
+    if (redisCached) {
+      const analysis: IpAnalysis = {
+        country: redisCached.country,
+        isDatacenter: redisCached.hosting,
+        isProxy: redisCached.proxy,
+        isMobile: redisCached.mobile,
+        isp: redisCached.isp,
+        org: redisCached.org,
+        as: redisCached.as
+      };
+      ipAnalysisCache.set(cleanIp, { data: analysis, timestamp: Date.now() });
+      return analysis;
+    }
+    
+    // Fetch from ip-api.com with extended fields including hosting/proxy detection
+    const response = await fetch(
+      `http://ip-api.com/json/${cleanIp}?fields=status,message,country,countryCode,isp,org,as,hosting,proxy,mobile`
+    );
+    
+    if (!response.ok) {
+      return {
+        country: "XX",
+        isDatacenter: false,
+        isProxy: false,
+        isMobile: false,
+        isp: "",
+        org: "",
+        as: ""
+      };
+    }
+    
+    const data = await response.json();
+    
+    if (data.status === 'fail') {
+      console.log(`[IP Analysis] API error for ${cleanIp}: ${data.message}`);
+      return {
+        country: "XX",
+        isDatacenter: false,
+        isProxy: false,
+        isMobile: false,
+        isp: "",
+        org: "",
+        as: ""
+      };
+    }
+    
+    // Check ASN and ISP patterns for datacenter detection
+    const asUpper = (data.as || "").toUpperCase();
+    const ispUpper = (data.isp || "").toUpperCase();
+    const orgUpper = (data.org || "").toUpperCase();
+    
+    let isDatacenterByPattern = false;
+    let patternReason = "";
+    
+    for (const pattern of DATACENTER_ASN_PATTERNS) {
+      if (asUpper.includes(pattern) || orgUpper.includes(pattern)) {
+        isDatacenterByPattern = true;
+        patternReason = `ASN/ORG contains: ${pattern}`;
+        break;
+      }
+    }
+    
+    if (!isDatacenterByPattern) {
+      for (const pattern of DATACENTER_ISP_PATTERNS) {
+        if (ispUpper.includes(pattern)) {
+          isDatacenterByPattern = true;
+          patternReason = `ISP contains: ${pattern}`;
+          break;
+        }
+      }
+    }
+    
+    // Use ip-api's hosting flag OR our pattern matching
+    const isDatacenter = data.hosting === true || isDatacenterByPattern;
+    
+    const analysis: IpAnalysis = {
+      country: data.countryCode || "XX",
+      isDatacenter,
+      isProxy: data.proxy === true,
+      isMobile: data.mobile === true,
+      isp: data.isp || "",
+      org: data.org || "",
+      as: data.as || "",
+      reason: isDatacenter ? (data.hosting ? "hosting_flag" : patternReason) : undefined
+    };
+    
+    // Cache in Redis
+    const ipInfoData: IpInfoData = {
+      country: analysis.country,
+      isp: analysis.isp,
+      org: analysis.org,
+      as: analysis.as,
+      hosting: analysis.isDatacenter,
+      proxy: analysis.isProxy,
+      mobile: analysis.isMobile
+    };
+    await cacheIpInfo(cleanIp, ipInfoData);
+    
+    // Cache in memory
+    ipAnalysisCache.set(cleanIp, { data: analysis, timestamp: Date.now() });
+    
+    if (analysis.isDatacenter || analysis.isProxy) {
+      console.log(`[IP Analysis] ${cleanIp}: DATACENTER=${analysis.isDatacenter} PROXY=${analysis.isProxy} ISP=${analysis.isp} AS=${analysis.as} ${analysis.reason || ''}`);
+    }
+    
+    return analysis;
+  } catch (error) {
+    console.log(`[IP Analysis] Error for ${ip}: ${error}`);
+    return {
+      country: "XX",
+      isDatacenter: false,
+      isProxy: false,
+      isMobile: false,
+      isp: "",
+      org: "",
+      as: ""
+    };
   }
 }
 
@@ -3946,6 +4240,24 @@ export async function registerRoutes(
         console.log(`[Cloak] BOT DETECTED - Rate limited: ${ip} - ${rateLimitResult.clickCount} clicks in 1 minute`);
       }
       
+      // 0b. Datacenter/Hosting IP detection - block traffic from cloud providers
+      // This catches TikTok/Facebook crawlers and VPS-based bots
+      if (!isBotDetected) {
+        const ipAnalysis = await analyzeIP(ip);
+        
+        if (ipAnalysis.isDatacenter) {
+          isBotDetected = true;
+          failReason = `datacenter_ip:${ipAnalysis.isp.substring(0, 30)}`;
+          console.log(`[Cloak] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis.isp} AS: ${ipAnalysis.as} Reason: ${ipAnalysis.reason}`);
+        }
+        
+        if (ipAnalysis.isProxy) {
+          isBotDetected = true;
+          failReason = `proxy_ip:${ipAnalysis.isp.substring(0, 30)}`;
+          console.log(`[Cloak] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis.isp}`);
+        }
+      }
+      
       // 1. Detect TikTok page verification bots by User-Agent
       const tiktokBotPatterns = [
         'thirdLandingPageFeInfra',     // TikTok page verification bot
@@ -4491,8 +4803,22 @@ export async function registerRoutes(
       
       let paramsValid = false;
       let failReason = "";
+      let isBotDetected2 = false;
 
-      if (offer.platform === "tiktok") {
+      // Datacenter/Hosting IP detection for /:slug route
+      const ipAnalysis2 = await analyzeIP(ip);
+      if (ipAnalysis2.isDatacenter) {
+        isBotDetected2 = true;
+        failReason = `datacenter_ip:${ipAnalysis2.isp.substring(0, 30)}`;
+        console.log(`[Cloak /:slug] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis2.isp} AS: ${ipAnalysis2.as}`);
+      }
+      if (ipAnalysis2.isProxy) {
+        isBotDetected2 = true;
+        failReason = `proxy_ip:${ipAnalysis2.isp.substring(0, 30)}`;
+        console.log(`[Cloak /:slug] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis2.isp}`);
+      }
+
+      if (offer.platform === "tiktok" && !isBotDetected2) {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
@@ -4541,7 +4867,7 @@ export async function registerRoutes(
         }
         
         console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium2}, utm_content=${!!utmContent2}, utm_campaign=${!!utmCampaign2}, src=${!!csite2}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
-      } else if (offer.platform === "facebook") {
+      } else if (offer.platform === "facebook" && !isBotDetected2) {
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";
         } else if (xcode !== offer.xcode) {
@@ -4569,7 +4895,8 @@ export async function registerRoutes(
         countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
       }
 
-      const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
+      // Bot detected = always go to WHITE
+      const shouldRedirectToBlack = !isBotDetected2 && paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
       const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
 
