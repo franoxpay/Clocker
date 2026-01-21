@@ -114,9 +114,15 @@ export default function Offers() {
     queryKey: ["/api/domains"],
   });
 
-  const { data: sharedDomains = [] } = useQuery<SharedDomain[]>({
-    queryKey: ["/api/shared-domains"],
+  // Fetch user's activated shared domains only
+  const { data: activatedSharedDomains = [] } = useQuery<{ id: number; sharedDomainId: number; sharedDomain: SharedDomain }[]>({
+    queryKey: ["/api/user/shared-domains"],
   });
+
+  // Extract the shared domains from the activated ones
+  const sharedDomains = activatedSharedDomains
+    .filter(a => a.sharedDomain)
+    .map(a => a.sharedDomain);
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
