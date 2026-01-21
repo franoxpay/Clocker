@@ -2932,6 +2932,8 @@ export async function registerRoutes(
         suspendedAt: null,
         suspensionReason: null,
         gracePeriodEndsAt: null,
+        subscriptionStatus: 'active',
+        subscriptionStartDate: new Date(),
       };
       
       if (!user.stripeSubscriptionId) {
