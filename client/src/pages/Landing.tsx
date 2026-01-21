@@ -216,7 +216,7 @@ export default function Landing() {
                       {language === "pt-BR" ? "Mais Popular" : "Most Popular"}
                     </Badge>
                   )}
-                  <CardHeader className="text-center pb-2 flex-shrink-0">
+                  <CardHeader className={`text-center pb-2 flex-shrink-0 ${plan.popular ? "pt-6" : ""}`}>
                     <CardTitle className="text-lg">{t(plan.nameKey)}</CardTitle>
                     <div className="mt-3">
                       <span className="text-3xl font-bold">R${plan.price}</span>
