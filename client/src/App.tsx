@@ -12,10 +12,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, X, MessageCircle } from "lucide-react";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
@@ -34,34 +35,54 @@ import AdminBilling from "@/pages/admin/AdminBilling";
 import AdminDomains from "@/pages/admin/AdminDomains";
 import NotFound from "@/pages/not-found";
 
+function PageLoadingFallback() {
+  return (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="space-y-4 w-64">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    </div>
+  );
+}
+
 function UserRoutes() {
   return (
-    <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/offers" component={Offers} />
-      <Route path="/domains" component={Domains} />
-      <Route path="/logs" component={Logs} />
-      <Route path="/analytics" component={Analytics} />
-      <Route path="/subscription" component={Subscription} />
-      <Route path="/settings" component={Settings} />
-      <Route component={NotFound} />
-    </Switch>
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoadingFallback />}>
+        <Switch>
+          <Route path="/" component={Dashboard} />
+          <Route path="/offers" component={Offers} />
+          <Route path="/domains" component={Domains} />
+          <Route path="/logs" component={Logs} />
+          <Route path="/analytics" component={Analytics} />
+          <Route path="/subscription" component={Subscription} />
+          <Route path="/settings" component={Settings} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
 function AdminRoutes() {
   return (
-    <Switch>
-      <Route path="/confg-admin" component={AdminDashboard} />
-      <Route path="/confg-admin/dashboard" component={AdminDashboard} />
-      <Route path="/confg-admin/users" component={AdminUsers} />
-      <Route path="/confg-admin/plans" component={AdminPlans} />
-      <Route path="/confg-admin/billing" component={AdminBilling} />
-      <Route path="/confg-admin/domains" component={AdminDomains} />
-      <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
-      <Route path="/confg-admin/settings" component={AdminSettings} />
-      <Route component={NotFound} />
-    </Switch>
+    <ErrorBoundary>
+      <Suspense fallback={<PageLoadingFallback />}>
+        <Switch>
+          <Route path="/confg-admin" component={AdminDashboard} />
+          <Route path="/confg-admin/dashboard" component={AdminDashboard} />
+          <Route path="/confg-admin/users" component={AdminUsers} />
+          <Route path="/confg-admin/plans" component={AdminPlans} />
+          <Route path="/confg-admin/billing" component={AdminBilling} />
+          <Route path="/confg-admin/domains" component={AdminDomains} />
+          <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
+          <Route path="/confg-admin/settings" component={AdminSettings} />
+          <Route component={NotFound} />
+        </Switch>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -197,16 +218,20 @@ function AppContent() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <LanguageProvider>
-          <TooltipProvider>
-            <AppContent />
-            <Toaster />
-          </TooltipProvider>
-        </LanguageProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <LanguageProvider>
+            <TooltipProvider>
+              <Suspense fallback={<PageLoadingFallback />}>
+                <AppContent />
+              </Suspense>
+              <Toaster />
+            </TooltipProvider>
+          </LanguageProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
