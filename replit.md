@@ -42,8 +42,11 @@ The platform uses distinct routing for public access, authenticated user dashboa
 ### Authentication
 - **Replit OIDC**: Provides OAuth2/OpenID Connect authentication, requiring `ISSUER_URL`, `REPL_ID`, and `SESSION_SECRET`.
 
+### Caching
+- **Redis**: External Redis server for caching IP geolocation results, reducing API calls and improving performance. Configured via `REDIS_URL`.
+
 ### External APIs
-- **ip-api.com**: Used for IP geolocation to determine visitor country.
+- **ip-api.com**: Used for IP geolocation to determine visitor country (cached in Redis for 1 hour).
 
 ### Key NPM Dependencies
 - `@tanstack/react-query`: Server state management.

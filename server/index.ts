@@ -9,6 +9,7 @@ import { setupWebSocket } from "./websocketService";
 import { initEasyPanel } from "./easypanel";
 import { storage } from "./storage";
 import { startDomainMonitor } from "./domainMonitor";
+import { getRedisClient } from "./redis";
 
 const app = express();
 app.set('trust proxy', true);
@@ -337,6 +338,13 @@ app.use((req, res, next) => {
 (async () => {
   await initStripe();
   initEasyPanel();
+  
+  // Initialize Redis connection
+  const redisClient = getRedisClient();
+  if (redisClient) {
+    console.log("[Redis] Initializing connection...");
+  }
+  
   setupWebSocket(httpServer);
   startDomainMonitor();
   await registerRoutes(httpServer, app);
