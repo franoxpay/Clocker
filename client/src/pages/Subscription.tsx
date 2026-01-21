@@ -42,10 +42,56 @@ import {
   XCircle,
   Plus,
   Trash2,
-  Loader2
+  Loader2,
+  Headphones
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
+
+import facebookLogo from "@assets/facebook-logo-facebook-icon-transparent-free-png_1768998868063.webp";
+import instagramLogo from "@assets/Instagram_icon_1768998868062.png";
+import tiktokLogo from "@assets/tiktok-logo-tikok-icon-transparent-tikok-app-logo-free-png_1768998868062.png";
+
+const trafficSourceLogos: Record<string, string> = {
+  facebook: facebookLogo,
+  instagram: instagramLogo,
+  tiktok: tiktokLogo,
+};
+
+interface PlanMetadata {
+  trafficSources: string[];
+  supportType: "normal" | "vip";
+}
+
+const planMetadataByName: Record<string, PlanMetadata> = {
+  "Plano Básico": { trafficSources: ["facebook", "instagram"], supportType: "normal" },
+  "Basic Plan": { trafficSources: ["facebook", "instagram"], supportType: "normal" },
+  "Plano Avançado": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "normal" },
+  "Advanced Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "normal" },
+  "Plano Pré-Escala": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Pre-Scale Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Plano Escala": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Scale Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Plano Ilimitado": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Unlimited Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+  "Starter": { trafficSources: ["facebook", "instagram"], supportType: "normal" },
+  "Professional": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "normal" },
+  "Enterprise": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
+};
+
+const getTrafficSourcesForPlan = (plan: { name: string; nameEn: string; price: number }): string[] => {
+  const metadata = planMetadataByName[plan.name] || planMetadataByName[plan.nameEn];
+  if (metadata) return metadata.trafficSources;
+  if (plan.price <= 19700) return ["facebook", "instagram"];
+  return ["facebook", "instagram", "tiktok"];
+};
+
+const getSupportTypeForPlan = (plan: { name: string; nameEn: string; price: number }): "normal" | "vip" => {
+  const metadata = planMetadataByName[plan.name] || planMetadataByName[plan.nameEn];
+  if (metadata) return metadata.supportType;
+  if (plan.price <= 49700) return "normal";
+  return "vip";
+};
 
 interface Plan {
   id: number;
@@ -711,9 +757,9 @@ export default function Subscription() {
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {plansLoading ? (
-          [...Array(3)].map((_, i) => (
+          [...Array(5)].map((_, i) => (
             <Skeleton key={i} className="h-96" />
           ))
         ) : (
@@ -746,26 +792,52 @@ export default function Subscription() {
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
-                <ul className="space-y-3">
+                <ul className="space-y-2">
                   <li className="flex items-center gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary" />
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     {plan.isUnlimited 
                       ? t("subscription.unlimited") 
                       : `${plan.maxOffers} ${t("plan.offers")}`}
                   </li>
                   <li className="flex items-center gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary" />
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     {plan.isUnlimited 
                       ? t("subscription.unlimited") 
                       : `${plan.maxDomains} ${t("plan.domains")}`}
                   </li>
                   <li className="flex items-center gap-2 text-sm">
-                    <Check className="w-4 h-4 text-primary" />
+                    <Check className="w-4 h-4 text-primary flex-shrink-0" />
                     {plan.isUnlimited 
                       ? t("subscription.unlimited") 
                       : `${formatClicks(plan.maxClicks)} ${t("plan.clicks")}`}
                   </li>
+                  <li className="flex items-center gap-2 text-sm">
+                    <Headphones className="w-4 h-4 text-primary flex-shrink-0" />
+                    {language === "pt-BR" 
+                      ? (getSupportTypeForPlan(plan) === "vip" ? "Suporte VIP" : "Suporte Normal")
+                      : (getSupportTypeForPlan(plan) === "vip" ? "VIP Support" : "Normal Support")}
+                  </li>
                 </ul>
+
+                <div className="pt-3 border-t">
+                  <p className="text-xs text-muted-foreground mb-2 text-center">
+                    {language === "pt-BR" ? "FONTES DE TRÁFEGO" : "TRAFFIC SOURCES"}
+                  </p>
+                  <div className="flex justify-center gap-2">
+                    {getTrafficSourcesForPlan(plan).map((source) => (
+                      <div 
+                        key={source} 
+                        className="w-8 h-8 rounded-lg overflow-hidden bg-muted flex items-center justify-center"
+                      >
+                        <img 
+                          src={trafficSourceLogos[source]} 
+                          alt={source} 
+                          className="w-6 h-6 object-contain"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 <Button
                   className="w-full"
