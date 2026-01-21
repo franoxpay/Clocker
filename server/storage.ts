@@ -568,7 +568,9 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(sharedDomains, eq(userSharedDomains.sharedDomainId, sharedDomains.id))
       .where(and(
         eq(userSharedDomains.userId, userId),
-        eq(userSharedDomains.isActive, true)
+        eq(userSharedDomains.isActive, true),
+        eq(sharedDomains.isActive, true),
+        eq(sharedDomains.isVerified, true)
       ));
     return results;
   }
