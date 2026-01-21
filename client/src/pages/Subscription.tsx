@@ -761,18 +761,18 @@ export default function Subscription() {
           activePlans.map((plan) => (
             <Card 
               key={plan.id} 
-              className={`relative ${plan.isPopular ? "border-primary shadow-lg" : ""}`}
+              className={`relative flex flex-col h-full ${plan.isPopular ? "border-primary shadow-lg" : ""}`}
               data-testid={`card-plan-${plan.id}`}
             >
               {plan.isPopular && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                   <Badge className="gap-1">
                     <Star className="w-3 h-3" />
                     {t("subscription.mostPopular")}
                   </Badge>
                 </div>
               )}
-              <CardHeader className="text-center pt-6">
+              <CardHeader className="text-center pt-6 flex-shrink-0">
                 <CardTitle className="text-xl">
                   {language === "pt-BR" ? plan.name : plan.nameEn}
                 </CardTitle>
@@ -786,7 +786,7 @@ export default function Subscription() {
                   </Badge>
                 )}
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 flex-grow flex flex-col">
                 <ul className="space-y-2">
                   <li className="flex items-center gap-2 text-sm">
                     <Check className="w-4 h-4 text-primary flex-shrink-0" />

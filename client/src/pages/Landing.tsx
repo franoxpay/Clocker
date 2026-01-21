@@ -208,22 +208,22 @@ export default function Landing() {
               {plans.map((plan) => (
                 <Card
                   key={plan.id}
-                  className={`relative ${plan.popular ? "border-primary border-2" : ""}`}
+                  className={`relative flex flex-col h-full ${plan.popular ? "border-primary border-2" : ""}`}
                   data-testid={`card-plan-${plan.id}`}
                 >
                   {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                       {language === "pt-BR" ? "Mais Popular" : "Most Popular"}
                     </Badge>
                   )}
-                  <CardHeader className="text-center pb-2">
+                  <CardHeader className="text-center pb-2 flex-shrink-0">
                     <CardTitle className="text-lg">{t(plan.nameKey)}</CardTitle>
                     <div className="mt-3">
                       <span className="text-3xl font-bold">R${plan.price}</span>
                       <span className="text-muted-foreground text-sm">/mês</span>
                     </div>
                   </CardHeader>
-                  <CardContent className="pt-0">
+                  <CardContent className="pt-0 flex-grow flex flex-col">
                     <ul className="space-y-2 text-sm">
                       <li className="flex items-center gap-2">
                         <Check className="w-4 h-4 text-primary flex-shrink-0" />
