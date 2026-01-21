@@ -322,7 +322,8 @@ export default function Offers() {
 
   const getOfferParams = (offer: OfferWithDomain) => {
     if (offer.platform === "tiktok") {
-      return `?ttclid=__CLICKID__&adname=__AID_NAME__&adset=__AID__&cname=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
+      // New TikTok UTM format with __CALLBACK_PARAM__ and __CID_NAME__
+      return `?src=__CSITE__&ttclid=__CALLBACK_PARAM__&utm_medium=__AID_NAME__&utm_content=__CID_NAME__&utm_campaign=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
     }
     return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
   };

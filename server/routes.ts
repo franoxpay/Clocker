@@ -3922,6 +3922,13 @@ export async function registerRoutes(
       const fbcl = fixedQuery.fbcl || rawQuery.fbcl;
       const xcode = fixedQuery.xcode || rawQuery.xcode;
       
+      // TikTok UTM parameters (new format)
+      const utmMedium = fixedQuery.utm_medium || rawQuery.utm_medium;
+      const utmContent = fixedQuery.utm_content || rawQuery.utm_content;
+      const utmCampaign = fixedQuery.utm_campaign || rawQuery.utm_campaign;
+      const csite = fixedQuery.src || rawQuery.src;
+      const cid = fixedQuery.cid || rawQuery.cid;
+      
       let paramsValid = false;
       let failReason = "";
       let isBotDetected = false;
@@ -4022,15 +4029,26 @@ export async function registerRoutes(
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
-        // Required params: ttclid, adname, adset, cname, xcode
+        // Required params: ttclid, utm_medium (adname), utm_content (cid), utm_campaign (cname), xcode
+        // Optional: src (csite) for analytics
         // No advanced bot detection, no JS challenge - direct redirect
         // Only validates: params + country + device filters
         
-        const adname = fixedQuery.adname || rawQuery.adname;
+        // Support both old format (adname/adset/cname) and new UTM format
+        const adname = utmMedium || fixedQuery.adname || rawQuery.adname;
         const adset = fixedQuery.adset || rawQuery.adset;
+        const campaignId = utmContent || cid || fixedQuery.cid || rawQuery.cid;
+        const campaignName = utmCampaign || cname;
         
         // Check for unresolved macros (basic bot detection)
-        const tiktok2Macros = ['__CLICKID__', '__AID_NAME__', '__AID__', '__CAMPAIGN_NAME__'];
+        // Updated to include __CALLBACK_PARAM__, __CID__, __CID_NAME__, __CSITE__
+        const tiktok2Macros = [
+          '__CALLBACK_PARAM__', '__CLICKID__',  // Click ID macros
+          '__AID_NAME__', '__AID__',             // Ad name/ID macros
+          '__CAMPAIGN_NAME__', '__CID_NAME__',   // Campaign name macros
+          '__CID__',                              // Campaign ID macro
+          '__CSITE__'                             // Site origin macro
+        ];
         let hasUnresolvedMacro = false;
         let failedParam = "";
         
@@ -4038,7 +4056,9 @@ export async function registerRoutes(
           if ((ttclid && ttclid.includes(macro)) ||
               (adname && adname.includes(macro)) ||
               (adset && adset.includes(macro)) ||
-              (cname && cname.includes(macro))) {
+              (campaignName && campaignName.includes(macro)) ||
+              (campaignId && campaignId.includes(macro)) ||
+              (csite && csite.includes(macro))) {
             hasUnresolvedMacro = true;
             failedParam = `macro:${macro}`;
             break;
@@ -4052,13 +4072,13 @@ export async function registerRoutes(
           failReason = "missing_ttclid";
           paramsValid = false;
         } else if (!adname) {
-          failReason = "missing_adname";
+          failReason = "missing_utm_medium";
           paramsValid = false;
-        } else if (!adset) {
-          failReason = "missing_adset";
+        } else if (!campaignId) {
+          failReason = "missing_utm_content";
           paramsValid = false;
-        } else if (!cname) {
-          failReason = "missing_cname";
+        } else if (!campaignName) {
+          failReason = "missing_utm_campaign";
           paramsValid = false;
         } else if (!xcode) {
           failReason = "missing_xcode";
@@ -4070,7 +4090,7 @@ export async function registerRoutes(
           paramsValid = true;
         }
         
-        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, adname=${!!adname}, adset=${!!adset}, cname=${!!cname}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
+        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!adname}, utm_content=${!!campaignId}, utm_campaign=${!!campaignName}, src=${!!csite}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook") {
         // Facebook requires: fbcl (campaign.name|campaign.id), xcode
         if (!fbcl || !xcode) {
@@ -4472,6 +4492,13 @@ export async function registerRoutes(
       const fbcl = fixedQuery2.fbcl || rawQuery2.fbcl;
       const xcode = fixedQuery2.xcode || rawQuery2.xcode;
       
+      // TikTok UTM parameters (new format)
+      const utmMedium2 = fixedQuery2.utm_medium || rawQuery2.utm_medium;
+      const utmContent2 = fixedQuery2.utm_content || rawQuery2.utm_content;
+      const utmCampaign2 = fixedQuery2.utm_campaign || rawQuery2.utm_campaign;
+      const csite2 = fixedQuery2.src || rawQuery2.src;
+      const cid2 = fixedQuery2.cid || rawQuery2.cid;
+      
       let paramsValid = false;
       let failReason = "";
 
@@ -4479,10 +4506,20 @@ export async function registerRoutes(
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
-        const adname2 = fixedQuery2.adname || rawQuery2.adname;
+        // Support both old format (adname/adset/cname) and new UTM format
+        const adname2 = utmMedium2 || fixedQuery2.adname || rawQuery2.adname;
         const adset2 = fixedQuery2.adset || rawQuery2.adset;
+        const campaignId2 = utmContent2 || cid2 || fixedQuery2.cid || rawQuery2.cid;
+        const campaignName2 = utmCampaign2 || cname;
         
-        const tiktok2Macros = ['__CLICKID__', '__AID_NAME__', '__AID__', '__CAMPAIGN_NAME__'];
+        // Check for unresolved macros (basic bot detection)
+        const tiktok2Macros = [
+          '__CALLBACK_PARAM__', '__CLICKID__',
+          '__AID_NAME__', '__AID__',
+          '__CAMPAIGN_NAME__', '__CID_NAME__',
+          '__CID__',
+          '__CSITE__'
+        ];
         let hasUnresolvedMacro = false;
         let failedParam = "";
         
@@ -4490,7 +4527,9 @@ export async function registerRoutes(
           if ((ttclid && ttclid.includes(macro)) ||
               (adname2 && adname2.includes(macro)) ||
               (adset2 && adset2.includes(macro)) ||
-              (cname && cname.includes(macro))) {
+              (campaignName2 && campaignName2.includes(macro)) ||
+              (campaignId2 && campaignId2.includes(macro)) ||
+              (csite2 && csite2.includes(macro))) {
             hasUnresolvedMacro = true;
             failedParam = `macro:${macro}`;
             break;
@@ -4502,11 +4541,11 @@ export async function registerRoutes(
         } else if (!ttclid) {
           failReason = "missing_ttclid";
         } else if (!adname2) {
-          failReason = "missing_adname";
-        } else if (!adset2) {
-          failReason = "missing_adset";
-        } else if (!cname) {
-          failReason = "missing_cname";
+          failReason = "missing_utm_medium";
+        } else if (!campaignId2) {
+          failReason = "missing_utm_content";
+        } else if (!campaignName2) {
+          failReason = "missing_utm_campaign";
         } else if (!xcode) {
           failReason = "missing_xcode";
         } else if (xcode !== offer.xcode) {
@@ -4515,7 +4554,7 @@ export async function registerRoutes(
           paramsValid = true;
         }
         
-        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, adname=${!!adname2}, adset=${!!adset2}, cname=${!!cname}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
+        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!adname2}, utm_content=${!!campaignId2}, utm_campaign=${!!campaignName2}, src=${!!csite2}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook") {
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";
