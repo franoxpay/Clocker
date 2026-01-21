@@ -857,39 +857,32 @@ export default function Offers() {
                                 <Settings2 className="w-4 h-4" />
                                 {language === "pt-BR" ? "Parâmetros:" : "Parameters:"}
                               </Label>
-                              <div className="flex items-center gap-2 bg-background border rounded-md">
+                              <div className="flex items-center gap-1 bg-background border rounded-md">
                                 <Button
                                   variant="ghost"
-                                  size="icon"
-                                  className="shrink-0"
+                                  size="sm"
+                                  className="shrink-0 h-8 px-2 gap-1"
                                   onClick={() => copyToClipboard(getOfferParams(offer), `params-${offer.id}`)}
                                   data-testid={`button-copy-params-${offer.id}`}
+                                  title={language === "pt-BR" ? "Copiar os parâmetros" : "Copy parameters"}
                                 >
                                   {copiedField === `params-${offer.id}` ? (
                                     <Check className="w-4 h-4 text-green-500" />
                                   ) : (
                                     <Copy className="w-4 h-4" />
                                   )}
+                                  <span className="text-xs">{language === "pt-BR" ? "Copiar" : "Copy"}</span>
                                 </Button>
                                 <Button
                                   variant="ghost"
-                                  size="icon"
-                                  className="shrink-0"
-                                  onClick={() => copyToClipboard(getOfferUrl(offer) + getOfferParams(offer), `full-${offer.id}`)}
-                                  data-testid={`button-copy-full-${offer.id}`}
-                                  title={language === "pt-BR" ? "Copiar URL completa" : "Copy full URL"}
-                                >
-                                  <Link className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="shrink-0"
+                                  size="sm"
+                                  className="shrink-0 h-8 px-2 gap-1"
                                   onClick={() => openMergeModal(offer)}
                                   data-testid={`button-merge-params-${offer.id}`}
-                                  title={language === "pt-BR" ? "Mesclar Parâmetros" : "Merge Parameters"}
+                                  title={language === "pt-BR" ? "Adicionar mais parâmetros aos existentes" : "Add more parameters to existing ones"}
                                 >
-                                  <Link2 className="w-4 h-4" />
+                                  <Plus className="w-4 h-4" />
+                                  <span className="text-xs">{language === "pt-BR" ? "Adicionar" : "Add"}</span>
                                 </Button>
                                 <div className="flex-1 overflow-x-auto py-2 px-2">
                                   <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
@@ -935,20 +928,20 @@ export default function Offers() {
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Link2 className="w-5 h-5" />
-              {language === "pt-BR" ? "Mesclar Parâmetros" : "Merge Parameters"}
+              <Plus className="w-5 h-5" />
+              {language === "pt-BR" ? "Adicionar Parâmetros" : "Add Parameters"}
             </DialogTitle>
             <DialogDescription>
               {language === "pt-BR" 
-                ? "Adicione parâmetros extras" 
-                : "Add extra parameters"}
+                ? "Adicione novos parâmetros aos parâmetros existentes da sua oferta" 
+                : "Add new parameters to your offer's existing parameters"}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {language === "pt-BR" ? "Parâmetros atuais do Cloaker" : "Current Cloaker Parameters"}
+                {language === "pt-BR" ? "Seus parâmetros atuais" : "Your current parameters"}
               </Label>
               <div className="p-3 bg-muted rounded-md border border-primary/30">
                 <code className="text-xs font-mono text-muted-foreground break-all">
@@ -959,28 +952,28 @@ export default function Offers() {
 
             <div className="space-y-2">
               <Label className="text-sm font-medium">
-                {language === "pt-BR" ? "Parâmetros adicionais para mesclar" : "Additional parameters to merge"}
+                {language === "pt-BR" ? "Novos parâmetros para adicionar" : "New parameters to add"}
               </Label>
               <Textarea
                 value={additionalParams}
                 onChange={(e) => setAdditionalParams(e.target.value)}
                 placeholder={language === "pt-BR" 
-                  ? "Cole aqui os parâmetros adicionais (sem o ? inicial)" 
-                  : "Paste additional parameters here (without the initial ?)"}
+                  ? "Ex: utm_source=facebook&utm_campaign=vendas" 
+                  : "Ex: utm_source=facebook&utm_campaign=sales"}
                 className="min-h-[80px] font-mono text-sm"
                 data-testid="textarea-additional-params"
               />
               <p className="text-xs text-muted-foreground">
                 {language === "pt-BR" 
-                  ? "Cole aqui os parâmetros adicionais (sem o ? inicial)" 
-                  : "Paste additional parameters here (without the initial ?)"}
+                  ? "Cole ou digite os parâmetros extras que deseja adicionar" 
+                  : "Paste or type the extra parameters you want to add"}
               </p>
             </div>
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <Label className="text-sm font-medium">
-                  {language === "pt-BR" ? "Parâmetros mesclados" : "Merged Parameters"}
+                  {language === "pt-BR" ? "Resultado final (copie este)" : "Final result (copy this)"}
                 </Label>
                 <Button
                   variant="outline"
