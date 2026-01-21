@@ -208,11 +208,11 @@ export default function Landing() {
               {plans.map((plan) => (
                 <Card
                   key={plan.id}
-                  className={`relative flex flex-col h-full ${plan.popular ? "border-primary border-2" : ""}`}
+                  className={`relative flex flex-col h-full bg-card ${plan.popular ? "border-primary border-2" : ""}`}
                   data-testid={`card-plan-${plan.id}`}
                 >
                   {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10" variant="default">
                       {language === "pt-BR" ? "Mais Popular" : "Most Popular"}
                     </Badge>
                   )}
