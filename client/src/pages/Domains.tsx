@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +41,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Domain } from "@shared/schema";
+import type { Domain, SharedDomain } from "@shared/schema";
 import { 
   Plus, 
   MoreVertical, 
@@ -53,9 +53,21 @@ import {
   AlertTriangle,
   Shield,
   Info,
+  Share2,
+  Power,
+  PowerOff,
+  Loader2,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
+
+interface UserSharedDomainActivation {
+  id: number;
+  sharedDomainId: number;
+  isActive: boolean;
+  createdAt: string;
+  sharedDomain: SharedDomain;
+}
 
 export default function Domains() {
   const { t, language } = useLanguage();
@@ -65,12 +77,26 @@ export default function Domains() {
   const [subdomain, setSubdomain] = useState("");
   const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [showDnsInstructions, setShowDnsInstructions] = useState<string | null>(null);
+  const [activatingSharedId, setActivatingSharedId] = useState<number | null>(null);
+  const [deactivatingSharedId, setDeactivatingSharedId] = useState<number | null>(null);
   
   const platformDomain = window.location.hostname;
 
   const { data: domains = [], isLoading } = useQuery<Domain[]>({
     queryKey: ["/api/domains"],
   });
+
+  // Shared domains queries
+  const { data: availableSharedDomains = [], isLoading: isLoadingShared } = useQuery<SharedDomain[]>({
+    queryKey: ["/api/shared-domains"],
+  });
+
+  const { data: userActivatedSharedDomains = [], isLoading: isLoadingActivated } = useQuery<UserSharedDomainActivation[]>({
+    queryKey: ["/api/user/shared-domains"],
+  });
+
+  // Get list of activated shared domain IDs
+  const activatedSharedDomainIds = new Set(userActivatedSharedDomains.map(a => a.sharedDomainId));
 
   const createMutation = useMutation({
     mutationFn: async (subdomain: string) => {
@@ -198,6 +224,82 @@ export default function Domains() {
       toast({
         title: t("common.error"),
         description: language === "pt-BR" ? "Erro ao excluir domínio" : "Error deleting domain",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Activate shared domain mutation
+  const activateSharedMutation = useMutation({
+    mutationFn: async (sharedDomainId: number) => {
+      setActivatingSharedId(sharedDomainId);
+      const res = await apiRequest("POST", `/api/user/shared-domains/${sharedDomainId}/activate`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || errorData.code || "Error activating shared domain");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shared-domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      setActivatingSharedId(null);
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Domínio compartilhado ativado" : "Shared domain activated",
+      });
+    },
+    onError: (error: Error) => {
+      setActivatingSharedId(null);
+      let errorMessage = language === "pt-BR" ? "Erro ao ativar domínio" : "Error activating domain";
+      
+      if (error.message.includes("DOMAIN_LIMIT_REACHED") || error.message.includes("Maximum number of domains")) {
+        errorMessage = language === "pt-BR"
+          ? "Limite de domínios atingido. Atualize seu plano para adicionar mais."
+          : "Domain limit reached. Upgrade your plan to add more.";
+      } else if (error.message.includes("USER_SUSPENDED") || error.message.includes("suspended")) {
+        errorMessage = language === "pt-BR"
+          ? "Conta suspensa. Atualize seu plano para continuar."
+          : "Account suspended. Update your plan to continue.";
+      } else if (error.message.includes("NO_ACTIVE_PLAN") || error.message.includes("active plan")) {
+        errorMessage = language === "pt-BR"
+          ? "Você precisa de um plano ativo para ativar domínios."
+          : "You need an active plan to activate domains.";
+      }
+      
+      toast({
+        title: t("common.error"),
+        description: errorMessage,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Deactivate shared domain mutation
+  const deactivateSharedMutation = useMutation({
+    mutationFn: async (sharedDomainId: number) => {
+      setDeactivatingSharedId(sharedDomainId);
+      const res = await apiRequest("DELETE", `/api/user/shared-domains/${sharedDomainId}`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Error deactivating shared domain");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user/shared-domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
+      setDeactivatingSharedId(null);
+      toast({
+        title: t("common.success"),
+        description: language === "pt-BR" ? "Domínio compartilhado desativado" : "Shared domain deactivated",
+      });
+    },
+    onError: () => {
+      setDeactivatingSharedId(null);
+      toast({
+        title: t("common.error"),
+        description: language === "pt-BR" ? "Erro ao desativar domínio" : "Error deactivating domain",
         variant: "destructive",
       });
     },
@@ -431,6 +533,108 @@ export default function Domains() {
           )}
         </CardContent>
       </Card>
+
+      {/* Shared Domains Section */}
+      {availableSharedDomains.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <Share2 className="w-5 h-5" />
+            <CardTitle className="text-lg">
+              {language === "pt-BR" ? "Domínios Compartilhados" : "Shared Domains"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="p-4 pb-2">
+              <p className="text-sm text-muted-foreground">
+                {language === "pt-BR"
+                  ? "Ative domínios compartilhados para usar nas suas ofertas. Domínios compartilhados contam no seu limite de domínios do plano."
+                  : "Activate shared domains to use in your offers. Shared domains count towards your plan's domain limit."}
+              </p>
+            </div>
+            {isLoadingShared || isLoadingActivated ? (
+              <div className="p-6 space-y-4">
+                {[...Array(3)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{language === "pt-BR" ? "Domínio" : "Domain"}</TableHead>
+                    <TableHead>{t("domains.status")}</TableHead>
+                    <TableHead className="w-32 text-right">{t("common.actions")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {availableSharedDomains.map((sharedDomain) => {
+                    const isActivated = activatedSharedDomainIds.has(sharedDomain.id);
+                    const isActivating = activatingSharedId === sharedDomain.id;
+                    const isDeactivating = deactivatingSharedId === sharedDomain.id;
+                    
+                    return (
+                      <TableRow key={sharedDomain.id} data-testid={`row-shared-domain-${sharedDomain.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Share2 className="w-4 h-4 text-muted-foreground" />
+                            <span className="font-medium font-mono">{sharedDomain.subdomain}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {isActivated ? (
+                            <Badge variant="default" className="bg-green-600">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              {language === "pt-BR" ? "Ativo" : "Active"}
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="w-3 h-3 mr-1" />
+                              {language === "pt-BR" ? "Não Ativo" : "Not Active"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isActivated ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => deactivateSharedMutation.mutate(sharedDomain.id)}
+                              disabled={isDeactivating}
+                              data-testid={`button-deactivate-shared-${sharedDomain.id}`}
+                            >
+                              {isDeactivating ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <PowerOff className="w-4 h-4 mr-1" />
+                              )}
+                              {language === "pt-BR" ? "Desativar" : "Deactivate"}
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() => activateSharedMutation.mutate(sharedDomain.id)}
+                              disabled={isActivating}
+                              data-testid={`button-activate-shared-${sharedDomain.id}`}
+                            >
+                              {isActivating ? (
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                              ) : (
+                                <Power className="w-4 h-4 mr-1" />
+                              )}
+                              {language === "pt-BR" ? "Ativar" : "Activate"}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={!!showDnsInstructions} onOpenChange={(open) => !open && setShowDnsInstructions(null)}>
         <DialogContent className="max-w-lg">

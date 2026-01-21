@@ -5,6 +5,7 @@ import {
   plans,
   domains,
   sharedDomains,
+  userSharedDomains,
   offers,
   clickLogs,
   dailyClickMetrics,
@@ -34,6 +35,8 @@ import {
   type InsertSuspensionHistory,
   type RemovedDomain,
   type InsertRemovedDomain,
+  type UserSharedDomain,
+  type InsertUserSharedDomain,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -79,6 +82,12 @@ export interface IStorage {
   updateSharedDomainNotificationTimestamp(id: number, timestamp: Date): Promise<void>;
   deleteSharedDomain(id: number): Promise<void>;
   getOffersBySharedDomainId(sharedDomainId: number): Promise<Offer[]>;
+
+  // User shared domains (activation of shared domains per user)
+  getUserSharedDomains(userId: string): Promise<Array<{ id: number; sharedDomainId: number; isActive: boolean; createdAt: Date; sharedDomain: SharedDomain }>>;
+  activateSharedDomain(userId: string, sharedDomainId: number): Promise<{ id: number; userId: string; sharedDomainId: number; isActive: boolean; createdAt: Date }>;
+  deactivateUserSharedDomain(userId: string, sharedDomainId: number): Promise<void>;
+  getUserTotalDomainsCount(userId: string): Promise<number>;
 
   getOffer(id: number): Promise<Offer | undefined>;
   getOfferBySlug(slug: string): Promise<Offer | undefined>;
@@ -543,6 +552,83 @@ export class DatabaseStorage implements IStorage {
 
   async getOffersBySharedDomainId(sharedDomainId: number): Promise<Offer[]> {
     return db.select().from(offers).where(eq(offers.sharedDomainId, sharedDomainId));
+  }
+
+  // User shared domains methods
+  async getUserSharedDomains(userId: string): Promise<Array<{ id: number; sharedDomainId: number; isActive: boolean; createdAt: Date; sharedDomain: SharedDomain }>> {
+    const results = await db
+      .select({
+        id: userSharedDomains.id,
+        sharedDomainId: userSharedDomains.sharedDomainId,
+        isActive: userSharedDomains.isActive,
+        createdAt: userSharedDomains.createdAt,
+        sharedDomain: sharedDomains,
+      })
+      .from(userSharedDomains)
+      .innerJoin(sharedDomains, eq(userSharedDomains.sharedDomainId, sharedDomains.id))
+      .where(and(
+        eq(userSharedDomains.userId, userId),
+        eq(userSharedDomains.isActive, true)
+      ));
+    return results;
+  }
+
+  async activateSharedDomain(userId: string, sharedDomainId: number): Promise<{ id: number; userId: string; sharedDomainId: number; isActive: boolean; createdAt: Date }> {
+    // Check if already exists
+    const [existing] = await db
+      .select()
+      .from(userSharedDomains)
+      .where(and(
+        eq(userSharedDomains.userId, userId),
+        eq(userSharedDomains.sharedDomainId, sharedDomainId)
+      ))
+      .limit(1);
+    
+    if (existing) {
+      // Reactivate if exists
+      const [updated] = await db
+        .update(userSharedDomains)
+        .set({ isActive: true })
+        .where(eq(userSharedDomains.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    // Create new activation
+    const [created] = await db
+      .insert(userSharedDomains)
+      .values({ userId, sharedDomainId, isActive: true })
+      .returning();
+    return created;
+  }
+
+  async deactivateUserSharedDomain(userId: string, sharedDomainId: number): Promise<void> {
+    await db
+      .update(userSharedDomains)
+      .set({ isActive: false })
+      .where(and(
+        eq(userSharedDomains.userId, userId),
+        eq(userSharedDomains.sharedDomainId, sharedDomainId)
+      ));
+  }
+
+  async getUserTotalDomainsCount(userId: string): Promise<number> {
+    // Count user's own domains
+    const [ownDomainsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(domains)
+      .where(eq(domains.userId, userId));
+    
+    // Count user's activated shared domains
+    const [sharedDomainsResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(userSharedDomains)
+      .where(and(
+        eq(userSharedDomains.userId, userId),
+        eq(userSharedDomains.isActive, true)
+      ));
+    
+    return (ownDomainsResult?.count || 0) + (sharedDomainsResult?.count || 0);
   }
 
   async getOffer(id: number): Promise<Offer | undefined> {
@@ -1644,13 +1730,14 @@ export class DatabaseStorage implements IStorage {
       return { allowed: false, reason: 'no_active_plan', currentCount: 0, limit: null };
     }
 
-    // Unlimited plan
+    // Unlimited plan - use total count (own + shared)
     if (plan.isUnlimited) {
-      const currentCount = await this.getUserDomainsCount(userId);
+      const currentCount = await this.getUserTotalDomainsCount(userId);
       return { allowed: true, currentCount, limit: null };
     }
 
-    const currentCount = await this.getUserDomainsCount(userId);
+    // Count total domains (own + activated shared)
+    const currentCount = await this.getUserTotalDomainsCount(userId);
     const limit = plan.maxDomains;
 
     if (currentCount >= limit) {

@@ -3465,6 +3465,95 @@ export async function registerRoutes(
     }
   });
 
+  // User shared domains - Get user's activated shared domains
+  app.get("/api/user/shared-domains", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const userSharedDomains = await storage.getUserSharedDomains(userId);
+      res.json(userSharedDomains);
+    } catch (error) {
+      console.error("Error fetching user shared domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // User shared domains - Activate a shared domain
+  app.post("/api/user/shared-domains/:sharedDomainId/activate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const sharedDomainId = parseInt(req.params.sharedDomainId);
+      
+      // Check if user is suspended
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ message: "User not found", code: "USER_NOT_FOUND" });
+      }
+      if (user.suspendedAt) {
+        return res.status(403).json({ message: "Account suspended", code: "USER_SUSPENDED" });
+      }
+      
+      // Check if user has active plan
+      if (!user.planId || !["active", "trialing"].includes(user.subscriptionStatus || "")) {
+        return res.status(403).json({ message: "No active plan", code: "NO_ACTIVE_PLAN" });
+      }
+      
+      // Get plan limits
+      const plan = await storage.getPlan(user.planId);
+      if (!plan) {
+        return res.status(403).json({ message: "Plan not found", code: "NO_ACTIVE_PLAN" });
+      }
+      
+      // Count total domains (own + activated shared)
+      const totalDomainsCount = await storage.getUserTotalDomainsCount(userId);
+      
+      // Check if limit reached (skip for unlimited plans)
+      if (!plan.isUnlimited && totalDomainsCount >= plan.maxDomains) {
+        return res.status(403).json({ 
+          message: "Maximum number of domains reached", 
+          code: "DOMAIN_LIMIT_REACHED" 
+        });
+      }
+      
+      // Check if shared domain exists and is active
+      const sharedDomain = await storage.getSharedDomain(sharedDomainId);
+      if (!sharedDomain || !sharedDomain.isActive) {
+        return res.status(404).json({ message: "Shared domain not found or inactive" });
+      }
+      
+      const activation = await storage.activateSharedDomain(userId, sharedDomainId);
+      res.json({ ...activation, sharedDomain });
+    } catch (error) {
+      console.error("Error activating shared domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // User shared domains - Deactivate a shared domain
+  app.delete("/api/user/shared-domains/:sharedDomainId", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const sharedDomainId = parseInt(req.params.sharedDomainId);
+      
+      await storage.deactivateUserSharedDomain(userId, sharedDomainId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deactivating shared domain:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get user's total domain count (own + activated shared)
+  app.get("/api/user/domains-count", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const count = await storage.getUserTotalDomainsCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching domain count:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Admin Domain Management - Get all system domains (user + shared)
   app.get("/api/admin/domains", isAdmin, async (req: Request, res: Response) => {
     try {

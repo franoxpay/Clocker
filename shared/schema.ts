@@ -114,6 +114,21 @@ export const sharedDomains = pgTable(
   ]
 );
 
+// User shared domains activation table (tracks which shared domains a user has activated)
+export const userSharedDomains = pgTable(
+  "user_shared_domains",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    sharedDomainId: integer("shared_domain_id").notNull().references(() => sharedDomains.id, { onDelete: "cascade" }),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_shared_domains_user_domain_idx").on(table.userId, table.sharedDomainId),
+  ]
+);
+
 // Offers table
 export const offers = pgTable(
   "offers",
@@ -318,6 +333,18 @@ export const offersRelations = relations(offers, ({ one, many }) => ({
 
 export const sharedDomainsRelations = relations(sharedDomains, ({ many }) => ({
   offers: many(offers),
+  userActivations: many(userSharedDomains),
+}));
+
+export const userSharedDomainsRelations = relations(userSharedDomains, ({ one }) => ({
+  user: one(users, {
+    fields: [userSharedDomains.userId],
+    references: [users.id],
+  }),
+  sharedDomain: one(sharedDomains, {
+    fields: [userSharedDomains.sharedDomainId],
+    references: [sharedDomains.id],
+  }),
 }));
 
 export const clickLogsRelations = relations(clickLogs, ({ one }) => ({
@@ -361,6 +388,11 @@ export const insertSharedDomainSchema = createInsertSchema(sharedDomains).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+export const insertUserSharedDomainSchema = createInsertSchema(userSharedDomains).omit({
+  id: true,
+  createdAt: true,
 });
 
 export const insertOfferSchema = createInsertSchema(offers).omit({
@@ -507,3 +539,6 @@ export const insertRemovedDomainSchema = createInsertSchema(removedDomains).omit
 });
 export type RemovedDomain = typeof removedDomains.$inferSelect;
 export type InsertRemovedDomain = z.infer<typeof insertRemovedDomainSchema>;
+
+export type UserSharedDomain = typeof userSharedDomains.$inferSelect;
+export type InsertUserSharedDomain = z.infer<typeof insertUserSharedDomainSchema>;
