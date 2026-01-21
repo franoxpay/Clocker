@@ -475,7 +475,6 @@ export default function Subscription() {
           </AlertDescription>
         </Alert>
       )}
-
       {checkoutStatus === "canceled" && (
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
@@ -489,7 +488,6 @@ export default function Subscription() {
           </AlertDescription>
         </Alert>
       )}
-
       {checkoutError && (
         <Alert variant="destructive">
           <XCircle className="h-4 w-4" />
@@ -524,7 +522,6 @@ export default function Subscription() {
           </AlertDescription>
         </Alert>
       )}
-
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-3xl font-semibold" data-testid="title-subscription">
           {t("subscription.title")}
@@ -541,7 +538,6 @@ export default function Subscription() {
           </Button>
         )}
       </div>
-
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -756,7 +752,6 @@ export default function Subscription() {
           </CardContent>
         </Card>
       </div>
-
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {plansLoading ? (
           [...Array(5)].map((_, i) => (
@@ -782,7 +777,7 @@ export default function Subscription() {
                   {language === "pt-BR" ? plan.name : plan.nameEn}
                 </CardTitle>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
+                  <span className="font-bold text-[26px]">{formatPrice(plan.price)}</span>
                   <span className="text-muted-foreground">{t("subscription.month")}</span>
                 </div>
                 {plan.hasTrial && plan.trialDays > 0 && (
@@ -859,7 +854,6 @@ export default function Subscription() {
           ))
         )}
       </div>
-
       <Card>
         <CardHeader>
           <CardTitle>{t("subscription.paymentHistory")}</CardTitle>
@@ -913,7 +907,6 @@ export default function Subscription() {
           )}
         </CardContent>
       </Card>
-
       <Dialog open={cardSelectorOpen} onOpenChange={setCardSelectorOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
