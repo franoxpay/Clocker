@@ -51,17 +51,16 @@ interface Plan {
 
 interface AffiliateStats {
   totalReferrals: number;
-  activeReferrals: number;
   totalEarnings: number;
   pendingEarnings: number;
   paidEarnings: number;
-  coupons: {
+  coupon: {
     id: number;
     code: string;
     discountType: string;
     discountValue: number;
     usageCount: number;
-  }[];
+  } | null;
 }
 
 export default function Settings() {
@@ -453,9 +452,9 @@ export default function Settings() {
                         </div>
                         <div>
                           <p className="text-sm text-muted-foreground">
-                            {language === "pt-BR" ? "Indicados Ativos" : "Active Referrals"}
+                            {language === "pt-BR" ? "Total de Indicados" : "Total Referrals"}
                           </p>
-                          <p className="text-2xl font-bold">{affiliateStats.activeReferrals}</p>
+                          <p className="text-2xl font-bold">{affiliateStats.totalReferrals}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -504,7 +503,7 @@ export default function Settings() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    {affiliateStats.coupons.length === 0 ? (
+                    {!affiliateStats.coupon ? (
                       <div className="text-center py-8 text-muted-foreground">
                         {language === "pt-BR"
                           ? "Você ainda não possui cupons de indicação. Entre em contato com o suporte para solicitar."
@@ -512,38 +511,35 @@ export default function Settings() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {affiliateStats.coupons.map((coupon) => (
-                          <div
-                            key={coupon.id}
-                            className="flex items-center justify-between p-4 border rounded-lg"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className="p-2 bg-primary/10 rounded-lg">
-                                <Gift className="w-5 h-5 text-primary" />
-                              </div>
-                              <div>
-                                <p className="font-mono text-lg font-bold">{coupon.code}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {coupon.discountType === "percentage"
-                                    ? `${coupon.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
-                                    : `R$ ${coupon.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
-                                  {" • "}
-                                  {coupon.usageCount}{" "}
-                                  {language === "pt-BR" ? "usos" : "uses"}
-                                </p>
-                              </div>
+                        <div
+                          className="flex items-center justify-between p-4 border rounded-lg"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="p-2 bg-primary/10 rounded-lg">
+                              <Gift className="w-5 h-5 text-primary" />
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => copyToClipboard(coupon.code)}
-                              data-testid={`button-copy-coupon-${coupon.id}`}
-                            >
-                              <Copy className="w-4 h-4 mr-2" />
-                              {language === "pt-BR" ? "Copiar" : "Copy"}
-                            </Button>
+                            <div>
+                              <p className="font-mono text-lg font-bold">{affiliateStats.coupon.code}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {affiliateStats.coupon.discountType === "percentage"
+                                  ? `${affiliateStats.coupon.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
+                                  : `R$ ${(affiliateStats.coupon.discountValue / 100).toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
+                                {" • "}
+                                {affiliateStats.coupon.usageCount}{" "}
+                                {language === "pt-BR" ? "usos" : "uses"}
+                              </p>
+                            </div>
                           </div>
-                        ))}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(affiliateStats.coupon!.code)}
+                            data-testid={`button-copy-coupon-${affiliateStats.coupon.id}`}
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            {language === "pt-BR" ? "Copiar" : "Copy"}
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </CardContent>
