@@ -153,9 +153,46 @@ export default function Subscription() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
   const [couponCode, setCouponCode] = useState("");
-  const [couponApplied, setCouponApplied] = useState<{ code: string; discountType: string; discountValue: number } | null>(null);
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discountType: string; discountValue: number } | null>(() => {
+    // Load saved coupon from localStorage on initial render
+    try {
+      const saved = localStorage.getItem('pendingCoupon');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [couponError, setCouponError] = useState<string | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+
+  // Clear saved coupon when user gets a subscription
+  useEffect(() => {
+    if (user?.stripeSubscriptionId || user?.hasUsedCoupon) {
+      localStorage.removeItem('pendingCoupon');
+      setCouponApplied(null);
+    }
+  }, [user?.stripeSubscriptionId, user?.hasUsedCoupon]);
+
+  // Revalidate saved coupon on load
+  useEffect(() => {
+    const revalidateSavedCoupon = async () => {
+      if (!couponApplied || user?.stripeSubscriptionId || user?.hasUsedCoupon) return;
+      
+      try {
+        const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponApplied.code)}`, {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          // Coupon is no longer valid, remove it
+          localStorage.removeItem('pendingCoupon');
+          setCouponApplied(null);
+        }
+      } catch {
+        // On error, keep the coupon but don't crash
+      }
+    };
+    revalidateSavedCoupon();
+  }, []);
 
   useEffect(() => {
     if (checkoutStatus === "success") {
@@ -163,6 +200,10 @@ export default function Subscription() {
       queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
       queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+      
+      // Clear pending coupon after successful checkout
+      localStorage.removeItem('pendingCoupon');
+      setCouponApplied(null);
       
       toast({
         title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
@@ -222,14 +263,15 @@ export default function Subscription() {
   const activePlans = plans.filter(p => p.isActive);
 
   // Calculate discounted price based on applied coupon
+  // Note: originalPrice is in cents, discountValue is in cents for fixed discounts
   const getDiscountedPrice = (originalPrice: number): number => {
     if (!couponApplied) return originalPrice;
     
     if (couponApplied.discountType === "percentage") {
       return Math.round(originalPrice * (1 - couponApplied.discountValue / 100));
     } else {
-      // Fixed discount (value is in cents)
-      return Math.max(0, originalPrice - couponApplied.discountValue * 100);
+      // Fixed discount - discountValue is already in cents
+      return Math.max(0, originalPrice - couponApplied.discountValue);
     }
   };
 
@@ -249,13 +291,16 @@ export default function Subscription() {
         setCouponError(data.message || (language === "pt-BR" ? "Cupom inválido" : "Invalid coupon"));
         setCouponApplied(null);
       } else {
-        setCouponApplied({ code: data.code, discountType: data.discountType, discountValue: data.discountValue });
+        const couponData = { code: data.code, discountType: data.discountType, discountValue: data.discountValue };
+        setCouponApplied(couponData);
         setCouponError(null);
+        // Save to localStorage so coupon persists until first payment
+        localStorage.setItem('pendingCoupon', JSON.stringify(couponData));
         toast({
           title: language === "pt-BR" ? "Cupom aplicado!" : "Coupon applied!",
           description: data.discountType === "percentage"
             ? `${data.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
-            : `R$ ${data.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`,
+            : `R$ ${(data.discountValue / 100).toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`,
         });
       }
     } catch {
@@ -269,6 +314,7 @@ export default function Subscription() {
     setCouponApplied(null);
     setCouponCode("");
     setCouponError(null);
+    localStorage.removeItem('pendingCoupon');
   };
 
   const checkoutMutation = useMutation({
@@ -844,7 +890,7 @@ export default function Subscription() {
                     <p className="text-sm text-green-600 dark:text-green-400">
                       {couponApplied.discountType === "percentage"
                         ? `${couponApplied.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
-                        : `R$ ${couponApplied.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
+                        : `R$ ${(couponApplied.discountValue / 100).toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
                     </p>
                   </div>
                 </div>
@@ -935,7 +981,7 @@ export default function Subscription() {
                   <Badge className="mt-2 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">
                     {couponApplied.discountType === "percentage"
                       ? `${couponApplied.discountValue}% OFF`
-                      : `R$ ${couponApplied.discountValue.toFixed(2)} OFF`}
+                      : `R$ ${(couponApplied.discountValue / 100).toFixed(2)} OFF`}
                   </Badge>
                 )}
                 {plan.hasTrial && plan.trialDays > 0 && (
