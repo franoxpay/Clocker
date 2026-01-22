@@ -47,6 +47,8 @@ export const users = pgTable("users", {
   suspendedAt: timestamp("suspended_at"),
   suspensionReason: varchar("suspension_reason"),
   gracePeriodEndsAt: timestamp("grace_period_ends_at"),
+  hasUsedCoupon: boolean("has_used_coupon").default(false).notNull(),
+  usedCouponId: integer("used_coupon_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -288,6 +290,81 @@ export const removedDomains = pgTable(
   (table) => [
     index("removed_domains_subdomain_idx").on(table.subdomain),
     index("removed_domains_created_idx").on(table.createdAt),
+  ]
+);
+
+// Coupons table - Cupons de desconto
+export const coupons = pgTable(
+  "coupons",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    code: varchar("code").notNull().unique(),
+    discountType: varchar("discount_type").notNull(), // 'percentage' | 'fixed'
+    discountValue: integer("discount_value").notNull(), // valor em centavos ou porcentagem
+    durationMonths: integer("duration_months").default(1).notNull(), // quantos meses o desconto vale
+    expiresAt: timestamp("expires_at"),
+    validPlanIds: integer("valid_plan_ids").array(), // null = todos os planos
+    affiliateUserId: varchar("affiliate_user_id").references(() => users.id, { onDelete: "set null" }),
+    commissionType: varchar("commission_type"), // 'percentage' | 'fixed'
+    commissionValue: integer("commission_value"), // valor em centavos ou porcentagem
+    commissionMode: varchar("commission_mode").default("one_time"), // 'one_time' | 'recurring'
+    usageCount: integer("usage_count").default(0).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("coupons_code_idx").on(table.code),
+    index("coupons_affiliate_idx").on(table.affiliateUserId),
+  ]
+);
+
+// Coupon usages table - Registro de uso de cupons
+export const couponUsages = pgTable(
+  "coupon_usages",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    couponId: integer("coupon_id").notNull().references(() => coupons.id, { onDelete: "cascade" }),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    stripeSubscriptionId: varchar("stripe_subscription_id"),
+    appliedAt: timestamp("applied_at").defaultNow().notNull(),
+    status: varchar("status").default("active").notNull(), // 'active' | 'cancelled' | 'expired'
+    discountAmountApplied: integer("discount_amount_applied"), // valor do desconto aplicado em centavos
+    remainingMonths: integer("remaining_months").default(0).notNull(), // meses restantes de desconto
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("coupon_usages_coupon_idx").on(table.couponId),
+    index("coupon_usages_user_idx").on(table.userId),
+    uniqueIndex("coupon_usages_user_unique").on(table.userId), // cada usuário só pode usar 1 cupom
+  ]
+);
+
+// Commissions table - Comissões de afiliados
+export const commissions = pgTable(
+  "commissions",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    affiliateUserId: varchar("affiliate_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    referredUserId: varchar("referred_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    couponId: integer("coupon_id").notNull().references(() => coupons.id, { onDelete: "cascade" }),
+    couponUsageId: integer("coupon_usage_id").references(() => couponUsages.id, { onDelete: "set null" }),
+    stripeSubscriptionId: varchar("stripe_subscription_id"),
+    stripeInvoiceId: varchar("stripe_invoice_id"),
+    amount: integer("amount").notNull(), // valor em centavos
+    type: varchar("type").notNull(), // 'one_time' | 'recurring'
+    status: varchar("status").default("pending").notNull(), // 'pending' | 'paid' | 'reversed'
+    paidAt: timestamp("paid_at"),
+    paidByAdminId: varchar("paid_by_admin_id").references(() => users.id, { onDelete: "set null" }),
+    reversedAt: timestamp("reversed_at"),
+    reversedReason: varchar("reversed_reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("commissions_affiliate_idx").on(table.affiliateUserId),
+    index("commissions_referred_idx").on(table.referredUserId),
+    index("commissions_status_idx").on(table.status),
+    index("commissions_created_idx").on(table.createdAt),
   ]
 );
 
@@ -542,3 +619,28 @@ export type InsertRemovedDomain = z.infer<typeof insertRemovedDomainSchema>;
 
 export type UserSharedDomain = typeof userSharedDomains.$inferSelect;
 export type InsertUserSharedDomain = z.infer<typeof insertUserSharedDomainSchema>;
+
+// Coupon schemas and types
+export const insertCouponSchema = createInsertSchema(coupons).omit({
+  id: true,
+  usageCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type Coupon = typeof coupons.$inferSelect;
+export type InsertCoupon = z.infer<typeof insertCouponSchema>;
+
+export const insertCouponUsageSchema = createInsertSchema(couponUsages).omit({
+  id: true,
+  appliedAt: true,
+  createdAt: true,
+});
+export type CouponUsage = typeof couponUsages.$inferSelect;
+export type InsertCouponUsage = z.infer<typeof insertCouponUsageSchema>;
+
+export const insertCommissionSchema = createInsertSchema(commissions).omit({
+  id: true,
+  createdAt: true,
+});
+export type Commission = typeof commissions.$inferSelect;
+export type InsertCommission = z.infer<typeof insertCommissionSchema>;

@@ -15,6 +15,9 @@ import {
   adminImpersonations,
   suspensionHistory,
   removedDomains,
+  coupons,
+  couponUsages,
+  commissions,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -37,6 +40,12 @@ import {
   type InsertRemovedDomain,
   type UserSharedDomain,
   type InsertUserSharedDomain,
+  type Coupon,
+  type InsertCoupon,
+  type CouponUsage,
+  type InsertCouponUsage,
+  type Commission,
+  type InsertCommission,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -271,6 +280,54 @@ export interface IStorage {
   getRemovedDomainsHistory(page: number, limit: number): Promise<{
     domains: RemovedDomain[];
     total: number;
+  }>;
+
+  // Coupon functions
+  getCoupon(id: number): Promise<Coupon | undefined>;
+  getCouponByCode(code: string): Promise<Coupon | undefined>;
+  getAllCoupons(): Promise<Coupon[]>;
+  getCouponsByAffiliateId(affiliateUserId: string): Promise<Coupon[]>;
+  createCoupon(coupon: InsertCoupon): Promise<Coupon>;
+  updateCoupon(id: number, data: Partial<InsertCoupon>): Promise<Coupon | undefined>;
+  deleteCoupon(id: number): Promise<void>;
+  incrementCouponUsage(id: number): Promise<void>;
+  validateCouponForUser(code: string, userId: string, planId: number): Promise<{
+    valid: boolean;
+    coupon?: Coupon;
+    error?: string;
+  }>;
+
+  // Coupon usage functions
+  getCouponUsage(id: number): Promise<CouponUsage | undefined>;
+  getCouponUsageByUserId(userId: string): Promise<CouponUsage | undefined>;
+  getCouponUsagesByCouponId(couponId: number): Promise<CouponUsage[]>;
+  createCouponUsage(usage: InsertCouponUsage): Promise<CouponUsage>;
+  updateCouponUsage(id: number, data: Partial<InsertCouponUsage>): Promise<CouponUsage | undefined>;
+  
+  // Commission functions
+  getCommission(id: number): Promise<Commission | undefined>;
+  getCommissionsByAffiliateId(affiliateUserId: string): Promise<Commission[]>;
+  getCommissionsByReferredUserId(referredUserId: string): Promise<Commission[]>;
+  getAllCommissions(page: number, limit: number, status?: string): Promise<{ commissions: Commission[]; total: number }>;
+  createCommission(commission: InsertCommission): Promise<Commission>;
+  updateCommission(id: number, data: Partial<InsertCommission>): Promise<Commission | undefined>;
+  markCommissionAsPaid(id: number, adminId: string): Promise<Commission | undefined>;
+  reverseCommission(id: number, reason: string): Promise<Commission | undefined>;
+  
+  // Affiliate reports
+  getAffiliateStats(affiliateUserId: string): Promise<{
+    totalReferrals: number;
+    totalEarnings: number;
+    pendingEarnings: number;
+    paidEarnings: number;
+    coupon: Coupon | null;
+  }>;
+  getCouponReports(): Promise<{
+    totalCoupons: number;
+    activeCoupons: number;
+    totalUsages: number;
+    topCoupons: Array<{ couponId: number; code: string; usageCount: number }>;
+    topAffiliates: Array<{ affiliateId: string; email: string; referrals: number; earnings: number }>;
   }>;
 }
 
@@ -1992,6 +2049,307 @@ export class DatabaseStorage implements IStorage {
     return {
       domains: domainsResult,
       total: countResult?.count || 0,
+    };
+  }
+
+  // ================== COUPON FUNCTIONS ==================
+
+  async getCoupon(id: number): Promise<Coupon | undefined> {
+    const [coupon] = await db.select().from(coupons).where(eq(coupons.id, id)).limit(1);
+    return coupon;
+  }
+
+  async getCouponByCode(code: string): Promise<Coupon | undefined> {
+    const [coupon] = await db.select().from(coupons).where(eq(coupons.code, code.toUpperCase())).limit(1);
+    return coupon;
+  }
+
+  async getAllCoupons(): Promise<Coupon[]> {
+    return db.select().from(coupons).orderBy(desc(coupons.createdAt));
+  }
+
+  async getCouponsByAffiliateId(affiliateUserId: string): Promise<Coupon[]> {
+    return db.select().from(coupons).where(eq(coupons.affiliateUserId, affiliateUserId));
+  }
+
+  async createCoupon(coupon: InsertCoupon): Promise<Coupon> {
+    const [newCoupon] = await db.insert(coupons).values({
+      ...coupon,
+      code: coupon.code.toUpperCase(),
+    }).returning();
+    return newCoupon;
+  }
+
+  async updateCoupon(id: number, data: Partial<InsertCoupon>): Promise<Coupon | undefined> {
+    const updateData = data.code ? { ...data, code: data.code.toUpperCase() } : data;
+    const [updated] = await db
+      .update(coupons)
+      .set({ ...updateData, updatedAt: new Date() })
+      .where(eq(coupons.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCoupon(id: number): Promise<void> {
+    await db.delete(coupons).where(eq(coupons.id, id));
+  }
+
+  async incrementCouponUsage(id: number): Promise<void> {
+    await db
+      .update(coupons)
+      .set({ usageCount: sql`${coupons.usageCount} + 1` })
+      .where(eq(coupons.id, id));
+  }
+
+  async validateCouponForUser(code: string, userId: string, planId: number): Promise<{
+    valid: boolean;
+    coupon?: Coupon;
+    error?: string;
+  }> {
+    const coupon = await this.getCouponByCode(code);
+    
+    if (!coupon) {
+      return { valid: false, error: "coupon_not_found" };
+    }
+
+    if (!coupon.isActive) {
+      return { valid: false, error: "coupon_inactive" };
+    }
+
+    if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+      return { valid: false, error: "coupon_expired" };
+    }
+
+    if (coupon.validPlanIds && coupon.validPlanIds.length > 0 && !coupon.validPlanIds.includes(planId)) {
+      return { valid: false, error: "coupon_invalid_plan" };
+    }
+
+    // Check if user already used a coupon
+    const user = await this.getUser(userId);
+    if (user?.hasUsedCoupon) {
+      return { valid: false, error: "user_already_used_coupon" };
+    }
+
+    // Check if user is the affiliate (cannot use own coupon)
+    if (coupon.affiliateUserId === userId) {
+      return { valid: false, error: "cannot_use_own_coupon" };
+    }
+
+    // Check if affiliate has active subscription (required to receive commissions)
+    if (coupon.affiliateUserId) {
+      const affiliate = await this.getUser(coupon.affiliateUserId);
+      if (!affiliate || affiliate.subscriptionStatus !== "active") {
+        return { valid: false, error: "affiliate_inactive" };
+      }
+    }
+
+    return { valid: true, coupon };
+  }
+
+  // ================== COUPON USAGE FUNCTIONS ==================
+
+  async getCouponUsage(id: number): Promise<CouponUsage | undefined> {
+    const [usage] = await db.select().from(couponUsages).where(eq(couponUsages.id, id)).limit(1);
+    return usage;
+  }
+
+  async getCouponUsageByUserId(userId: string): Promise<CouponUsage | undefined> {
+    const [usage] = await db.select().from(couponUsages).where(eq(couponUsages.userId, userId)).limit(1);
+    return usage;
+  }
+
+  async getCouponUsagesByCouponId(couponId: number): Promise<CouponUsage[]> {
+    return db.select().from(couponUsages).where(eq(couponUsages.couponId, couponId)).orderBy(desc(couponUsages.createdAt));
+  }
+
+  async createCouponUsage(usage: InsertCouponUsage): Promise<CouponUsage> {
+    const [newUsage] = await db.insert(couponUsages).values(usage).returning();
+    
+    // Mark user as having used a coupon
+    await this.updateUser(usage.userId, { 
+      hasUsedCoupon: true,
+      usedCouponId: usage.couponId,
+    });
+    
+    // Increment coupon usage count
+    await this.incrementCouponUsage(usage.couponId);
+    
+    return newUsage;
+  }
+
+  async updateCouponUsage(id: number, data: Partial<InsertCouponUsage>): Promise<CouponUsage | undefined> {
+    const [updated] = await db
+      .update(couponUsages)
+      .set(data)
+      .where(eq(couponUsages.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ================== COMMISSION FUNCTIONS ==================
+
+  async getCommission(id: number): Promise<Commission | undefined> {
+    const [commission] = await db.select().from(commissions).where(eq(commissions.id, id)).limit(1);
+    return commission;
+  }
+
+  async getCommissionsByAffiliateId(affiliateUserId: string): Promise<Commission[]> {
+    return db
+      .select()
+      .from(commissions)
+      .where(eq(commissions.affiliateUserId, affiliateUserId))
+      .orderBy(desc(commissions.createdAt));
+  }
+
+  async getCommissionsByReferredUserId(referredUserId: string): Promise<Commission[]> {
+    return db
+      .select()
+      .from(commissions)
+      .where(eq(commissions.referredUserId, referredUserId))
+      .orderBy(desc(commissions.createdAt));
+  }
+
+  async getAllCommissions(page: number, limit: number, status?: string): Promise<{ commissions: Commission[]; total: number }> {
+    const offset = (page - 1) * limit;
+    
+    const whereClause = status ? eq(commissions.status, status) : undefined;
+    
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(commissions)
+      .where(whereClause);
+
+    const commissionsResult = await db
+      .select()
+      .from(commissions)
+      .where(whereClause)
+      .orderBy(desc(commissions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      commissions: commissionsResult,
+      total: countResult?.count || 0,
+    };
+  }
+
+  async createCommission(commission: InsertCommission): Promise<Commission> {
+    const [newCommission] = await db.insert(commissions).values(commission).returning();
+    return newCommission;
+  }
+
+  async updateCommission(id: number, data: Partial<InsertCommission>): Promise<Commission | undefined> {
+    const [updated] = await db
+      .update(commissions)
+      .set(data)
+      .where(eq(commissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markCommissionAsPaid(id: number, adminId: string): Promise<Commission | undefined> {
+    const [updated] = await db
+      .update(commissions)
+      .set({ 
+        status: "paid",
+        paidAt: new Date(),
+        paidByAdminId: adminId,
+      })
+      .where(eq(commissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async reverseCommission(id: number, reason: string): Promise<Commission | undefined> {
+    const [updated] = await db
+      .update(commissions)
+      .set({ 
+        status: "reversed",
+        reversedAt: new Date(),
+        reversedReason: reason,
+      })
+      .where(eq(commissions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ================== AFFILIATE REPORTS ==================
+
+  async getAffiliateStats(affiliateUserId: string): Promise<{
+    totalReferrals: number;
+    totalEarnings: number;
+    pendingEarnings: number;
+    paidEarnings: number;
+    coupon: Coupon | null;
+  }> {
+    // Get affiliate's coupon
+    const affiliateCoupons = await this.getCouponsByAffiliateId(affiliateUserId);
+    const coupon = affiliateCoupons.length > 0 ? affiliateCoupons[0] : null;
+
+    // Get all commissions for this affiliate
+    const affiliateCommissions = await this.getCommissionsByAffiliateId(affiliateUserId);
+
+    const totalReferrals = affiliateCommissions.length;
+    const totalEarnings = affiliateCommissions.reduce((sum, c) => sum + c.amount, 0);
+    const pendingEarnings = affiliateCommissions
+      .filter(c => c.status === "pending")
+      .reduce((sum, c) => sum + c.amount, 0);
+    const paidEarnings = affiliateCommissions
+      .filter(c => c.status === "paid")
+      .reduce((sum, c) => sum + c.amount, 0);
+
+    return {
+      totalReferrals,
+      totalEarnings,
+      pendingEarnings,
+      paidEarnings,
+      coupon,
+    };
+  }
+
+  async getCouponReports(): Promise<{
+    totalCoupons: number;
+    activeCoupons: number;
+    totalUsages: number;
+    topCoupons: Array<{ couponId: number; code: string; usageCount: number }>;
+    topAffiliates: Array<{ affiliateId: string; email: string; referrals: number; earnings: number }>;
+  }> {
+    const allCoupons = await this.getAllCoupons();
+    const totalCoupons = allCoupons.length;
+    const activeCoupons = allCoupons.filter(c => c.isActive).length;
+    const totalUsages = allCoupons.reduce((sum, c) => sum + c.usageCount, 0);
+
+    // Top coupons by usage
+    const topCoupons = allCoupons
+      .sort((a, b) => b.usageCount - a.usageCount)
+      .slice(0, 10)
+      .map(c => ({ couponId: c.id, code: c.code, usageCount: c.usageCount }));
+
+    // Top affiliates by earnings
+    const affiliateIds = [...new Set(allCoupons.map(c => c.affiliateUserId).filter(Boolean))] as string[];
+    const topAffiliatesData = await Promise.all(
+      affiliateIds.map(async (affiliateId) => {
+        const stats = await this.getAffiliateStats(affiliateId);
+        const user = await this.getUser(affiliateId);
+        return {
+          affiliateId,
+          email: user?.email || "",
+          referrals: stats.totalReferrals,
+          earnings: stats.totalEarnings,
+        };
+      })
+    );
+
+    const topAffiliates = topAffiliatesData
+      .sort((a, b) => b.earnings - a.earnings)
+      .slice(0, 10);
+
+    return {
+      totalCoupons,
+      activeCoupons,
+      totalUsages,
+      topCoupons,
+      topAffiliates,
     };
   }
 }
