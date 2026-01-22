@@ -3176,7 +3176,7 @@ export async function registerRoutes(
   app.get("/api/admin/users", isAdmin, async (req: Request, res: Response) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
-      const limit = 20;
+      const limit = parseInt(req.query.limit as string) || 20;
       const search = req.query.search as string | undefined;
       const result = await storage.getAllUsers(page, limit, search);
       
