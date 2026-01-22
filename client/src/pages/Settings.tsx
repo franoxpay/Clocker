@@ -26,7 +26,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { User, Lock, CreditCard, Globe, ExternalLink, Check } from "lucide-react";
+import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 
@@ -49,6 +49,21 @@ interface Plan {
   isUnlimited: boolean;
 }
 
+interface AffiliateStats {
+  totalReferrals: number;
+  activeReferrals: number;
+  totalEarnings: number;
+  pendingEarnings: number;
+  paidEarnings: number;
+  coupons: {
+    id: number;
+    code: string;
+    discountType: string;
+    discountValue: number;
+    usageCount: number;
+  }[];
+}
+
 export default function Settings() {
   const { t, language, setLanguage } = useLanguage();
   const { user } = useAuth();
@@ -66,6 +81,10 @@ export default function Settings() {
 
   const { data: plans = [] } = useQuery<Plan[]>({
     queryKey: ["/api/plans"],
+  });
+
+  const { data: affiliateStats, isLoading: affiliateLoading } = useQuery<AffiliateStats>({
+    queryKey: ["/api/affiliate/stats"],
   });
 
   const changePasswordMutation = useMutation({
@@ -122,6 +141,14 @@ export default function Settings() {
 
   const currentPlan = plans.find((p) => p.id === user?.planId);
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: t("common.success"),
+      description: language === "pt-BR" ? "Código copiado!" : "Code copied!",
+    });
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";
     return format(new Date(dateStr), "dd/MM/yyyy", {
@@ -152,6 +179,10 @@ export default function Settings() {
           <TabsTrigger value="language" data-testid="tab-language">
             <Globe className="w-4 h-4 mr-2" />
             {t("settings.language")}
+          </TabsTrigger>
+          <TabsTrigger value="referrals" data-testid="tab-referrals">
+            <Gift className="w-4 h-4 mr-2" />
+            {language === "pt-BR" ? "Indicações" : "Referrals"}
           </TabsTrigger>
         </TabsList>
 
@@ -387,6 +418,147 @@ export default function Settings() {
               </Select>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="referrals">
+          <div className="space-y-6">
+            {affiliateLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-32 w-full" />
+                <Skeleton className="h-48 w-full" />
+              </div>
+            ) : affiliateStats ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            {language === "pt-BR" ? "Total de Indicados" : "Total Referrals"}
+                          </p>
+                          <p className="text-2xl font-bold">{affiliateStats.totalReferrals}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                          <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            {language === "pt-BR" ? "Indicados Ativos" : "Active Referrals"}
+                          </p>
+                          <p className="text-2xl font-bold">{affiliateStats.activeReferrals}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+                          <DollarSign className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            {language === "pt-BR" ? "Comissão Pendente" : "Pending Commission"}
+                          </p>
+                          <p className="text-2xl font-bold">R$ {affiliateStats.pendingEarnings.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                          <DollarSign className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">
+                            {language === "pt-BR" ? "Total Pago" : "Total Paid"}
+                          </p>
+                          <p className="text-2xl font-bold">R$ {affiliateStats.paidEarnings.toFixed(2)}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {language === "pt-BR" ? "Seus Cupons de Indicação" : "Your Referral Coupons"}
+                    </CardTitle>
+                    <CardDescription>
+                      {language === "pt-BR"
+                        ? "Compartilhe estes códigos com amigos para ganhar comissões"
+                        : "Share these codes with friends to earn commissions"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {affiliateStats.coupons.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        {language === "pt-BR"
+                          ? "Você ainda não possui cupons de indicação. Entre em contato com o suporte para solicitar."
+                          : "You don't have referral coupons yet. Contact support to request one."}
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {affiliateStats.coupons.map((coupon) => (
+                          <div
+                            key={coupon.id}
+                            className="flex items-center justify-between p-4 border rounded-lg"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="p-2 bg-primary/10 rounded-lg">
+                                <Gift className="w-5 h-5 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-mono text-lg font-bold">{coupon.code}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {coupon.discountType === "percentage"
+                                    ? `${coupon.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
+                                    : `R$ ${coupon.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
+                                  {" • "}
+                                  {coupon.usageCount}{" "}
+                                  {language === "pt-BR" ? "usos" : "uses"}
+                                </p>
+                              </div>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copyToClipboard(coupon.code)}
+                              data-testid={`button-copy-coupon-${coupon.id}`}
+                            >
+                              <Copy className="w-4 h-4 mr-2" />
+                              {language === "pt-BR" ? "Copiar" : "Copy"}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="py-8 text-center text-muted-foreground">
+                  {language === "pt-BR"
+                    ? "Não foi possível carregar as informações de indicações."
+                    : "Could not load referral information."}
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </div>

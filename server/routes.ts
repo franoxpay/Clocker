@@ -2609,6 +2609,18 @@ export async function registerRoutes(
     }
   });
 
+  // Affiliate stats endpoint for user dashboard
+  app.get("/api/affiliate/stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const stats = await storage.getAffiliateStats(userId);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error fetching affiliate stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/billing/payment-methods", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const configured = await isStripeConfigured();

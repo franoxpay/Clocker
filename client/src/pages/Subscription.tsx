@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -151,6 +152,10 @@ export default function Subscription() {
   const [cardSelectorOpen, setCardSelectorOpen] = useState(false);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponApplied, setCouponApplied] = useState<{ code: string; discountType: string; discountValue: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
 
   useEffect(() => {
     if (checkoutStatus === "success") {
@@ -216,8 +221,46 @@ export default function Subscription() {
   const currentPlan = plans.find(p => p.id === user?.planId);
   const activePlans = plans.filter(p => p.isActive);
 
+  const validateCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCouponError(language === "pt-BR" ? "Digite um código de cupom" : "Enter a coupon code");
+      return;
+    }
+    setValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await fetch(`/api/coupons/validate?code=${encodeURIComponent(couponCode.trim())}`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCouponError(data.message || (language === "pt-BR" ? "Cupom inválido" : "Invalid coupon"));
+        setCouponApplied(null);
+      } else {
+        setCouponApplied({ code: data.code, discountType: data.discountType, discountValue: data.discountValue });
+        setCouponError(null);
+        toast({
+          title: language === "pt-BR" ? "Cupom aplicado!" : "Coupon applied!",
+          description: data.discountType === "percentage"
+            ? `${data.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
+            : `R$ ${data.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`,
+        });
+      }
+    } catch {
+      setCouponError(language === "pt-BR" ? "Erro ao validar cupom" : "Error validating coupon");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setCouponApplied(null);
+    setCouponCode("");
+    setCouponError(null);
+  };
+
   const checkoutMutation = useMutation({
-    mutationFn: async (payload: { priceId?: string; planId?: number; paymentMethodId?: string }) => {
+    mutationFn: async (payload: { priceId?: string; planId?: number; paymentMethodId?: string; couponCode?: string }) => {
       const res = await fetch("/api/subscription/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -424,7 +467,7 @@ export default function Subscription() {
       setSelectedCardId(defaultCard?.id || null);
       setCardSelectorOpen(true);
     } else if (paymentMethods.length === 1) {
-      const payload: { priceId?: string; planId?: number; paymentMethodId?: string } = {
+      const payload: { priceId?: string; planId?: number; paymentMethodId?: string; couponCode?: string } = {
         paymentMethodId: paymentMethods[0].id,
       };
       if (plan.stripePriceId) {
@@ -432,26 +475,37 @@ export default function Subscription() {
       } else {
         payload.planId = plan.id;
       }
+      if (couponApplied) {
+        payload.couponCode = couponApplied.code;
+      }
       checkoutMutation.mutate(payload);
     } else {
+      const payload: { priceId?: string; planId?: number; couponCode?: string } = {};
       if (plan.stripePriceId) {
-        checkoutMutation.mutate({ priceId: plan.stripePriceId });
+        payload.priceId = plan.stripePriceId;
       } else {
-        checkoutMutation.mutate({ planId: plan.id });
+        payload.planId = plan.id;
       }
+      if (couponApplied) {
+        payload.couponCode = couponApplied.code;
+      }
+      checkoutMutation.mutate(payload);
     }
   };
 
   const handleConfirmSubscription = () => {
     if (!pendingPlan || !selectedCardId) return;
     
-    const payload: { priceId?: string; planId?: number; paymentMethodId?: string } = {
+    const payload: { priceId?: string; planId?: number; paymentMethodId?: string; couponCode?: string } = {
       paymentMethodId: selectedCardId,
     };
     if (pendingPlan.stripePriceId) {
       payload.priceId = pendingPlan.stripePriceId;
     } else {
       payload.planId = pendingPlan.id;
+    }
+    if (couponApplied) {
+      payload.couponCode = couponApplied.code;
     }
     
     setCardSelectorOpen(false);
@@ -753,6 +807,71 @@ export default function Subscription() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Coupon Code Section */}
+      {!user?.hasUsedCoupon && !currentPlan && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Gift className="w-5 h-5 text-primary" />
+              {language === "pt-BR" ? "Cupom de Desconto" : "Discount Coupon"}
+            </CardTitle>
+            <CardDescription>
+              {language === "pt-BR"
+                ? "Tem um código de cupom? Aplique para obter desconto na sua assinatura."
+                : "Have a coupon code? Apply it to get a discount on your subscription."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {couponApplied ? (
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <div>
+                    <p className="font-semibold text-green-700 dark:text-green-300">{couponApplied.code}</p>
+                    <p className="text-sm text-green-600 dark:text-green-400">
+                      {couponApplied.discountType === "percentage"
+                        ? `${couponApplied.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
+                        : `R$ ${couponApplied.discountValue.toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
+                    </p>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" onClick={removeCoupon} data-testid="button-remove-coupon">
+                  <XCircle className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  placeholder={language === "pt-BR" ? "Digite o código do cupom" : "Enter coupon code"}
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value.toUpperCase());
+                    setCouponError(null);
+                  }}
+                  className="flex-1"
+                  data-testid="input-coupon-code"
+                />
+                <Button
+                  onClick={validateCoupon}
+                  disabled={validatingCoupon || !couponCode.trim()}
+                  data-testid="button-apply-coupon"
+                >
+                  {validatingCoupon ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    language === "pt-BR" ? "Aplicar" : "Apply"
+                  )}
+                </Button>
+              </div>
+            )}
+            {couponError && (
+              <p className="mt-2 text-sm text-destructive" data-testid="text-coupon-error">{couponError}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {plansLoading ? (
           [...Array(5)].map((_, i) => (
