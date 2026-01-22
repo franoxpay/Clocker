@@ -136,6 +136,86 @@ export class WebhookHandlers {
 
     await storage.updateUser(userId, updateData);
     console.log(`[WebhookHandlers] Updated user ${userId} with subscription data:`, updateData);
+
+    // Process coupon usage and create commission if applicable
+    const couponIdStr = session.metadata?.couponId || session.subscription_data?.metadata?.couponId;
+    const affiliateUserId = session.metadata?.affiliateUserId || session.subscription_data?.metadata?.affiliateUserId;
+    
+    if (couponIdStr && subscriptionId) {
+      const couponId = parseInt(couponIdStr, 10);
+      if (!isNaN(couponId)) {
+        await this.processCouponUsageAndCommission(couponId, userId, affiliateUserId, subscriptionId, session.amount_total);
+      }
+    }
+  }
+
+  private static async processCouponUsageAndCommission(
+    couponId: number,
+    userId: string,
+    affiliateUserId: string | undefined,
+    subscriptionId: string,
+    amountPaid: number
+  ): Promise<void> {
+    try {
+      const coupon = await storage.getCoupon(couponId);
+      if (!coupon) {
+        console.log(`[WebhookHandlers] Coupon ${couponId} not found, skipping coupon processing`);
+        return;
+      }
+
+      // Check if coupon usage already exists for this user
+      const existingUsage = await storage.getCouponUsageByUserId(userId);
+      if (!existingUsage) {
+        // Record the coupon usage
+        await storage.createCouponUsage({
+          couponId,
+          userId,
+          stripeSubscriptionId: subscriptionId,
+          discountApplied: coupon.discountType === 'percentage'
+            ? Math.round(amountPaid * (coupon.discountValue / 100))
+            : coupon.discountValue,
+        });
+        console.log(`[WebhookHandlers] Recorded coupon usage for user ${userId}, coupon ${couponId}`);
+      }
+
+      // Create commission for affiliate if applicable
+      if (affiliateUserId && coupon.commissionType && coupon.commissionValue) {
+        const affiliate = await storage.getUser(affiliateUserId);
+        if (affiliate && affiliate.subscriptionStatus === 'active') {
+          // Calculate commission amount
+          let commissionAmount: number;
+          if (coupon.commissionType === 'percentage') {
+            commissionAmount = Math.round(amountPaid * (coupon.commissionValue / 100));
+          } else {
+            commissionAmount = coupon.commissionValue;
+          }
+
+          // Check if this is the first commission for this referred user
+          const existingCommissions = await storage.getCommissionsByReferredUserId(userId);
+          const isFirstCommission = existingCommissions.length === 0;
+
+          // For non-recurring commissions, only create on first payment
+          if (!coupon.commissionRecurring && !isFirstCommission) {
+            console.log(`[WebhookHandlers] Skipping non-recurring commission for affiliate ${affiliateUserId} - not first payment`);
+            return;
+          }
+
+          await storage.createCommission({
+            affiliateUserId,
+            referredUserId: userId,
+            couponId,
+            stripeSubscriptionId: subscriptionId,
+            amount: commissionAmount,
+            status: 'pending',
+          });
+          console.log(`[WebhookHandlers] Created commission of ${commissionAmount} for affiliate ${affiliateUserId}`);
+        } else {
+          console.log(`[WebhookHandlers] Affiliate ${affiliateUserId} not active, skipping commission`);
+        }
+      }
+    } catch (error) {
+      console.error('[WebhookHandlers] Error processing coupon usage and commission:', error);
+    }
   }
 
   private static async handleSubscriptionUpdated(subscription: any): Promise<void> {
@@ -204,6 +284,7 @@ export class WebhookHandlers {
 
   private static async handleSubscriptionDeleted(subscription: any): Promise<void> {
     const customerId = subscription.customer;
+    const subscriptionId = subscription.id;
 
     console.log(`[WebhookHandlers] subscription.deleted - customerId: ${customerId}`);
 
@@ -239,6 +320,27 @@ export class WebhookHandlers {
     });
     
     console.log(`[WebhookHandlers] Updated user ${user.id} - subscription canceled, grace period until ${gracePeriodEndsAt.toISOString()}`);
+
+    // Reverse pending commissions for this user (if they used a referral)
+    await this.reversePendingCommissionsForUser(user.id, 'subscription_canceled_early');
+  }
+
+  private static async reversePendingCommissionsForUser(userId: string, reason: string): Promise<void> {
+    try {
+      const commissions = await storage.getCommissionsByReferredUserId(userId);
+      const pendingCommissions = commissions.filter(c => c.status === 'pending');
+      
+      for (const commission of pendingCommissions) {
+        await storage.reverseCommission(commission.id, reason);
+        console.log(`[WebhookHandlers] Reversed commission ${commission.id} for user ${userId} - reason: ${reason}`);
+      }
+      
+      if (pendingCommissions.length > 0) {
+        console.log(`[WebhookHandlers] Reversed ${pendingCommissions.length} pending commissions for user ${userId}`);
+      }
+    } catch (error) {
+      console.error(`[WebhookHandlers] Error reversing commissions for user ${userId}:`, error);
+    }
   }
 
   private static async handlePaymentFailed(invoice: any): Promise<void> {

@@ -2835,11 +2835,27 @@ export async function registerRoutes(
       }
 
       const userId = (req.user as any).id;
-      const { priceId, planId } = req.body;
+      const { priceId, planId, couponCode } = req.body;
       
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+
+      // Validate coupon if provided
+      let validatedCoupon: { id: number; discountType: string; discountValue: number; discountDurationMonths: number | null; affiliateUserId: string | null; commissionType: string | null; commissionValue: number | null; commissionRecurring: boolean } | null = null;
+      
+      if (couponCode) {
+        const planIdNum = planId || (priceId ? (await storage.getPlanByStripePriceId(priceId))?.id : null);
+        if (!planIdNum) {
+          return res.status(400).json({ message: "Plan not found for coupon validation" });
+        }
+        
+        const validation = await storage.validateCouponForUser(couponCode, userId, planIdNum);
+        if (!validation.valid) {
+          return res.status(400).json({ message: "Invalid coupon", error: validation.error });
+        }
+        validatedCoupon = validation.coupon!;
       }
 
       const stripe = await getStripeClient();
@@ -2936,6 +2952,30 @@ export async function registerRoutes(
           subscriptionConfig.trial_period_days = trialDays;
         }
 
+        // Apply coupon discount if valid
+        if (validatedCoupon) {
+          const stripeCoupon = await stripe.coupons.create({
+            ...(validatedCoupon.discountType === 'percentage' 
+              ? { percent_off: validatedCoupon.discountValue }
+              : { amount_off: validatedCoupon.discountValue, currency: 'brl' }),
+            duration: validatedCoupon.discountDurationMonths 
+              ? 'repeating' 
+              : 'once',
+            ...(validatedCoupon.discountDurationMonths 
+              ? { duration_in_months: validatedCoupon.discountDurationMonths }
+              : {}),
+            metadata: { 
+              internalCouponId: String(validatedCoupon.id),
+              affiliateUserId: validatedCoupon.affiliateUserId || '',
+            },
+          });
+          subscriptionConfig.coupon = stripeCoupon.id;
+          subscriptionConfig.metadata.couponId = String(validatedCoupon.id);
+          if (validatedCoupon.affiliateUserId) {
+            subscriptionConfig.metadata.affiliateUserId = validatedCoupon.affiliateUserId;
+          }
+        }
+
         if (priceId && plan.stripePriceId) {
           subscriptionConfig.items = [{ price: priceId }];
         } else {
@@ -2985,6 +3025,18 @@ export async function registerRoutes(
             message: "Payment failed. Please try again or use a different card." 
           });
         }
+
+        // Record coupon usage if coupon was applied
+        if (validatedCoupon) {
+          await storage.createCouponUsage({
+            couponId: validatedCoupon.id,
+            userId,
+            stripeSubscriptionId: subscription.id,
+            discountApplied: validatedCoupon.discountType === 'percentage' 
+              ? Math.round(plan.price * (validatedCoupon.discountValue / 100))
+              : validatedCoupon.discountValue,
+          });
+        }
         
         await storage.updateUser(userId, {
           stripeSubscriptionId: subscription.id,
@@ -3010,6 +3062,41 @@ export async function registerRoutes(
         subscription_data: trialDays ? { trial_period_days: trialDays } : undefined,
         metadata: { userId, planId: String(plan.id) },
       };
+
+      // Apply coupon discount if valid
+      if (validatedCoupon) {
+        const stripeCoupon = await stripe.coupons.create({
+          ...(validatedCoupon.discountType === 'percentage' 
+            ? { percent_off: validatedCoupon.discountValue }
+            : { amount_off: validatedCoupon.discountValue, currency: 'brl' }),
+          duration: validatedCoupon.discountDurationMonths 
+            ? 'repeating' 
+            : 'once',
+          ...(validatedCoupon.discountDurationMonths 
+            ? { duration_in_months: validatedCoupon.discountDurationMonths }
+            : {}),
+          metadata: { 
+            internalCouponId: String(validatedCoupon.id),
+            affiliateUserId: validatedCoupon.affiliateUserId || '',
+          },
+        });
+        
+        // Add discount to checkout session
+        sessionConfig.discounts = [{ coupon: stripeCoupon.id }];
+        sessionConfig.metadata.couponId = String(validatedCoupon.id);
+        if (validatedCoupon.affiliateUserId) {
+          sessionConfig.metadata.affiliateUserId = validatedCoupon.affiliateUserId;
+        }
+        
+        // Store validated coupon info for webhook processing
+        if (!sessionConfig.subscription_data) {
+          sessionConfig.subscription_data = {};
+        }
+        sessionConfig.subscription_data.metadata = {
+          couponId: String(validatedCoupon.id),
+          affiliateUserId: validatedCoupon.affiliateUserId || '',
+        };
+      }
 
       if (priceId && plan.stripePriceId) {
         sessionConfig.line_items = [{ price: priceId, quantity: 1 }];
