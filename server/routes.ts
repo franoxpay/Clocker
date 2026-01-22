@@ -3996,6 +3996,340 @@ export async function registerRoutes(
     }
   });
 
+  // ==========================================
+  // ADMIN COUPON MANAGEMENT
+  // ==========================================
+
+  // Get all coupons
+  app.get("/api/admin/coupons", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const coupons = await storage.getAllCoupons();
+      res.json(coupons);
+    } catch (error) {
+      console.error("Error fetching coupons:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get single coupon
+  app.get("/api/admin/coupons/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const coupon = await storage.getCoupon(id);
+      if (!coupon) {
+        return res.status(404).json({ message: "Coupon not found" });
+      }
+      res.json(coupon);
+    } catch (error) {
+      console.error("Error fetching coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Create coupon
+  app.post("/api/admin/coupons", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const {
+        code,
+        discountType,
+        discountValue,
+        discountDurationMonths,
+        affiliateUserId,
+        commissionType,
+        commissionValue,
+        commissionRecurring,
+        validPlanIds,
+        expiresAt,
+        isActive,
+      } = req.body;
+
+      if (!code || !discountType || discountValue === undefined) {
+        return res.status(400).json({ message: "Code, discountType, and discountValue are required" });
+      }
+
+      // Check if code already exists
+      const existing = await storage.getCouponByCode(code);
+      if (existing) {
+        return res.status(400).json({ message: "Coupon code already exists" });
+      }
+
+      // Validate affiliate user if provided
+      if (affiliateUserId) {
+        const affiliate = await storage.getUser(affiliateUserId);
+        if (!affiliate) {
+          return res.status(400).json({ message: "Affiliate user not found" });
+        }
+      }
+
+      const coupon = await storage.createCoupon({
+        code,
+        discountType,
+        discountValue,
+        discountDurationMonths: discountDurationMonths || null,
+        affiliateUserId: affiliateUserId || null,
+        commissionType: commissionType || null,
+        commissionValue: commissionValue || null,
+        commissionRecurring: commissionRecurring || false,
+        validPlanIds: validPlanIds || null,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        isActive: isActive !== undefined ? isActive : true,
+      });
+
+      res.status(201).json(coupon);
+    } catch (error) {
+      console.error("Error creating coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Update coupon
+  app.patch("/api/admin/coupons/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const coupon = await storage.getCoupon(id);
+      if (!coupon) {
+        return res.status(404).json({ message: "Coupon not found" });
+      }
+
+      // Check if code is changing and if new code already exists
+      if (req.body.code && req.body.code.toUpperCase() !== coupon.code) {
+        const existing = await storage.getCouponByCode(req.body.code);
+        if (existing) {
+          return res.status(400).json({ message: "Coupon code already exists" });
+        }
+      }
+
+      // Validate affiliate user if provided
+      if (req.body.affiliateUserId) {
+        const affiliate = await storage.getUser(req.body.affiliateUserId);
+        if (!affiliate) {
+          return res.status(400).json({ message: "Affiliate user not found" });
+        }
+      }
+
+      const updated = await storage.updateCoupon(id, {
+        ...req.body,
+        expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : req.body.expiresAt,
+      });
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Delete coupon
+  app.delete("/api/admin/coupons/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const coupon = await storage.getCoupon(id);
+      if (!coupon) {
+        return res.status(404).json({ message: "Coupon not found" });
+      }
+
+      await storage.deleteCoupon(id);
+      res.json({ message: "Coupon deleted" });
+    } catch (error) {
+      console.error("Error deleting coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get coupon usages
+  app.get("/api/admin/coupons/:id/usages", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const usages = await storage.getCouponUsagesByCouponId(id);
+      res.json(usages);
+    } catch (error) {
+      console.error("Error fetching coupon usages:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get coupon reports
+  app.get("/api/admin/coupons/reports/summary", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const reports = await storage.getCouponReports();
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching coupon reports:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==========================================
+  // ADMIN COMMISSION MANAGEMENT
+  // ==========================================
+
+  // Get all commissions
+  app.get("/api/admin/commissions", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const status = req.query.status as string | undefined;
+
+      const result = await storage.getAllCommissions(page, limit, status);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching commissions:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get single commission
+  app.get("/api/admin/commissions/:id", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const commission = await storage.getCommission(id);
+      if (!commission) {
+        return res.status(404).json({ message: "Commission not found" });
+      }
+      res.json(commission);
+    } catch (error) {
+      console.error("Error fetching commission:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Mark commission as paid
+  app.post("/api/admin/commissions/:id/pay", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const adminId = req.user!.id;
+      
+      const commission = await storage.getCommission(id);
+      if (!commission) {
+        return res.status(404).json({ message: "Commission not found" });
+      }
+
+      if (commission.status !== "pending") {
+        return res.status(400).json({ message: "Commission is not pending" });
+      }
+
+      const updated = await storage.markCommissionAsPaid(id, adminId);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error paying commission:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Reverse commission
+  app.post("/api/admin/commissions/:id/reverse", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { reason } = req.body;
+      
+      if (!reason) {
+        return res.status(400).json({ message: "Reason is required" });
+      }
+
+      const commission = await storage.getCommission(id);
+      if (!commission) {
+        return res.status(404).json({ message: "Commission not found" });
+      }
+
+      if (commission.status === "reversed") {
+        return res.status(400).json({ message: "Commission is already reversed" });
+      }
+
+      const updated = await storage.reverseCommission(id, reason);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error reversing commission:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==========================================
+  // USER COUPON ENDPOINTS
+  // ==========================================
+
+  // Validate coupon (for checkout)
+  app.post("/api/coupons/validate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const { code, planId } = req.body;
+
+      if (!code || !planId) {
+        return res.status(400).json({ message: "Code and planId are required" });
+      }
+
+      const result = await storage.validateCouponForUser(code, userId, planId);
+      
+      if (!result.valid) {
+        const errorMessages: Record<string, string> = {
+          coupon_not_found: "Coupon not found",
+          coupon_inactive: "Coupon is no longer active",
+          coupon_expired: "Coupon has expired",
+          coupon_invalid_plan: "Coupon is not valid for this plan",
+          user_already_used_coupon: "You have already used a coupon",
+          cannot_use_own_coupon: "You cannot use your own referral coupon",
+          affiliate_inactive: "This referral coupon is temporarily unavailable",
+        };
+        return res.status(400).json({ 
+          message: errorMessages[result.error!] || "Invalid coupon",
+          error: result.error,
+        });
+      }
+
+      // Return coupon info with calculated discount
+      const coupon = result.coupon!;
+      const plan = await storage.getPlan(planId);
+      
+      let discountAmount = 0;
+      if (plan) {
+        if (coupon.discountType === "percentage") {
+          discountAmount = Math.round(plan.price * (coupon.discountValue / 100));
+        } else {
+          discountAmount = Math.min(coupon.discountValue, plan.price);
+        }
+      }
+
+      res.json({
+        valid: true,
+        coupon: {
+          id: coupon.id,
+          code: coupon.code,
+          discountType: coupon.discountType,
+          discountValue: coupon.discountValue,
+          discountDurationMonths: coupon.discountDurationMonths,
+        },
+        discountAmount,
+        finalPrice: plan ? plan.price - discountAmount : 0,
+      });
+    } catch (error) {
+      console.error("Error validating coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get user's affiliate stats (if they have a coupon)
+  app.get("/api/user/affiliate-stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const stats = await storage.getAffiliateStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching affiliate stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get commissions for current user (as affiliate)
+  app.get("/api/user/commissions", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const commissions = await storage.getCommissionsByAffiliateId(userId);
+      res.json(commissions);
+    } catch (error) {
+      console.error("Error fetching user commissions:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Rate limiting for bot detection - track clicks per IP
   const ipClickTracker = new Map<string, { count: number; firstClick: number; lastClick: number }>();
   const RATE_LIMIT_WINDOW_MS = 180000; // 3 minute window
