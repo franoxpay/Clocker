@@ -221,6 +221,18 @@ export default function Subscription() {
   const currentPlan = plans.find(p => p.id === user?.planId);
   const activePlans = plans.filter(p => p.isActive);
 
+  // Calculate discounted price based on applied coupon
+  const getDiscountedPrice = (originalPrice: number): number => {
+    if (!couponApplied) return originalPrice;
+    
+    if (couponApplied.discountType === "percentage") {
+      return Math.round(originalPrice * (1 - couponApplied.discountValue / 100));
+    } else {
+      // Fixed discount (value is in cents)
+      return Math.max(0, originalPrice - couponApplied.discountValue * 100);
+    }
+  };
+
   const validateCoupon = async () => {
     if (!couponCode.trim()) {
       setCouponError(language === "pt-BR" ? "Digite um código de cupom" : "Enter a coupon code");
@@ -808,8 +820,8 @@ export default function Subscription() {
         </Card>
       </div>
 
-      {/* Coupon Code Section */}
-      {!user?.hasUsedCoupon && !currentPlan && (
+      {/* Coupon Code Section - Only show if user never had a subscription and never used a coupon */}
+      {!user?.hasUsedCoupon && !user?.stripeSubscriptionId && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -905,9 +917,27 @@ export default function Subscription() {
                   {language === "pt-BR" ? plan.name : plan.nameEn}
                 </CardTitle>
                 <div className="mt-4">
-                  <span className="font-bold text-[26px]">{formatPrice(plan.price)}</span>
+                  {couponApplied && getDiscountedPrice(plan.price) < plan.price ? (
+                    <div className="flex flex-col items-center">
+                      <span className="text-sm text-muted-foreground line-through">
+                        {formatPrice(plan.price)}
+                      </span>
+                      <span className="font-bold text-[26px] text-green-600 dark:text-green-400">
+                        {formatPrice(getDiscountedPrice(plan.price))}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="font-bold text-[26px]">{formatPrice(plan.price)}</span>
+                  )}
                   <span className="text-muted-foreground">{t("subscription.month")}</span>
                 </div>
+                {couponApplied && getDiscountedPrice(plan.price) < plan.price && (
+                  <Badge className="mt-2 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">
+                    {couponApplied.discountType === "percentage"
+                      ? `${couponApplied.discountValue}% OFF`
+                      : `R$ ${couponApplied.discountValue.toFixed(2)} OFF`}
+                  </Badge>
+                )}
                 {plan.hasTrial && plan.trialDays > 0 && (
                   <Badge variant="outline" className="mt-2">
                     {plan.trialDays} {t("subscription.freeTrial")}
