@@ -190,13 +190,14 @@ export class WebhookHandlers {
             commissionAmount = coupon.commissionValue;
           }
 
-          // Check if this is the first commission for this referred user
+          // Check how many commissions have been paid for this referred user
           const existingCommissions = await storage.getCommissionsByReferredUserId(userId);
-          const isFirstCommission = existingCommissions.length === 0;
+          const commissionCount = existingCommissions.length;
+          const maxCommissions = coupon.commissionDurationMonths || 1;
 
-          // For non-recurring commissions, only create on first payment
-          if (!coupon.commissionRecurring && !isFirstCommission) {
-            console.log(`[WebhookHandlers] Skipping non-recurring commission for affiliate ${affiliateUserId} - not first payment`);
+          // Check if we've reached the commission limit
+          if (commissionCount >= maxCommissions) {
+            console.log(`[WebhookHandlers] Skipping commission for affiliate ${affiliateUserId} - reached limit of ${maxCommissions} months (current: ${commissionCount})`);
             return;
           }
 

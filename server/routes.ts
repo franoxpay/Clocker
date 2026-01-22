@@ -2855,7 +2855,7 @@ export async function registerRoutes(
       }
 
       // Validate coupon if provided
-      let validatedCoupon: { id: number; discountType: string; discountValue: number; discountDurationMonths: number | null; affiliateUserId: string | null; commissionType: string | null; commissionValue: number | null; commissionRecurring: boolean } | null = null;
+      let validatedCoupon: { id: number; discountType: string; discountValue: number; discountDurationMonths: number | null; affiliateUserId: string | null; commissionType: string | null; commissionValue: number | null; commissionDurationMonths: number | null } | null = null;
       
       if (couponCode) {
         const planIdNum = planId || (priceId ? (await storage.getPlanByStripePriceId(priceId))?.id : null);
@@ -4136,7 +4136,7 @@ export async function registerRoutes(
         affiliateUserId,
         commissionType,
         commissionValue,
-        commissionRecurring,
+        commissionDurationMonths,
         validPlanIds,
         expiresAt,
         isActive,
@@ -4168,7 +4168,7 @@ export async function registerRoutes(
         affiliateUserId: affiliateUserId || null,
         commissionType: commissionType || null,
         commissionValue: commissionValue || null,
-        commissionRecurring: commissionRecurring || false,
+        commissionDurationMonths: commissionDurationMonths || 1,
         validPlanIds: validPlanIds || null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         isActive: isActive !== undefined ? isActive : true,

@@ -55,9 +55,9 @@ type CouponFormData = {
   affiliateUserId: string;
   commissionType: string;
   commissionValue: string;
-  commissionRecurring: boolean;
+  commissionDurationMonths: string;
   validPlanIds: number[];
-  expiresAt: string;
+  expirationPeriod: string;
   isActive: boolean;
 };
 
@@ -69,9 +69,9 @@ const defaultFormData: CouponFormData = {
   affiliateUserId: "",
   commissionType: "",
   commissionValue: "",
-  commissionRecurring: false,
+  commissionDurationMonths: "1",
   validPlanIds: [],
-  expiresAt: "",
+  expirationPeriod: "",
   isActive: true,
 };
 
@@ -104,8 +104,17 @@ export default function AdminReferrals() {
       "admin.affiliate": { "pt-BR": "Afiliado", en: "Affiliate" },
       "admin.commissionType": { "pt-BR": "Tipo de Comissão", en: "Commission Type" },
       "admin.commissionValue": { "pt-BR": "Valor da Comissão", en: "Commission Value" },
-      "admin.recurring": { "pt-BR": "Recorrente", en: "Recurring" },
-      "admin.expiresAt": { "pt-BR": "Expira em", en: "Expires at" },
+      "admin.commissionPeriod": { "pt-BR": "Período de Comissão", en: "Commission Period" },
+      "admin.firstMonth": { "pt-BR": "Primeiro mês", en: "First month" },
+      "admin.first3Months": { "pt-BR": "3 primeiros meses", en: "First 3 months" },
+      "admin.first6Months": { "pt-BR": "6 primeiros meses", en: "First 6 months" },
+      "admin.first12Months": { "pt-BR": "1 ano", en: "1 year" },
+      "admin.expirationPeriod": { "pt-BR": "Período de Expiração", en: "Expiration Period" },
+      "admin.noExpiration": { "pt-BR": "Sem expiração", en: "No expiration" },
+      "admin.expires1Month": { "pt-BR": "1 mês", en: "1 month" },
+      "admin.expires3Months": { "pt-BR": "3 meses", en: "3 months" },
+      "admin.expires6Months": { "pt-BR": "6 meses", en: "6 months" },
+      "admin.expires1Year": { "pt-BR": "1 ano", en: "1 year" },
       "admin.active": { "pt-BR": "Ativo", en: "Active" },
       "admin.usages": { "pt-BR": "Usos", en: "Usages" },
       "admin.status": { "pt-BR": "Status", en: "Status" },
@@ -162,8 +171,18 @@ export default function AdminReferrals() {
     queryKey: ["/api/admin/users?page=1&limit=100"],
   });
 
+  const calculateExpirationDate = (period: string): string | null => {
+    if (!period) return null;
+    const months = parseInt(period);
+    if (isNaN(months)) return null;
+    const date = new Date();
+    date.setMonth(date.getMonth() + months);
+    return date.toISOString();
+  };
+
   const createMutation = useMutation({
     mutationFn: async (data: CouponFormData) => {
+      const commissionDuration = data.commissionDurationMonths ? parseInt(data.commissionDurationMonths) : 1;
       const res = await apiRequest("POST", "/api/admin/coupons", {
         code: data.code,
         discountType: data.discountType,
@@ -172,9 +191,9 @@ export default function AdminReferrals() {
         affiliateUserId: data.affiliateUserId || null,
         commissionType: data.commissionType || null,
         commissionValue: data.commissionValue ? parseFloat(data.commissionValue) : null,
-        commissionRecurring: data.commissionRecurring,
+        commissionDurationMonths: commissionDuration,
         validPlanIds: data.validPlanIds.length > 0 ? data.validPlanIds : null,
-        expiresAt: data.expiresAt || null,
+        expiresAt: calculateExpirationDate(data.expirationPeriod),
         isActive: data.isActive,
       });
       return res.json();
@@ -199,6 +218,7 @@ export default function AdminReferrals() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: CouponFormData }) => {
+      const commissionDuration = data.commissionDurationMonths ? parseInt(data.commissionDurationMonths) : 1;
       const res = await apiRequest("PATCH", `/api/admin/coupons/${id}`, {
         code: data.code,
         discountType: data.discountType,
@@ -207,9 +227,9 @@ export default function AdminReferrals() {
         affiliateUserId: data.affiliateUserId || null,
         commissionType: data.commissionType || null,
         commissionValue: data.commissionValue ? parseFloat(data.commissionValue) : null,
-        commissionRecurring: data.commissionRecurring,
+        commissionDurationMonths: commissionDuration,
         validPlanIds: data.validPlanIds.length > 0 ? data.validPlanIds : null,
-        expiresAt: data.expiresAt || null,
+        expiresAt: calculateExpirationDate(data.expirationPeriod),
         isActive: data.isActive,
       });
       return res.json();
@@ -298,6 +318,17 @@ export default function AdminReferrals() {
     },
   });
 
+  const calculateExpirationPeriodFromDate = (expiresAt: Date | string | null): string => {
+    if (!expiresAt) return "";
+    const expDate = new Date(expiresAt);
+    const now = new Date();
+    const diffMonths = Math.round((expDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 30));
+    if (diffMonths <= 1) return "1";
+    if (diffMonths <= 3) return "3";
+    if (diffMonths <= 6) return "6";
+    return "12";
+  };
+
   const handleEditCoupon = (coupon: Coupon) => {
     setFormData({
       code: coupon.code,
@@ -307,9 +338,9 @@ export default function AdminReferrals() {
       affiliateUserId: coupon.affiliateUserId || "",
       commissionType: coupon.commissionType || "",
       commissionValue: coupon.commissionValue?.toString() || "",
-      commissionRecurring: coupon.commissionMode === "recurring",
+      commissionDurationMonths: coupon.commissionDurationMonths?.toString() || "1",
       validPlanIds: coupon.validPlanIds || [],
-      expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString().split("T")[0] : "",
+      expirationPeriod: calculateExpirationPeriodFromDate(coupon.expiresAt),
       isActive: coupon.isActive,
     });
     setEditingCoupon(coupon);
@@ -425,13 +456,22 @@ export default function AdminReferrals() {
       )}
 
       {formData.affiliateUserId && (
-        <div className="flex items-center space-x-2">
-          <Switch
-            checked={formData.commissionRecurring}
-            onCheckedChange={(checked) => setFormData({ ...formData, commissionRecurring: checked })}
-            data-testid="switch-commission-recurring"
-          />
-          <Label>{t("admin.recurring")}</Label>
+        <div className="space-y-2">
+          <Label>{t("admin.commissionPeriod")}</Label>
+          <Select
+            value={formData.commissionDurationMonths}
+            onValueChange={(value) => setFormData({ ...formData, commissionDurationMonths: value })}
+          >
+            <SelectTrigger data-testid="select-commission-duration">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">{t("admin.firstMonth")}</SelectItem>
+              <SelectItem value="3">{t("admin.first3Months")}</SelectItem>
+              <SelectItem value="6">{t("admin.first6Months")}</SelectItem>
+              <SelectItem value="12">{t("admin.first12Months")}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
@@ -468,13 +508,22 @@ export default function AdminReferrals() {
       </div>
 
       <div className="space-y-2">
-        <Label>{t("admin.expiresAt")} {t("admin.optional")}</Label>
-        <Input
-          type="date"
-          value={formData.expiresAt}
-          onChange={(e) => setFormData({ ...formData, expiresAt: e.target.value })}
-          data-testid="input-expires-at"
-        />
+        <Label>{t("admin.expirationPeriod")} {t("admin.optional")}</Label>
+        <Select
+          value={formData.expirationPeriod || "none"}
+          onValueChange={(value) => setFormData({ ...formData, expirationPeriod: value === "none" ? "" : value })}
+        >
+          <SelectTrigger data-testid="select-expiration-period">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">{t("admin.noExpiration")}</SelectItem>
+            <SelectItem value="1">{t("admin.expires1Month")}</SelectItem>
+            <SelectItem value="3">{t("admin.expires3Months")}</SelectItem>
+            <SelectItem value="6">{t("admin.expires6Months")}</SelectItem>
+            <SelectItem value="12">{t("admin.expires1Year")}</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="flex items-center space-x-2">

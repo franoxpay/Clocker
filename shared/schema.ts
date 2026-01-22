@@ -307,7 +307,7 @@ export const coupons = pgTable(
     affiliateUserId: varchar("affiliate_user_id").references(() => users.id, { onDelete: "set null" }),
     commissionType: varchar("commission_type"), // 'percentage' | 'fixed'
     commissionValue: integer("commission_value"), // valor em centavos ou porcentagem
-    commissionMode: varchar("commission_mode").default("one_time"), // 'one_time' | 'recurring'
+    commissionDurationMonths: integer("commission_duration_months").default(1), // por quantos meses a comissão é paga (1, 3, 6, 12)
     usageCount: integer("usage_count").default(0).notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
