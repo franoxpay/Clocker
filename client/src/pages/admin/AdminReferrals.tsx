@@ -303,11 +303,11 @@ export default function AdminReferrals() {
       code: coupon.code,
       discountType: coupon.discountType,
       discountValue: coupon.discountValue.toString(),
-      discountDurationMonths: coupon.discountDurationMonths?.toString() || "",
+      discountDurationMonths: coupon.durationMonths?.toString() || "",
       affiliateUserId: coupon.affiliateUserId || "",
       commissionType: coupon.commissionType || "",
       commissionValue: coupon.commissionValue?.toString() || "",
-      commissionRecurring: coupon.commissionRecurring,
+      commissionRecurring: coupon.commissionMode === "recurring",
       validPlanIds: coupon.validPlanIds || [],
       expiresAt: coupon.expiresAt ? new Date(coupon.expiresAt).toISOString().split("T")[0] : "",
       isActive: coupon.isActive,
@@ -377,14 +377,14 @@ export default function AdminReferrals() {
       <div className="space-y-2">
         <Label>{t("admin.affiliate")} {t("admin.optional")}</Label>
         <Select
-          value={formData.affiliateUserId}
-          onValueChange={(value) => setFormData({ ...formData, affiliateUserId: value })}
+          value={formData.affiliateUserId || "none"}
+          onValueChange={(value) => setFormData({ ...formData, affiliateUserId: value === "none" ? "" : value })}
         >
           <SelectTrigger data-testid="select-affiliate">
             <SelectValue placeholder={t("admin.selectAffiliate")} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">{t("admin.noAffiliate")}</SelectItem>
+            <SelectItem value="none">{t("admin.noAffiliate")}</SelectItem>
             {usersData?.users.map((user) => (
               <SelectItem key={user.id} value={user.id}>
                 {user.email} {user.firstName ? `(${user.firstName})` : ""}
@@ -394,7 +394,7 @@ export default function AdminReferrals() {
         </Select>
       </div>
 
-      {formData.affiliateUserId && (
+      {formData.affiliateUserId && formData.affiliateUserId !== "none" && (
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>{t("admin.commissionType")}</Label>
