@@ -159,7 +159,7 @@ export default function AdminReferrals() {
   });
 
   const { data: usersData } = useQuery<{ users: User[]; total: number }>({
-    queryKey: ["/api/admin/users", 1, 100],
+    queryKey: ["/api/admin/users/1/100"],
   });
 
   const createMutation = useMutation({
