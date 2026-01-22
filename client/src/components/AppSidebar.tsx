@@ -42,6 +42,7 @@ import {
   Trophy,
   ChevronUp,
   ChevronDown,
+  Gift,
 } from "lucide-react";
 const logoPreta = "/images/logo-dark.png";
 const logoBranca = "/images/logo-light.png";
@@ -63,6 +64,7 @@ const adminNavItems = [
   { key: "billing", path: "/confg-admin/billing", icon: Wallet, label: "nav.admin.billing" },
   { key: "domains", path: "/confg-admin/domains", icon: Globe, label: "nav.admin.domains" },
   { key: "monitoring", path: "/confg-admin/monitoring", icon: Activity, label: "nav.admin.monitoring" },
+  { key: "referrals", path: "/confg-admin/referrals", icon: Gift, label: "nav.admin.referrals" },
   { key: "settings", path: "/confg-admin/settings", icon: Cog, label: "nav.admin.settings" },
 ];
 
