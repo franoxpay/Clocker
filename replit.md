@@ -18,7 +18,7 @@ The backend is an Express.js application written in TypeScript. It uses PostgreS
 
 ### Data Models
 Key data models include:
-- **Users**: Multi-tenant users with subscription details and usage tracking.
+- **Users**: Multi-tenant users with subscription details and usage tracking. Includes `hasUsedCoupon` field for lifetime coupon usage tracking.
 - **Plans**: Subscription tiers defining limits for offers, domains, and clicks.
 - **Domains**: User-owned subdomains for campaign traffic routing.
 - **Offers**: Campaign configurations including targeting rules.
@@ -26,6 +26,22 @@ Key data models include:
 - **DailyClickMetrics**: Aggregated analytics for dashboards.
 - **Notifications**: In-app notification system.
 - **AdminSettings**: Platform-wide configuration.
+- **Coupons**: Discount coupons with affiliate tracking, supporting percentage or fixed discounts, plan restrictions, and expiration dates.
+- **CouponUsages**: Tracks when users apply coupons, linking to Stripe subscriptions.
+- **Commissions**: Affiliate commission records with status tracking (pending, paid, reversed) and payout management.
+
+### Referral/Affiliate System
+The platform includes a complete affiliate/referral system:
+- **Coupon Management**: Admin creates discount coupons linked to affiliate users
+- **Commission Types**: Percentage or fixed amount, one-time or recurring
+- **Business Rules**:
+  - Each user can only use 1 coupon (lifetime)
+  - Affiliate cannot use their own coupon
+  - Affiliate must have active subscription to receive commissions
+  - Commissions are automatically reversed if subscription is canceled early
+- **Admin Controls**: Manage coupons, view commissions, mark commissions as paid, view reports and top affiliates
+- **User Dashboard**: Settings > Referrals tab shows affiliate statistics and coupons
+- **Stripe Integration**: Dynamic coupon creation during checkout, webhook handlers for commission creation/reversal
 
 ### Routing Strategy
 The platform uses distinct routing for public access, authenticated user dashboards (e.g., `/offers`, `/domains`), admin functionalities (`/confg-admin/*`), and a dedicated click tracking endpoint (`/r/:slug`) for traffic routing.

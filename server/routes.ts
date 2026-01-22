@@ -4346,7 +4346,63 @@ export async function registerRoutes(
   // USER COUPON ENDPOINTS
   // ==========================================
 
-  // Validate coupon (for checkout)
+  // Validate coupon (GET - basic validation for frontend preview)
+  app.get("/api/coupons/validate", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const code = req.query.code as string;
+
+      if (!code) {
+        return res.status(400).json({ message: "Code is required" });
+      }
+
+      const coupon = await storage.getCouponByCode(code);
+      
+      if (!coupon) {
+        return res.status(400).json({ message: "Coupon not found", error: "coupon_not_found" });
+      }
+
+      if (!coupon.isActive) {
+        return res.status(400).json({ message: "Coupon is no longer active", error: "coupon_inactive" });
+      }
+
+      if (coupon.expiresAt && new Date(coupon.expiresAt) < new Date()) {
+        return res.status(400).json({ message: "Coupon has expired", error: "coupon_expired" });
+      }
+
+      // Check if user already used a coupon
+      const user = await storage.getUser(userId);
+      if (user?.hasUsedCoupon) {
+        return res.status(400).json({ message: "You have already used a coupon", error: "user_already_used_coupon" });
+      }
+
+      // Check if user is the affiliate (cannot use own coupon)
+      if (coupon.affiliateUserId === userId) {
+        return res.status(400).json({ message: "You cannot use your own referral coupon", error: "cannot_use_own_coupon" });
+      }
+
+      // Check if affiliate has active subscription (required to receive commissions)
+      if (coupon.affiliateUserId) {
+        const affiliate = await storage.getUser(coupon.affiliateUserId);
+        if (!affiliate || affiliate.subscriptionStatus !== "active") {
+          return res.status(400).json({ message: "This referral coupon is temporarily unavailable", error: "affiliate_inactive" });
+        }
+      }
+
+      // Return basic coupon info for preview
+      res.json({
+        code: coupon.code,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        validPlanIds: coupon.validPlanIds,
+      });
+    } catch (error) {
+      console.error("Error validating coupon:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Validate coupon (POST - full validation for checkout)
   app.post("/api/coupons/validate", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = req.user!.id;
