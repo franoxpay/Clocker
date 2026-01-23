@@ -472,7 +472,7 @@ export default function Settings() {
                           <p className="text-sm text-muted-foreground">
                             {language === "pt-BR" ? "Comissão Pendente" : "Pending Commission"}
                           </p>
-                          <p className="text-2xl font-bold">R$ {affiliateStats.pendingEarnings.toFixed(2)}</p>
+                          <p className="text-2xl font-bold">R$ {(affiliateStats.pendingEarnings / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -487,7 +487,7 @@ export default function Settings() {
                           <p className="text-sm text-muted-foreground">
                             {language === "pt-BR" ? "Total Pago" : "Total Paid"}
                           </p>
-                          <p className="text-2xl font-bold">R$ {affiliateStats.paidEarnings.toFixed(2)}</p>
+                          <p className="text-2xl font-bold">R$ {(affiliateStats.paidEarnings / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
