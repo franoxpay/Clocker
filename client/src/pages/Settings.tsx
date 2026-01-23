@@ -29,6 +29,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 interface Invoice {
   id: string;
@@ -53,6 +54,8 @@ interface AffiliateStats {
   totalReferrals: number;
   totalEarnings: number;
   pendingEarnings: number;
+  couponUsages: number;
+  paidConversions: number;
   paidEarnings: number;
   coupon: {
     id: number;
@@ -490,6 +493,90 @@ export default function Settings() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {affiliateStats.coupon && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>
+                        {language === "pt-BR" ? "Conversão de Indicações" : "Referral Conversion"}
+                      </CardTitle>
+                      <CardDescription>
+                        {language === "pt-BR"
+                          ? "Quantas pessoas usaram seu cupom vs quantas pagaram a assinatura"
+                          : "How many people used your coupon vs how many paid for subscription"}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={[
+                              {
+                                name: language === "pt-BR" ? "Usaram Cupom" : "Used Coupon",
+                                value: affiliateStats.couponUsages,
+                                fill: "hsl(var(--primary))",
+                              },
+                              {
+                                name: language === "pt-BR" ? "Pagaram Assinatura" : "Paid Subscription",
+                                value: affiliateStats.paidConversions,
+                                fill: "hsl(142, 76%, 36%)",
+                              },
+                            ]}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis 
+                              dataKey="name" 
+                              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                            />
+                            <YAxis 
+                              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                              allowDecimals={false}
+                            />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                              labelStyle={{ color: "hsl(var(--foreground))" }}
+                            />
+                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                              {[
+                                { fill: "hsl(var(--primary))" },
+                                { fill: "hsl(142, 76%, 36%)" },
+                              ].map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.fill} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 flex justify-center gap-8 text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm bg-primary"></div>
+                          <span className="text-muted-foreground">
+                            {language === "pt-BR" ? "Usaram Cupom" : "Used Coupon"}: <span className="font-bold text-foreground">{affiliateStats.couponUsages}</span>
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(142, 76%, 36%)" }}></div>
+                          <span className="text-muted-foreground">
+                            {language === "pt-BR" ? "Pagaram" : "Paid"}: <span className="font-bold text-foreground">{affiliateStats.paidConversions}</span>
+                          </span>
+                        </div>
+                        {affiliateStats.couponUsages > 0 && (
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-green-500" />
+                            <span className="text-muted-foreground">
+                              {language === "pt-BR" ? "Taxa de Conversão" : "Conversion Rate"}: <span className="font-bold text-green-600">{((affiliateStats.paidConversions / affiliateStats.couponUsages) * 100).toFixed(1)}%</span>
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 <Card>
                   <CardHeader>

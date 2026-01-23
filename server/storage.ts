@@ -321,6 +321,8 @@ export interface IStorage {
     pendingEarnings: number;
     paidEarnings: number;
     coupon: Coupon | null;
+    couponUsages: number;
+    paidConversions: number;
   }>;
   getCouponReports(): Promise<{
     totalCoupons: number;
@@ -2281,6 +2283,8 @@ export class DatabaseStorage implements IStorage {
     pendingEarnings: number;
     paidEarnings: number;
     coupon: Coupon | null;
+    couponUsages: number;
+    paidConversions: number;
   }> {
     // Get affiliate's coupon
     const affiliateCoupons = await this.getCouponsByAffiliateId(affiliateUserId);
@@ -2298,12 +2302,19 @@ export class DatabaseStorage implements IStorage {
       .filter(c => c.status === "paid")
       .reduce((sum, c) => sum + c.amount, 0);
 
+    // Calculate coupon usages and paid conversions
+    const couponUsages = coupon?.usageCount || 0;
+    // paidConversions = number of commissions generated (pending or paid, not reversed)
+    const paidConversions = affiliateCommissions.filter(c => c.status !== "reversed").length;
+
     return {
       totalReferrals,
       totalEarnings,
       pendingEarnings,
       paidEarnings,
       coupon,
+      couponUsages,
+      paidConversions,
     };
   }
 
