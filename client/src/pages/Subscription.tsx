@@ -178,7 +178,7 @@ export default function Subscription() {
     }
   }, [user?.stripeSubscriptionId, user?.hasUsedCoupon]);
 
-  // Revalidate saved coupon on load
+  // Revalidate saved coupon on load and update with latest data (including validPlanIds)
   useEffect(() => {
     const revalidateSavedCoupon = async () => {
       if (!couponApplied || user?.stripeSubscriptionId || user?.hasUsedCoupon) return;
@@ -191,6 +191,17 @@ export default function Subscription() {
           // Coupon is no longer valid, remove it
           localStorage.removeItem('pendingCoupon');
           setCouponApplied(null);
+        } else {
+          // Update coupon with latest data from server (including validPlanIds)
+          const data = await res.json();
+          const updatedCoupon = {
+            code: data.code,
+            discountType: data.discountType,
+            discountValue: data.discountValue,
+            validPlanIds: data.validPlanIds || null,
+          };
+          setCouponApplied(updatedCoupon);
+          localStorage.setItem('pendingCoupon', JSON.stringify(updatedCoupon));
         }
       } catch {
         // On error, keep the coupon but don't crash
