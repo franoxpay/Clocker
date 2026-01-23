@@ -37,6 +37,11 @@ export class WebhookHandlers {
   }
 
   static async handleStripeEvent(event: any): Promise<void> {
+    if (!event || !event.type) {
+      console.log('[WebhookHandlers] Received undefined or invalid event, skipping');
+      return;
+    }
+    
     console.log(`[WebhookHandlers] Processing event: ${event.type}`);
     
     switch (event.type) {
