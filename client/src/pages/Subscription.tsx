@@ -153,7 +153,12 @@ export default function Subscription() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
   const [couponCode, setCouponCode] = useState("");
-  const [couponApplied, setCouponApplied] = useState<{ code: string; discountType: string; discountValue: number } | null>(() => {
+  const [couponApplied, setCouponApplied] = useState<{ 
+    code: string; 
+    discountType: string; 
+    discountValue: number;
+    validPlanIds: number[] | null;
+  } | null>(() => {
     // Load saved coupon from localStorage on initial render
     try {
       const saved = localStorage.getItem('pendingCoupon');
@@ -264,8 +269,15 @@ export default function Subscription() {
 
   // Calculate discounted price based on applied coupon
   // Note: originalPrice is in cents, discountValue is in cents for fixed discounts
-  const getDiscountedPrice = (originalPrice: number): number => {
+  const getDiscountedPrice = (originalPrice: number, planId: number): number => {
     if (!couponApplied) return originalPrice;
+    
+    // Check if coupon is valid for this plan
+    if (couponApplied.validPlanIds && couponApplied.validPlanIds.length > 0) {
+      if (!couponApplied.validPlanIds.includes(planId)) {
+        return originalPrice; // Coupon not valid for this plan
+      }
+    }
     
     if (couponApplied.discountType === "percentage") {
       return Math.round(originalPrice * (1 - couponApplied.discountValue / 100));
@@ -273,6 +285,13 @@ export default function Subscription() {
       // Fixed discount - discountValue is already in cents
       return Math.max(0, originalPrice - couponApplied.discountValue);
     }
+  };
+  
+  // Check if coupon is valid for a specific plan
+  const isCouponValidForPlan = (planId: number): boolean => {
+    if (!couponApplied) return false;
+    if (!couponApplied.validPlanIds || couponApplied.validPlanIds.length === 0) return true;
+    return couponApplied.validPlanIds.includes(planId);
   };
 
   const validateCoupon = async () => {
@@ -291,7 +310,12 @@ export default function Subscription() {
         setCouponError(data.message || (language === "pt-BR" ? "Cupom inválido" : "Invalid coupon"));
         setCouponApplied(null);
       } else {
-        const couponData = { code: data.code, discountType: data.discountType, discountValue: data.discountValue };
+        const couponData = { 
+          code: data.code, 
+          discountType: data.discountType, 
+          discountValue: data.discountValue,
+          validPlanIds: data.validPlanIds || null,
+        };
         setCouponApplied(couponData);
         setCouponError(null);
         // Save to localStorage so coupon persists until first payment
@@ -963,13 +987,13 @@ export default function Subscription() {
                   {language === "pt-BR" ? plan.name : plan.nameEn}
                 </CardTitle>
                 <div className="mt-4">
-                  {couponApplied && getDiscountedPrice(plan.price) < plan.price ? (
+                  {couponApplied && isCouponValidForPlan(plan.id) && getDiscountedPrice(plan.price, plan.id) < plan.price ? (
                     <div className="flex flex-col items-center">
                       <span className="text-sm text-muted-foreground line-through">
                         {formatPrice(plan.price)}
                       </span>
                       <span className="font-bold text-[26px] text-green-600 dark:text-green-400">
-                        {formatPrice(getDiscountedPrice(plan.price))}
+                        {formatPrice(getDiscountedPrice(plan.price, plan.id))}
                       </span>
                     </div>
                   ) : (
@@ -977,7 +1001,7 @@ export default function Subscription() {
                   )}
                   <span className="text-muted-foreground">{t("subscription.month")}</span>
                 </div>
-                {couponApplied && getDiscountedPrice(plan.price) < plan.price && (
+                {couponApplied && isCouponValidForPlan(plan.id) && getDiscountedPrice(plan.price, plan.id) < plan.price && (
                   <Badge className="mt-2 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-800">
                     {couponApplied.discountType === "percentage"
                       ? `${couponApplied.discountValue}% OFF`
