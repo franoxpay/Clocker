@@ -572,6 +572,33 @@ export const insertTiktok2TelemetrySchema = createInsertSchema(tiktok2Telemetry)
   createdAt: true,
 });
 
+// Email logs table - tracks all sent emails
+export const emailLogs = pgTable(
+  "email_logs",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+    toEmail: varchar("to_email").notNull(),
+    subject: varchar("subject").notNull(),
+    type: varchar("type").notNull(), // welcome, subscription, domain_inactive, plan_limit, notification
+    status: varchar("status").default("sent").notNull(), // sent, failed
+    resendId: varchar("resend_id"), // ID returned by Resend API
+    errorMessage: text("error_message"),
+    metadata: jsonb("metadata"), // Additional context (plan name, domain name, etc.)
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("email_logs_user_idx").on(table.userId),
+    index("email_logs_type_idx").on(table.type),
+    index("email_logs_created_idx").on(table.createdAt),
+  ]
+);
+
+export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -644,3 +671,6 @@ export const insertCommissionSchema = createInsertSchema(commissions).omit({
 });
 export type Commission = typeof commissions.$inferSelect;
 export type InsertCommission = z.infer<typeof insertCommissionSchema>;
+
+export type EmailLog = typeof emailLogs.$inferSelect;
+export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;

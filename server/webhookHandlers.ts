@@ -1,5 +1,6 @@
 import { getStripeSync, isStripeConfigured, getStripeClient } from './stripeClient';
 import { storage } from './storage';
+import { sendSubscriptionConfirmationEmail } from './email';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string, uuid?: string): Promise<void> {
@@ -141,6 +142,17 @@ export class WebhookHandlers {
 
     await storage.updateUser(userId, updateData);
     console.log(`[WebhookHandlers] Updated user ${userId} with subscription data:`, updateData);
+
+    // Send subscription confirmation email
+    if (planIdStr && subscriptionId) {
+      const user = await storage.getUser(userId);
+      const plan = await storage.getPlan(parseInt(planIdStr, 10));
+      if (user?.email && plan) {
+        sendSubscriptionConfirmationEmail(user.email, plan.name, userId).catch(err => {
+          console.error('[WebhookHandlers] Failed to send subscription confirmation email:', err);
+        });
+      }
+    }
 
     // Process coupon usage and create commission if applicable
     const couponIdStr = session.metadata?.couponId || session.subscription_data?.metadata?.couponId;

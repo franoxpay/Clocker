@@ -18,6 +18,7 @@ import {
   coupons,
   couponUsages,
   commissions,
+  emailLogs,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -46,6 +47,7 @@ import {
   type InsertCouponUsage,
   type Commission,
   type InsertCommission,
+  type EmailLog,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -330,6 +332,15 @@ export interface IStorage {
     totalUsages: number;
     topCoupons: Array<{ couponId: number; code: string; usageCount: number }>;
     topAffiliates: Array<{ affiliateId: string; email: string; referrals: number; earnings: number }>;
+  }>;
+  
+  // Email logs
+  getEmailLogs(page: number, limit: number, type?: string): Promise<{ logs: EmailLog[]; total: number }>;
+  getEmailStats(): Promise<{
+    totalSent: number;
+    totalFailed: number;
+    byType: Array<{ type: string; count: number }>;
+    last24Hours: number;
   }>;
 }
 
@@ -2361,6 +2372,66 @@ export class DatabaseStorage implements IStorage {
       totalUsages,
       topCoupons,
       topAffiliates,
+    };
+  }
+// ================== EMAIL LOGS ==================
+
+  async getEmailLogs(page: number, limit: number, type?: string): Promise<{ logs: EmailLog[]; total: number }> {
+    const offset = (page - 1) * limit;
+    
+    let query = db.select().from(emailLogs);
+    let countQuery = db.select({ count: sql<number>`count(*)` }).from(emailLogs);
+    
+    if (type && type !== 'all') {
+      query = query.where(eq(emailLogs.type, type)) as any;
+      countQuery = countQuery.where(eq(emailLogs.type, type)) as any;
+    }
+    
+    const logs = await query
+      .orderBy(desc(emailLogs.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    const [{ count }] = await countQuery;
+    
+    return { logs, total: Number(count) };
+  }
+
+  async getEmailStats(): Promise<{
+    totalSent: number;
+    totalFailed: number;
+    byType: Array<{ type: string; count: number }>;
+    last24Hours: number;
+  }> {
+    const [sentResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(emailLogs)
+      .where(eq(emailLogs.status, 'sent'));
+    
+    const [failedResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(emailLogs)
+      .where(eq(emailLogs.status, 'failed'));
+    
+    const byTypeResult = await db
+      .select({
+        type: emailLogs.type,
+        count: sql<number>`count(*)`,
+      })
+      .from(emailLogs)
+      .groupBy(emailLogs.type);
+    
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [last24HoursResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(emailLogs)
+      .where(gte(emailLogs.createdAt, twentyFourHoursAgo));
+    
+    return {
+      totalSent: Number(sentResult.count),
+      totalFailed: Number(failedResult.count),
+      byType: byTypeResult.map(r => ({ type: r.type, count: Number(r.count) })),
+      last24Hours: Number(last24HoursResult.count),
     };
   }
 }

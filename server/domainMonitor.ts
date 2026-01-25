@@ -1,5 +1,6 @@
 import dns from "dns/promises";
 import { storage } from "./storage";
+import { sendDomainInactiveEmail, sendSharedDomainInactiveEmail } from "./email";
 
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -105,6 +106,13 @@ async function checkAllDomains() {
                   messageEn: messageEn,
                 });
                 
+                // Send email notification
+                if (owner.email) {
+                  sendDomainInactiveEmail(owner.email, domain.subdomain, domain.userId).catch(err => {
+                    console.error(`[DOMAIN MONITOR] Failed to send domain inactive email:`, err);
+                  });
+                }
+                
                 console.log(`[DOMAIN MONITOR] Notification sent for domain: ${domain.subdomain}`);
               }
             }
@@ -188,6 +196,13 @@ async function checkAllDomains() {
                   messagePt: messagePt,
                   messageEn: messageEn,
                 });
+                
+                // Send email notification for shared domain
+                if (owner.email) {
+                  sendSharedDomainInactiveEmail(owner.email, domain.subdomain, userId).catch(err => {
+                    console.error(`[DOMAIN MONITOR] Failed to send shared domain inactive email:`, err);
+                  });
+                }
                 
                 console.log(`[DOMAIN MONITOR] Notification sent to user ${userId} for shared domain: ${domain.subdomain}`);
               }

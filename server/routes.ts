@@ -9,6 +9,7 @@ import { db } from "./db";
 import { tiktok2Telemetry } from "@shared/schema";
 import { promises as dns } from "dns";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
+import { sendPlanLimitEmail } from "./email";
 
 // ==========================================
 // ANTI-BOT CHALLENGE SYSTEM
@@ -4343,6 +4344,36 @@ export async function registerRoutes(
   });
 
   // ==========================================
+  // ADMIN EMAIL LOGS
+  // ==========================================
+
+  // Get email logs
+  app.get("/api/admin/emails", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const type = req.query.type as string | undefined;
+
+      const result = await storage.getEmailLogs(page, limit, type);
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching email logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get email stats
+  app.get("/api/admin/emails/stats", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const stats = await storage.getEmailStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching email stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ==========================================
   // USER COUPON ENDPOINTS
   // ==========================================
 
@@ -4682,6 +4713,20 @@ export async function registerRoutes(
             // Start grace period (48 hours)
             console.log(`[Cloak] User ${currentOwner.id} exceeded clicks limit - starting grace period`);
             await storage.startGracePeriod(currentOwner.id);
+            
+            // Send email notification about plan limit
+            if (currentOwner.email) {
+              sendPlanLimitEmail(
+                currentOwner.email, 
+                'clicks', 
+                clicksUsed, 
+                clicksLimit, 
+                planForLimits.name, 
+                currentOwner.id
+              ).catch(err => {
+                console.error('[Cloak] Failed to send plan limit email:', err);
+              });
+            }
           }
           // During grace period, continue processing clicks
           // (The check above handles expired grace periods)

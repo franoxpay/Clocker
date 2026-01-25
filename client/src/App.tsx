@@ -34,6 +34,7 @@ import AdminDashboard from "@/pages/admin/AdminDashboard";
 import AdminBilling from "@/pages/admin/AdminBilling";
 import AdminDomains from "@/pages/admin/AdminDomains";
 import AdminReferrals from "@/pages/admin/AdminReferrals";
+import AdminEmails from "@/pages/admin/AdminEmails";
 import NotFound from "@/pages/not-found";
 
 function PageLoadingFallback() {
@@ -80,6 +81,7 @@ function AdminRoutes() {
           <Route path="/confg-admin/domains" component={AdminDomains} />
           <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
           <Route path="/confg-admin/referrals" component={AdminReferrals} />
+          <Route path="/confg-admin/emails" component={AdminEmails} />
           <Route path="/confg-admin/settings" component={AdminSettings} />
           <Route component={NotFound} />
         </Switch>

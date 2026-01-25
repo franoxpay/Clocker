@@ -3,7 +3,7 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
-import { sendWelcomeEmail } from "./emailService";
+import { sendWelcomeEmail } from "./email";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
@@ -67,7 +67,7 @@ export async function setupAuth(app: Express) {
 
       if (email) {
         const name = firstName || email.split("@")[0] || "";
-        sendWelcomeEmail(email, name, "pt").catch(err => {
+        sendWelcomeEmail(email, name, user.id).catch(err => {
           console.error("[Auth] Failed to send welcome email:", err);
         });
       }
