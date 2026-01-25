@@ -65,7 +65,16 @@ The platform uses distinct routing for public access, authenticated user dashboa
 - **ip-api.com**: Used for IP geolocation to determine visitor country (cached in Redis for 1 hour).
 
 ### Email Service
-- **Resend**: Transactional email service configured via `RESEND_API_KEY`. Email functions are in `server/email.ts`. Supports welcome emails, subscription confirmations, password reset, and notifications. Configured to send from `noreply@cleryon.com`.
+- **Resend**: Transactional email service configured via `RESEND_API_KEY`. Email functions are in `server/email.ts`. Configured to send from `noreply@cleryon.com`.
+- **Email Types**: welcome, subscription, domain_inactive, shared_domain_inactive, plan_limit, notification, password_reset
+- **Email Logging**: All emails are logged in `email_logs` table with status (sent/failed), resendId, and metadata
+- **Admin Interface**: AdminEmails.tsx page shows email history, stats by type/status, and filtering options
+- **Automated Triggers**:
+  - Welcome email on user registration
+  - Subscription confirmation on checkout completion
+  - Domain inactive notification when user's domain fails health check (24h cooldown)
+  - Shared domain inactive notification to affected users (24h cooldown)
+  - Plan limit email when user exceeds clicks limit and grace period starts
 
 ### Key NPM Dependencies
 - `@tanstack/react-query`: Server state management.
