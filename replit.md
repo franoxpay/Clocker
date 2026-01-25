@@ -64,6 +64,9 @@ The platform uses distinct routing for public access, authenticated user dashboa
 ### External APIs
 - **ip-api.com**: Used for IP geolocation to determine visitor country (cached in Redis for 1 hour).
 
+### Email Service
+- **Resend**: Transactional email service configured via `RESEND_API_KEY`. Email functions are in `server/email.ts`. Supports welcome emails, subscription confirmations, password reset, and notifications. Configured to send from `noreply@cleryon.com`.
+
 ### Key NPM Dependencies
 - `@tanstack/react-query`: Server state management.
 - `drizzle-orm` + `drizzle-zod`: ORM with Zod validation.
