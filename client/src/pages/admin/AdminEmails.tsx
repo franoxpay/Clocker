@@ -174,7 +174,7 @@ export default function AdminEmails() {
   // Query para buscar usuários para seleção
   const { data: users } = useQuery<Array<{ id: string; email: string; firstName: string | null }>>({
     queryKey: ["/api/admin/users"],
-    select: (data: any) => data.map((u: any) => ({ id: u.id, email: u.email, firstName: u.firstName })),
+    select: (data: any) => (data.users || data).map((u: any) => ({ id: u.id, email: u.email, firstName: u.firstName })),
   });
 
   // Filtrar usuários baseado na busca

@@ -5938,5 +5938,21 @@ export async function registerRoutes(
     }
   });
 
+  // Auto-seed email templates on startup
+  (async () => {
+    try {
+      const existingTemplates = await storage.getEmailTemplates();
+      if (existingTemplates.length === 0) {
+        console.log("[EMAIL] Seeding default email templates...");
+        for (const [type, template] of Object.entries(DEFAULT_EMAIL_TEMPLATES)) {
+          await storage.upsertEmailTemplate({ type, ...template });
+        }
+        console.log("[EMAIL] Default email templates created successfully");
+      }
+    } catch (error) {
+      console.error("[EMAIL] Error seeding email templates:", error);
+    }
+  })();
+
   return httpServer;
 }
