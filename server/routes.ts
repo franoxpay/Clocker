@@ -2380,6 +2380,10 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Domain not found" });
       }
 
+      // Get user info for email notification
+      const user = await storage.getUser(userId);
+      const domainName = domain.subdomain;
+
       // Sync with EasyPanel (remove domain automatically)
       const { easypanelService } = await import("./easypanel");
       if (easypanelService.isConfigured() && domain.easypanelDomainId) {
@@ -2393,6 +2397,15 @@ export async function registerRoutes(
       }
 
       await storage.deleteDomain(domainId);
+
+      // Send email notification to user about domain removal
+      if (user?.email) {
+        const firstName = user.firstName || "Usuário";
+        sendDomainRemovedEmail(user.email, domainName, 'user_deleted', firstName, userId).catch(err => {
+          console.error(`Failed to send domain removed email to ${user.email}:`, err);
+        });
+      }
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting domain:", error);

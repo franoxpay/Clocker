@@ -7,7 +7,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
 
-type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset';
+type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed';
 
 interface SendEmailOptions {
   to: string | string[];
@@ -233,6 +233,10 @@ export async function sendDomainRemovedEmail(email: string, domainName: string, 
     admin_action: {
       pt: 'removido por decisão administrativa',
       en: 'removed by administrative decision',
+    },
+    user_deleted: {
+      pt: 'removido da sua conta com sucesso',
+      en: 'successfully removed from your account',
     },
   };
 
