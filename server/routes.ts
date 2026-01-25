@@ -10,6 +10,7 @@ import { tiktok2Telemetry } from "@shared/schema";
 import { promises as dns } from "dns";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 import { sendPlanLimitEmail } from "./email";
+import { z } from "zod";
 
 // ==========================================
 // ANTI-BOT CHALLENGE SYSTEM
@@ -4369,6 +4370,140 @@ export async function registerRoutes(
       res.json(stats);
     } catch (error) {
       console.error("Error fetching email stats:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get all email templates
+  app.get("/api/admin/emails/templates", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const templates = await storage.getEmailTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching email templates:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get single email template
+  app.get("/api/admin/emails/templates/:type", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const template = await storage.getEmailTemplate(req.params.type);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching email template:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Create or update email template
+  app.post("/api/admin/emails/templates", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const templateSchema = z.object({
+        type: z.string().min(1),
+        subjectPt: z.string().min(1),
+        subjectEn: z.string().min(1),
+        htmlPt: z.string().min(1),
+        htmlEn: z.string().min(1),
+        description: z.string().optional(),
+      });
+      
+      const parseResult = templateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid template data", errors: parseResult.error.errors });
+      }
+      
+      const { type, subjectPt, subjectEn, htmlPt, htmlEn, description } = parseResult.data;
+      
+      const template = await storage.upsertEmailTemplate({
+        type,
+        subjectPt,
+        subjectEn,
+        htmlPt,
+        htmlEn,
+        description,
+      });
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error saving email template:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Send test email to specific user
+  app.post("/api/admin/emails/send-test", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const testEmailSchema = z.object({
+        templateType: z.string().min(1),
+        targetEmail: z.string().email(),
+        targetUserId: z.string().optional(),
+        locale: z.enum(['pt', 'en']).default('pt'),
+      });
+      
+      const parseResult = testEmailSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ message: "Invalid request data", errors: parseResult.error.errors });
+      }
+      
+      const { templateType, targetEmail, targetUserId, locale } = parseResult.data;
+      
+      // Get the template
+      const template = await storage.getEmailTemplate(templateType);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found. Please create a template first." });
+      }
+      
+      // Get user info for personalization (optional)
+      let userName = locale === 'pt' ? "Usuário Teste" : "Test User";
+      if (targetUserId) {
+        const user = await storage.getUser(targetUserId);
+        if (user) {
+          userName = user.firstName || user.email.split("@")[0];
+        }
+      }
+      
+      // Select template content based on locale
+      const htmlTemplate = locale === 'pt' ? template.htmlPt : template.htmlEn;
+      const subjectTemplate = locale === 'pt' ? template.subjectPt : template.subjectEn;
+      
+      // Replace placeholders in template
+      const replacePlaceholders = (text: string) => text
+        .replace(/\{\{name\}\}/g, userName)
+        .replace(/\{\{firstName\}\}/g, userName)
+        .replace(/\{\{email\}\}/g, targetEmail)
+        .replace(/\{\{planName\}\}/g, locale === 'pt' ? "Plano Teste" : "Test Plan")
+        .replace(/\{\{domain\}\}/g, "example.com")
+        .replace(/\{\{limitType\}\}/g, locale === 'pt' ? "cliques" : "clicks")
+        .replace(/\{\{currentUsage\}\}/g, "1000")
+        .replace(/\{\{limit\}\}/g, "1000");
+      
+      const htmlContent = replacePlaceholders(htmlTemplate);
+      const subject = `[TESTE] ${replacePlaceholders(subjectTemplate)}`;
+      
+      // Send the email using Resend directly
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      
+      const { data, error } = await resend.emails.send({
+        from: `Cleryon <${process.env.FROM_EMAIL || 'noreply@cleryon.com'}>`,
+        to: [targetEmail],
+        subject,
+        html: htmlContent,
+      });
+      
+      if (error) {
+        console.error("Error sending test email:", error);
+        return res.status(500).json({ message: error.message });
+      }
+      
+      console.log(`[ADMIN] Test email sent to ${targetEmail} (type: ${templateType}, locale: ${locale})`);
+      res.json({ success: true, messageId: data?.id });
+    } catch (error) {
+      console.error("Error sending test email:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });
