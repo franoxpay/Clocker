@@ -4374,6 +4374,191 @@ export async function registerRoutes(
     }
   });
 
+  // Default email templates
+  const DEFAULT_EMAIL_TEMPLATES = {
+    welcome: {
+      subjectPt: "Bem-vindo ao Cleryon!",
+      subjectEn: "Welcome to Cleryon!",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Bem-vindo ao Cleryon, {{firstName}}!</h1>
+  <p>Estamos felizes em ter você conosco.</p>
+  <p>Agora você pode começar a criar suas ofertas e domínios para suas campanhas de marketing.</p>
+  <p>Se precisar de ajuda, não hesite em nos contatar.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Welcome to Cleryon, {{firstName}}!</h1>
+  <p>We're happy to have you with us.</p>
+  <p>Now you can start creating your offers and domains for your marketing campaigns.</p>
+  <p>If you need any help, don't hesitate to contact us.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um novo usuário se registra",
+    },
+    subscription: {
+      subjectPt: "Assinatura Confirmada - {{planName}}",
+      subjectEn: "Subscription Confirmed - {{planName}}",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Assinatura Confirmada!</h1>
+  <p>Olá {{firstName}},</p>
+  <p>Sua assinatura do plano <strong>{{planName}}</strong> foi confirmada com sucesso.</p>
+  <p>Você agora tem acesso a todos os recursos do seu plano.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Subscription Confirmed!</h1>
+  <p>Hello {{firstName}},</p>
+  <p>Your subscription to the <strong>{{planName}}</strong> plan has been successfully confirmed.</p>
+  <p>You now have access to all features of your plan.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando uma assinatura é confirmada",
+    },
+    domain_inactive: {
+      subjectPt: "Atenção: Seu domínio está inativo",
+      subjectEn: "Attention: Your domain is inactive",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #ef4444;">Domínio Inativo</h1>
+  <p>Olá {{firstName}},</p>
+  <p>Detectamos que seu domínio <strong>{{domain}}</strong> está inativo ou com problemas de DNS.</p>
+  <p>Por favor, verifique as configurações do seu domínio para que suas campanhas continuem funcionando.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #ef4444;">Inactive Domain</h1>
+  <p>Hello {{firstName}},</p>
+  <p>We detected that your domain <strong>{{domain}}</strong> is inactive or has DNS issues.</p>
+  <p>Please check your domain settings so your campaigns continue working.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio do usuário está inativo",
+    },
+    shared_domain_inactive: {
+      subjectPt: "Atenção: Domínio compartilhado inativo",
+      subjectEn: "Attention: Shared domain inactive",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #f59e0b;">Domínio Compartilhado Inativo</h1>
+  <p>Olá {{firstName}},</p>
+  <p>O domínio compartilhado <strong>{{domain}}</strong> que você utiliza está temporariamente inativo.</p>
+  <p>Nossa equipe já está trabalhando para resolver o problema o mais rápido possível.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #f59e0b;">Shared Domain Inactive</h1>
+  <p>Hello {{firstName}},</p>
+  <p>The shared domain <strong>{{domain}}</strong> that you use is temporarily inactive.</p>
+  <p>Our team is already working to resolve the issue as quickly as possible.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio compartilhado está inativo",
+    },
+    plan_limit: {
+      subjectPt: "Alerta: Limite do plano atingido",
+      subjectEn: "Alert: Plan limit reached",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #f59e0b;">Limite Atingido</h1>
+  <p>Olá {{firstName}},</p>
+  <p>Você atingiu o limite de <strong>{{limitType}}</strong> do seu plano.</p>
+  <p>Uso atual: {{currentUsage}} de {{limit}}</p>
+  <p>Considere fazer upgrade do seu plano para continuar usando todos os recursos.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #f59e0b;">Limit Reached</h1>
+  <p>Hello {{firstName}},</p>
+  <p>You have reached the <strong>{{limitType}}</strong> limit of your plan.</p>
+  <p>Current usage: {{currentUsage}} of {{limit}}</p>
+  <p>Consider upgrading your plan to continue using all features.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando o usuário atinge o limite do plano",
+    },
+    notification: {
+      subjectPt: "Nova Notificação - Cleryon",
+      subjectEn: "New Notification - Cleryon",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Nova Notificação</h1>
+  <p>Olá {{firstName}},</p>
+  <p>Você tem uma nova notificação no Cleryon.</p>
+  <p>Acesse sua conta para verificar.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">New Notification</h1>
+  <p>Hello {{firstName}},</p>
+  <p>You have a new notification on Cleryon.</p>
+  <p>Access your account to check it.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email de notificação geral",
+    },
+    password_reset: {
+      subjectPt: "Redefinição de Senha - Cleryon",
+      subjectEn: "Password Reset - Cleryon",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Redefinição de Senha</h1>
+  <p>Olá {{firstName}},</p>
+  <p>Recebemos uma solicitação para redefinir sua senha.</p>
+  <p>Se você não fez esta solicitação, ignore este email.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #6366f1;">Password Reset</h1>
+  <p>Hello {{firstName}},</p>
+  <p>We received a request to reset your password.</p>
+  <p>If you did not make this request, please ignore this email.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email de redefinição de senha",
+    },
+  };
+
+  // Seed default templates
+  app.post("/api/admin/emails/templates/seed", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const seeded: string[] = [];
+      for (const [type, template] of Object.entries(DEFAULT_EMAIL_TEMPLATES)) {
+        const existing = await storage.getEmailTemplate(type);
+        if (!existing) {
+          await storage.upsertEmailTemplate({ type, ...template });
+          seeded.push(type);
+        }
+      }
+      res.json({ success: true, seeded, message: `${seeded.length} templates criados` });
+    } catch (error) {
+      console.error("Error seeding email templates:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Get all email templates
   app.get("/api/admin/emails/templates", isAdmin, async (req: Request, res: Response) => {
     try {

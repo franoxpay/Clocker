@@ -69,6 +69,11 @@ The platform uses distinct routing for public access, authenticated user dashboa
 - **Email Types**: welcome, subscription, domain_inactive, shared_domain_inactive, plan_limit, notification, password_reset
 - **Email Logging**: All emails are logged in `email_logs` table with status (sent/failed), resendId, and metadata
 - **Admin Interface**: AdminEmails.tsx page shows email history, stats by type/status, and filtering options
+- **Email Templates**: Editable email templates stored in `email_templates` table with PT/EN content (subject and HTML)
+  - Template placeholders: {{name}}, {{firstName}}, {{email}}, {{planName}}, {{domain}}, {{limitType}}, {{currentUsage}}, {{limit}}
+  - Admin can create default templates with one click ("Criar Templates Padrão" button)
+  - Admin can edit templates with full HTML content for both languages
+  - Admin can send test emails to any user or email with locale selection
 - **Automated Triggers**:
   - Welcome email on user registration
   - Subscription confirmation on checkout completion

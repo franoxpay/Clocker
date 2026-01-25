@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { Mail, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Send, FileText, Edit, Eye, Loader2 } from "lucide-react";
+import { Mail, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Send, FileText, Edit, Eye, Loader2, Users, Search, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -68,6 +68,8 @@ export default function AdminEmails() {
   const [selectedTemplateType, setSelectedTemplateType] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [testLocale, setTestLocale] = useState<"pt" | "en">("pt");
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [userSearch, setUserSearch] = useState("");
   const limit = 20;
 
   const t = (key: string) => {
@@ -169,6 +171,35 @@ export default function AdminEmails() {
     queryKey: ["/api/admin/emails/templates"],
   });
 
+  // Query para buscar usuários para seleção
+  const { data: users } = useQuery<Array<{ id: string; email: string; firstName: string | null }>>({
+    queryKey: ["/api/admin/users"],
+    select: (data: any) => data.map((u: any) => ({ id: u.id, email: u.email, firstName: u.firstName })),
+  });
+
+  // Filtrar usuários baseado na busca
+  const filteredUsers = users?.filter(u => 
+    u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+    (u.firstName?.toLowerCase() || "").includes(userSearch.toLowerCase())
+  ) || [];
+
+  // Mutation para criar templates padrão
+  const seedTemplatesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/admin/emails/templates/seed", {});
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/templates"] });
+      toast({ 
+        title: language === "pt-BR" ? "Templates Criados" : "Templates Created",
+        description: data.message || `${data.seeded?.length || 0} templates criados`
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
   const saveTemplateMutation = useMutation({
     mutationFn: async (template: Partial<EmailTemplate>) => {
       return apiRequest("POST", "/api/admin/emails/templates", template);
@@ -185,14 +216,16 @@ export default function AdminEmails() {
   });
 
   const sendTestMutation = useMutation({
-    mutationFn: async ({ templateType, targetEmail, locale }: { templateType: string; targetEmail: string; locale: "pt" | "en" }) => {
-      return apiRequest("POST", "/api/admin/emails/send-test", { templateType, targetEmail, locale });
+    mutationFn: async ({ templateType, targetEmail, locale, targetUserId }: { templateType: string; targetEmail: string; locale: "pt" | "en"; targetUserId?: string }) => {
+      return apiRequest("POST", "/api/admin/emails/send-test", { templateType, targetEmail, locale, targetUserId });
     },
     onSuccess: () => {
       setShowTestDialog(false);
       setTestEmail("");
       setSelectedTemplateType("");
       setTestLocale("pt");
+      setSelectedUserId("");
+      setUserSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/stats"] });
       toast({ title: t("admin.testSent") });
@@ -242,7 +275,18 @@ export default function AdminEmails() {
 
   const handleSendTest = () => {
     if (!selectedTemplateType || !testEmail) return;
-    sendTestMutation.mutate({ templateType: selectedTemplateType, targetEmail: testEmail, locale: testLocale });
+    sendTestMutation.mutate({ 
+      templateType: selectedTemplateType, 
+      targetEmail: testEmail, 
+      locale: testLocale,
+      targetUserId: selectedUserId || undefined
+    });
+  };
+
+  const handleSelectUser = (user: { id: string; email: string; firstName: string | null }) => {
+    setSelectedUserId(user.id);
+    setTestEmail(user.email);
+    setUserSearch("");
   };
 
   const existingTemplateTypes = templates?.map(t => t.type) || [];
@@ -466,9 +510,23 @@ export default function AdminEmails() {
 
         <TabsContent value="templates" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>{t("admin.templates")}</CardTitle>
-              <CardDescription>{t("admin.placeholders")}</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>{t("admin.templates")}</CardTitle>
+                <CardDescription>{t("admin.placeholders")}</CardDescription>
+              </div>
+              {templates && templates.length < EMAIL_TYPES.length && (
+                <Button
+                  variant="outline"
+                  onClick={() => seedTemplatesMutation.mutate()}
+                  disabled={seedTemplatesMutation.isPending}
+                  data-testid="button-seed-templates"
+                >
+                  {seedTemplatesMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  <Plus className="w-4 h-4 mr-2" />
+                  {language === "pt-BR" ? "Criar Templates Padrão" : "Create Default Templates"}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {templatesLoading ? (
@@ -648,15 +706,62 @@ export default function AdminEmails() {
                 </p>
               )}
             </div>
+            
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                {language === "pt-BR" ? "Selecionar Usuário" : "Select User"}
+              </Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder={language === "pt-BR" ? "Buscar por email ou nome..." : "Search by email or name..."}
+                  className="pl-10"
+                  data-testid="input-user-search"
+                />
+              </div>
+              {userSearch && filteredUsers.length > 0 && (
+                <div className="border rounded-md max-h-32 overflow-y-auto">
+                  {filteredUsers.slice(0, 5).map((user) => (
+                    <div
+                      key={user.id}
+                      className="p-2 hover-elevate cursor-pointer text-sm border-b last:border-b-0"
+                      onClick={() => handleSelectUser(user)}
+                      data-testid={`button-select-user-${user.id}`}
+                    >
+                      <div className="font-medium">{user.email}</div>
+                      {user.firstName && <div className="text-muted-foreground text-xs">{user.firstName}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {selectedUserId && (
+                <p className="text-sm text-muted-foreground">
+                  {language === "pt-BR" ? "Usuário selecionado: " : "Selected user: "}
+                  <span className="font-medium">{testEmail}</span>
+                </p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>{t("admin.testEmail")}</Label>
               <Input
                 type="email"
                 value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
+                onChange={(e) => {
+                  setTestEmail(e.target.value);
+                  setSelectedUserId("");
+                }}
                 placeholder="email@example.com"
                 data-testid="input-test-email"
               />
+              <p className="text-xs text-muted-foreground">
+                {language === "pt-BR" 
+                  ? "Selecione um usuário acima ou digite um email manualmente" 
+                  : "Select a user above or type an email manually"}
+              </p>
             </div>
             <div className="space-y-2">
               <Label>{language === "pt-BR" ? "Idioma do Template" : "Template Language"}</Label>
