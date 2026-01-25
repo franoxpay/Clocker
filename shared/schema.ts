@@ -599,6 +599,26 @@ export const insertEmailLogSchema = createInsertSchema(emailLogs).omit({
   createdAt: true,
 });
 
+// Email templates table - editable email templates
+export const emailTemplates = pgTable(
+  "email_templates",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    type: varchar("type").notNull().unique(), // welcome, subscription, domain_inactive, etc.
+    subjectPt: varchar("subject_pt").notNull(),
+    subjectEn: varchar("subject_en").notNull(),
+    htmlPt: text("html_pt").notNull(),
+    htmlEn: text("html_en").notNull(),
+    description: varchar("description"), // Admin description of what this template is for
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }
+);
+
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({
+  id: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -674,3 +694,6 @@ export type InsertCommission = z.infer<typeof insertCommissionSchema>;
 
 export type EmailLog = typeof emailLogs.$inferSelect;
 export type InsertEmailLog = z.infer<typeof insertEmailLogSchema>;
+
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;

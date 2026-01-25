@@ -19,6 +19,7 @@ import {
   couponUsages,
   commissions,
   emailLogs,
+  emailTemplates,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -48,6 +49,7 @@ import {
   type Commission,
   type InsertCommission,
   type EmailLog,
+  type EmailTemplate,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -342,6 +344,11 @@ export interface IStorage {
     byType: Array<{ type: string; count: number }>;
     last24Hours: number;
   }>;
+  
+  // Email templates
+  getEmailTemplates(): Promise<EmailTemplate[]>;
+  getEmailTemplate(type: string): Promise<EmailTemplate | undefined>;
+  upsertEmailTemplate(template: { type: string; subjectPt: string; subjectEn: string; htmlPt: string; htmlEn: string; description?: string }): Promise<EmailTemplate>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2433,6 +2440,50 @@ export class DatabaseStorage implements IStorage {
       byType: byTypeResult.map(r => ({ type: r.type, count: Number(r.count) })),
       last24Hours: Number(last24HoursResult.count),
     };
+  }
+
+  // ================== EMAIL TEMPLATES ==================
+
+  async getEmailTemplates(): Promise<EmailTemplate[]> {
+    return await db.select().from(emailTemplates).orderBy(emailTemplates.type);
+  }
+
+  async getEmailTemplate(type: string): Promise<EmailTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.type, type))
+      .limit(1);
+    return template;
+  }
+
+  async upsertEmailTemplate(template: {
+    type: string;
+    subjectPt: string;
+    subjectEn: string;
+    htmlPt: string;
+    htmlEn: string;
+    description?: string;
+  }): Promise<EmailTemplate> {
+    const [result] = await db
+      .insert(emailTemplates)
+      .values({
+        ...template,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: emailTemplates.type,
+        set: {
+          subjectPt: template.subjectPt,
+          subjectEn: template.subjectEn,
+          htmlPt: template.htmlPt,
+          htmlEn: template.htmlEn,
+          description: template.description,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
   }
 }
 
