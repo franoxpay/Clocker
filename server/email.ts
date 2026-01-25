@@ -220,6 +220,57 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
   });
 }
 
+export async function sendDomainRemovedEmail(email: string, domainName: string, reason: string, firstName: string, userId?: string) {
+  const reasonMessages: Record<string, { pt: string; en: string }> = {
+    phishing: {
+      pt: 'identificado como associado a atividade de phishing',
+      en: 'identified as associated with phishing activity',
+    },
+    inactive: {
+      pt: 'identificado como inativo durante verificações automáticas',
+      en: 'identified as inactive during automatic checks',
+    },
+    admin_action: {
+      pt: 'removido por decisão administrativa',
+      en: 'removed by administrative decision',
+    },
+  };
+
+  const reasonText = reasonMessages[reason] || reasonMessages.admin_action;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <div style="text-align: center; margin-bottom: 30px;">
+        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+      </div>
+      <h2 style="color: #ef4444;">Domínio Removido</h2>
+      <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
+      <p style="color: #555; line-height: 1.6;">O domínio <strong>${domainName}</strong> foi ${reasonText.pt}.</p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;">Suas ofertas vinculadas a este domínio foram desvinculadas e precisam de um novo domínio para continuar funcionando.</p>
+      </div>
+      <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Configurar Novo Domínio
+        </a>
+      </div>
+      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `Domínio Removido: ${domainName} - Cleryon`,
+    html,
+    text: `Olá ${firstName}, o domínio ${domainName} foi ${reasonText.pt}. Acesse sua conta para configurar um novo domínio.`,
+    userId,
+    type: 'domain_removed',
+    metadata: { domainName, reason },
+  });
+}
+
 export async function sendPlanLimitEmail(email: string, limitType: 'clicks' | 'offers' | 'domains', currentValue: number, maxValue: number, planName: string, userId?: string) {
   const limitLabels = {
     clicks: 'cliques',

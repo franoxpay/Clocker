@@ -166,46 +166,33 @@ async function checkAllDomains() {
             (now.getTime() - new Date(domain.lastInactiveNotificationAt).getTime()) > NOTIFICATION_COOLDOWN_MS;
           
           if (shouldNotify) {
-            // Get all offers using this shared domain
-            const offers = await storage.getOffersBySharedDomainId(domain.id);
+            // Get only users who have ACTIVATED this shared domain in their panel
+            const activeUsers = await storage.getUsersWithActiveSharedDomain(domain.id);
             
-            // Group offers by user
-            const offersByUser = new Map<string, typeof offers>();
-            for (const offer of offers) {
-              const existing = offersByUser.get(offer.userId) || [];
-              existing.push(offer);
-              offersByUser.set(offer.userId, existing);
-            }
-            
-            // Send notification to each affected user
-            const entries = Array.from(offersByUser.entries());
-            for (const [userId, userOffers] of entries) {
-              const owner = await storage.getUser(userId);
+            // Send notification to each user who activated this shared domain
+            for (const user of activeUsers) {
+              const firstName = user.firstName || user.email.split("@")[0];
               
-              if (owner) {
-                const firstName = owner.firstName || owner.email.split("@")[0];
-                
-                const messagePt = `Olá ${firstName}, o domínio ${domain.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`;
-                const messageEn = `Hello ${firstName}, the domain ${domain.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`;
-                
-                await storage.createNotification({
-                  userId,
-                  type: "domain_inactive",
-                  titlePt: "Domínio Compartilhado Inativo",
-                  titleEn: "Shared Domain Inactive",
-                  messagePt: messagePt,
-                  messageEn: messageEn,
+              const messagePt = `Olá ${firstName}, o domínio compartilhado ${domain.subdomain} que você ativou foi identificado como inativo durante as verificações automáticas do sistema. Verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`;
+              const messageEn = `Hello ${firstName}, the shared domain ${domain.subdomain} you activated was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`;
+              
+              await storage.createNotification({
+                userId: user.userId,
+                type: "domain_inactive",
+                titlePt: "Domínio Compartilhado Inativo",
+                titleEn: "Shared Domain Inactive",
+                messagePt: messagePt,
+                messageEn: messageEn,
+              });
+              
+              // Send email notification for shared domain
+              if (user.email) {
+                sendSharedDomainInactiveEmail(user.email, domain.subdomain, user.userId).catch(err => {
+                  console.error(`[DOMAIN MONITOR] Failed to send shared domain inactive email:`, err);
                 });
-                
-                // Send email notification for shared domain
-                if (owner.email) {
-                  sendSharedDomainInactiveEmail(owner.email, domain.subdomain, userId).catch(err => {
-                    console.error(`[DOMAIN MONITOR] Failed to send shared domain inactive email:`, err);
-                  });
-                }
-                
-                console.log(`[DOMAIN MONITOR] Notification sent to user ${userId} for shared domain: ${domain.subdomain}`);
               }
+              
+              console.log(`[DOMAIN MONITOR] Notification sent to user ${user.userId} for shared domain: ${domain.subdomain}`);
             }
             
             // Update notification timestamp for shared domain

@@ -9,7 +9,7 @@ import { db } from "./db";
 import { tiktok2Telemetry } from "@shared/schema";
 import { promises as dns } from "dns";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
-import { sendPlanLimitEmail } from "./email";
+import { sendPlanLimitEmail, sendDomainRemovedEmail } from "./email";
 import { z } from "zod";
 
 // ==========================================
@@ -4068,6 +4068,13 @@ export async function registerRoutes(
             messagePt,
             messageEn,
           });
+
+          // Send email notification
+          if (user?.email) {
+            sendDomainRemovedEmail(user.email, result.subdomain, removalReason, firstName, userId).catch(err => {
+              console.error(`[ADMIN] Failed to send domain removed email to ${user.email}:`, err);
+            });
+          }
         }
       }
 
@@ -4538,6 +4545,31 @@ export async function registerRoutes(
   <p>Best regards,<br>Cleryon Team</p>
 </body></html>`,
       description: "Email de redefinição de senha",
+    },
+    domain_removed: {
+      subjectPt: "Domínio Removido - {{domain}}",
+      subjectEn: "Domain Removed - {{domain}}",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #ef4444;">Domínio Removido</h1>
+  <p>Olá {{firstName}},</p>
+  <p>O domínio <strong>{{domain}}</strong> foi removido da plataforma.</p>
+  <p>Suas ofertas vinculadas a este domínio foram desvinculadas e precisam de um novo domínio para continuar funcionando.</p>
+  <p>Acesse sua conta para configurar um novo domínio.</p>
+  <p>Atenciosamente,<br>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h1 style="color: #ef4444;">Domain Removed</h1>
+  <p>Hello {{firstName}},</p>
+  <p>The domain <strong>{{domain}}</strong> has been removed from the platform.</p>
+  <p>Your offers linked to this domain have been unlinked and need a new domain to continue working.</p>
+  <p>Please access your account to configure a new domain.</p>
+  <p>Best regards,<br>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio é removido",
     },
   };
 

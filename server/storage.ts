@@ -101,6 +101,8 @@ export interface IStorage {
   activateSharedDomain(userId: string, sharedDomainId: number): Promise<{ id: number; userId: string; sharedDomainId: number; isActive: boolean; createdAt: Date }>;
   deactivateUserSharedDomain(userId: string, sharedDomainId: number): Promise<void>;
   getUserTotalDomainsCount(userId: string): Promise<number>;
+  hasUserActivatedSharedDomain(userId: string, sharedDomainId: number): Promise<boolean>;
+  getUsersWithActiveSharedDomain(sharedDomainId: number): Promise<Array<{ userId: string; email: string; firstName: string | null }>>;
 
   getOffer(id: number): Promise<Offer | undefined>;
   getOfferBySlug(slug: string): Promise<Offer | undefined>;
@@ -708,6 +710,37 @@ export class DatabaseStorage implements IStorage {
       ));
     
     return (ownDomainsResult?.count || 0) + (sharedDomainsResult?.count || 0);
+  }
+
+  async hasUserActivatedSharedDomain(userId: string, sharedDomainId: number): Promise<boolean> {
+    const [result] = await db
+      .select({ isActive: userSharedDomains.isActive })
+      .from(userSharedDomains)
+      .where(and(
+        eq(userSharedDomains.userId, userId),
+        eq(userSharedDomains.sharedDomainId, sharedDomainId),
+        eq(userSharedDomains.isActive, true)
+      ))
+      .limit(1);
+    
+    return !!result;
+  }
+
+  async getUsersWithActiveSharedDomain(sharedDomainId: number): Promise<Array<{ userId: string; email: string; firstName: string | null }>> {
+    const results = await db
+      .select({
+        userId: userSharedDomains.userId,
+        email: users.email,
+        firstName: users.firstName,
+      })
+      .from(userSharedDomains)
+      .innerJoin(users, eq(userSharedDomains.userId, users.id))
+      .where(and(
+        eq(userSharedDomains.sharedDomainId, sharedDomainId),
+        eq(userSharedDomains.isActive, true)
+      ));
+    
+    return results;
   }
 
   async getOffer(id: number): Promise<Offer | undefined> {
