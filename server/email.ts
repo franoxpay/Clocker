@@ -223,8 +223,8 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
 export async function sendDomainRemovedEmail(email: string, domainName: string, reason: string, firstName: string, userId?: string) {
   const reasonMessages: Record<string, { pt: string; en: string }> = {
     phishing: {
-      pt: 'identificado como associado a atividade de phishing',
-      en: 'identified as associated with phishing activity',
+      pt: 'removido devido a uma denúncia externa por violação de política',
+      en: 'removed due to an external report for policy violation',
     },
     inactive: {
       pt: 'identificado como inativo durante verificações automáticas',

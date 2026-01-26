@@ -4089,11 +4089,11 @@ export async function registerRoutes(
         switch (removalReason) {
           case 'phishing':
             messagePt = hasOffers 
-              ? `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`
-              : `Olá ${firstName}, identificamos que o domínio ${result.subdomain} que você havia ativado foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido da plataforma.`;
+              ? `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por violação de política. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`
+              : `Olá ${firstName}, identificamos que o domínio ${result.subdomain} que você havia ativado foi alvo de uma denúncia externa por violação de política. Por esse motivo, o domínio foi removido da plataforma.`;
             messageEn = hasOffers 
-              ? `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`
-              : `Hello ${firstName}, we identified that the domain ${result.subdomain} you had activated was the target of an external complaint for phishing activity. For this reason, the domain was removed from the platform.`;
+              ? `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external report for policy violation. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`
+              : `Hello ${firstName}, we identified that the domain ${result.subdomain} you had activated was the target of an external report for policy violation. For this reason, the domain was removed from the platform.`;
             break;
           case 'inactive':
             messagePt = hasOffers
