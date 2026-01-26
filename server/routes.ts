@@ -4624,6 +4624,307 @@ export async function registerRoutes(
 </body></html>`,
       description: "Email enviado quando um domínio é removido",
     },
+    domain_removed_policy: {
+      subjectPt: "Domínio Removido por Violação de Política - {{domain}}",
+      subjectEn: "Domain Removed for Policy Violation - {{domain}}",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Domínio Removido</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">O domínio <strong>{{domain}}</strong> foi removido devido a uma denúncia externa por violação de política.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Suas ofertas vinculadas a este domínio foram desvinculadas e precisam de um novo domínio para continuar funcionando.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Domain Removed</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">The domain <strong>{{domain}}</strong> has been removed due to an external report for policy violation.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Your offers linked to this domain have been unlinked and need a new domain to continue working.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio é removido por violação de política",
+    },
+    domain_removed_inactive: {
+      subjectPt: "Domínio Removido por Inatividade - {{domain}}",
+      subjectEn: "Domain Removed for Inactivity - {{domain}}",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #f59e0b;">Domínio Removido por Inatividade</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">O domínio <strong>{{domain}}</strong> foi identificado como inativo durante as verificações automáticas do sistema e foi removido.</p>
+  <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400e;">Verifique suas ofertas para evitar erros de redirecionamento, loops ou tráfego inválido.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #f59e0b;">Domain Removed for Inactivity</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">The domain <strong>{{domain}}</strong> was identified as inactive during automatic system checks and has been removed.</p>
+  <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #92400e;">Please check your offers to avoid redirection errors, loops, or invalid traffic.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio é removido por inatividade",
+    },
+    domain_removed_admin: {
+      subjectPt: "Domínio Removido por Decisão Administrativa - {{domain}}",
+      subjectEn: "Domain Removed by Administrative Decision - {{domain}}",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Domínio Removido</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">O domínio <strong>{{domain}}</strong> foi removido da plataforma por decisão administrativa.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Suas ofertas vinculadas a este domínio foram desvinculadas e precisam de um novo domínio para continuar funcionando.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Domain Removed</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">The domain <strong>{{domain}}</strong> has been removed from the platform by administrative decision.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Your offers linked to this domain have been unlinked and need a new domain to continue working.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um domínio é removido por decisão administrativa",
+    },
+    subscription_cancelled: {
+      subjectPt: "Sua Assinatura Foi Cancelada - Cleryon",
+      subjectEn: "Your Subscription Has Been Cancelled - Cleryon",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Assinatura Cancelada</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong>{{planName}}</strong> foi cancelada.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Você ainda terá acesso aos recursos do seu plano até {{endDate}}.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Sentimos sua falta! Se mudar de ideia, você pode reativar sua assinatura a qualquer momento.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reativar Assinatura</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Subscription Cancelled</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Your subscription to the <strong>{{planName}}</strong> plan has been cancelled.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">You will still have access to your plan features until {{endDate}}.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">We miss you! If you change your mind, you can reactivate your subscription at any time.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reactivate Subscription</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando a assinatura é cancelada",
+    },
+    subscription_renewed: {
+      subjectPt: "Sua Assinatura Foi Renovada - Cleryon",
+      subjectEn: "Your Subscription Has Been Renewed - Cleryon",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #10b981;">Assinatura Renovada</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong>{{planName}}</strong> foi renovada com sucesso!</p>
+  <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #065f46;">Próxima renovação: {{nextRenewalDate}}</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Obrigado por continuar conosco! Seu acesso a todos os recursos continua ativo.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Dashboard</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #10b981;">Subscription Renewed</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Your subscription to the <strong>{{planName}}</strong> plan has been successfully renewed!</p>
+  <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #065f46;">Next renewal: {{nextRenewalDate}}</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Thank you for staying with us! Your access to all features remains active.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Access Dashboard</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando a assinatura é renovada",
+    },
+    payment_failed: {
+      subjectPt: "Falha no Pagamento - Ação Necessária",
+      subjectEn: "Payment Failed - Action Required",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Falha no Pagamento</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Não conseguimos processar o pagamento da sua assinatura do plano <strong>{{planName}}</strong>.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Por favor, atualize seus dados de pagamento para evitar a suspensão da sua conta.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Acesse sua conta para atualizar o método de pagamento.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Atualizar Pagamento</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Payment Failed</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">We were unable to process the payment for your <strong>{{planName}}</strong> plan subscription.</p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Please update your payment information to avoid suspension of your account.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Access your account to update your payment method.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Update Payment</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando um pagamento falha",
+    },
+    account_suspended: {
+      subjectPt: "Sua Conta Foi Suspensa - Cleryon",
+      subjectEn: "Your Account Has Been Suspended - Cleryon",
+      htmlPt: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Conta Suspensa</h2>
+  <p style="color: #555; line-height: 1.6;">Olá {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Sua conta foi suspensa devido a: <strong>{{reason}}</strong></p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Suas ofertas e domínios foram temporariamente desativados.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">Se você acredita que isso foi um erro, entre em contato com nosso suporte.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="mailto:suporte@cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contatar Suporte</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+</body></html>`,
+      htmlEn: `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
+  </div>
+  <h2 style="color: #ef4444;">Account Suspended</h2>
+  <p style="color: #555; line-height: 1.6;">Hello {{firstName}},</p>
+  <p style="color: #555; line-height: 1.6;">Your account has been suspended due to: <strong>{{reason}}</strong></p>
+  <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+    <p style="margin: 0; color: #991b1b;">Your offers and domains have been temporarily deactivated.</p>
+  </div>
+  <p style="color: #555; line-height: 1.6;">If you believe this was an error, please contact our support.</p>
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="mailto:suporte@cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contact Support</a>
+  </div>
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
+</body></html>`,
+      description: "Email enviado quando a conta é suspensa",
+    },
   };
 
   // Seed default templates

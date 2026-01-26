@@ -7,7 +7,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = process.env.FROM_EMAIL || 'contato@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
 
-type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed';
+type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed' | 'domain_removed_policy' | 'domain_removed_inactive' | 'domain_removed_admin' | 'subscription_cancelled' | 'subscription_renewed' | 'payment_failed' | 'account_suspended';
 
 interface SendEmailOptions {
   to: string | string[];
