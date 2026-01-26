@@ -6,7 +6,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
-const LOGO_URL = 'https://cleryon.com/images/logo-light.png';
+const LOGO_URL = 'https://cleryon.com/images/logo-dark.png';
 
 const EMAIL_HEADER = `
   <div style="text-align: center; margin-bottom: 30px;">
@@ -336,7 +336,7 @@ ${EMAIL_HEADER}
       </div>
       <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
         <p style="margin: 0; color: #666; font-size: 12px;">Se você não solicitou esta redefinição, ignore este email.</p>
-        <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">Este link expira em 1 hora.</p>
+        <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">Este link expira em 30 minutos.</p>
       </div>
 ${EMAIL_FOOTER}
     </div>

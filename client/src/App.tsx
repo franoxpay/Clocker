@@ -36,6 +36,7 @@ import AdminDomains from "@/pages/admin/AdminDomains";
 import AdminReferrals from "@/pages/admin/AdminReferrals";
 import AdminEmails from "@/pages/admin/AdminEmails";
 import NotFound from "@/pages/not-found";
+import ResetPassword from "@/pages/ResetPassword";
 
 function PageLoadingFallback() {
   return (
@@ -200,6 +201,10 @@ function AuthenticatedLayout() {
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [location] = useLocation();
+
+  if (location.startsWith("/reset-password")) {
+    return <ResetPassword />;
+  }
 
   if (isLoading) {
     return (

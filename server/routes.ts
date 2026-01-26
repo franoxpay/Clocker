@@ -6,10 +6,10 @@ import { randomBytes, createHash } from "crypto";
 import { getStripeClient, getStripePublishableKey, isStripeConfigured, ensureStripeCustomer } from "./stripeClient";
 import { sql } from "drizzle-orm";
 import { db } from "./db";
-import { tiktok2Telemetry } from "@shared/schema";
+import { tiktok2Telemetry, passwordResetTokens } from "@shared/schema";
 import { promises as dns } from "dns";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
-import { sendPlanLimitEmail, sendDomainRemovedEmail } from "./email";
+import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { z } from "zod";
 
 // ==========================================
@@ -2814,6 +2814,103 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error changing password:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const user = await storage.getUserByEmail(email);
+      
+      if (user) {
+        const token = randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+        
+        await db.insert(passwordResetTokens).values({
+          userId: user.id,
+          token,
+          expiresAt,
+        });
+
+        const baseUrl = process.env.BASE_URL || "https://cleryon.com";
+        const resetLink = `${baseUrl}/reset-password?token=${token}`;
+        
+        await sendPasswordResetEmail(user.email, resetLink, user.id);
+      }
+
+      res.json({ success: true, message: "If an account with that email exists, a password reset link has been sent." });
+    } catch (error) {
+      console.error("Error requesting password reset:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, password } = req.body;
+      
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token and password are required" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      const [resetToken] = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(sql`${passwordResetTokens.token} = ${token} AND ${passwordResetTokens.usedAt} IS NULL AND ${passwordResetTokens.expiresAt} > NOW()`)
+        .limit(1);
+
+      if (!resetToken) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      const bcrypt = await import("bcryptjs");
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      await storage.updateUserPassword(resetToken.userId, hashedPassword);
+
+      await db
+        .update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(sql`${passwordResetTokens.id} = ${resetToken.id}`);
+
+      res.json({ success: true, message: "Password has been reset successfully" });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/auth/verify-reset-token", async (req: Request, res: Response) => {
+    try {
+      const { token } = req.query;
+      
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ valid: false, message: "Token is required" });
+      }
+
+      const [resetToken] = await db
+        .select()
+        .from(passwordResetTokens)
+        .where(sql`${passwordResetTokens.token} = ${token} AND ${passwordResetTokens.usedAt} IS NULL AND ${passwordResetTokens.expiresAt} > NOW()`)
+        .limit(1);
+
+      if (!resetToken) {
+        return res.json({ valid: false, message: "Invalid or expired reset token" });
+      }
+
+      res.json({ valid: true });
+    } catch (error) {
+      console.error("Error verifying reset token:", error);
+      res.status(500).json({ valid: false, message: "Internal server error" });
     }
   });
 

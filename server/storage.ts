@@ -58,6 +58,7 @@ export interface IStorage {
   getUserByStripeCustomerId(customerId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, data: Partial<UpsertUser>): Promise<User | undefined>;
+  updateUserPassword(id: string, hashedPassword: string): Promise<void>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(page: number, limit: number, search?: string): Promise<{ users: User[]; total: number }>;
   deleteUserWithCascade(userId: string): Promise<void>;
@@ -381,6 +382,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return updated;
+  }
+
+  async updateUserPassword(id: string, hashedPassword: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ password: hashedPassword, updatedAt: new Date() })
+      .where(eq(users.id, id));
   }
 
   async upsertUser(user: UpsertUser): Promise<User> {
