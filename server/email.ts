@@ -153,13 +153,15 @@ export async function sendSubscriptionConfirmationEmail(email: string, planName:
 }
 
 export async function sendDomainInactiveEmail(email: string, domainName: string, userId?: string) {
+  const safeDomainName = obfuscateDomain(domainName);
+  
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
       </div>
       <h2 style="color: #ef4444;">Alerta: Domínio Inativo</h2>
-      <p style="color: #555; line-height: 1.6;">Detectamos que seu domínio <strong>${domainName}</strong> está inativo ou com problemas de configuração.</p>
+      <p style="color: #555; line-height: 1.6;">Detectamos que seu domínio <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> está inativo ou com problemas de configuração.</p>
       <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #991b1b;">Suas campanhas neste domínio podem estar afetadas. Verifique as configurações de DNS.</p>
       </div>
@@ -181,9 +183,9 @@ export async function sendDomainInactiveEmail(email: string, domainName: string,
 
   return sendEmail({
     to: email,
-    subject: `Alerta: Domínio ${domainName} Inativo - Cleryon`,
+    subject: `Alerta: Verifique seu domínio - Cleryon`,
     html,
-    text: `Alerta: Seu domínio ${domainName} está inativo. Verifique as configurações de DNS.`,
+    text: `Alerta: Seu domínio ${safeDomainName} está inativo. Verifique as configurações de DNS.`,
     userId,
     type: 'domain_inactive',
     metadata: { domainName },
@@ -191,13 +193,15 @@ export async function sendDomainInactiveEmail(email: string, domainName: string,
 }
 
 export async function sendSharedDomainInactiveEmail(email: string, domainName: string, userId?: string) {
+  const safeDomainName = obfuscateDomain(domainName);
+  
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
       <div style="text-align: center; margin-bottom: 30px;">
         <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
       </div>
       <h2 style="color: #f59e0b;">Aviso: Domínio Compartilhado Indisponível</h2>
-      <p style="color: #555; line-height: 1.6;">O domínio compartilhado <strong>${domainName}</strong> que você está utilizando está temporariamente indisponível.</p>
+      <p style="color: #555; line-height: 1.6;">O domínio compartilhado <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> que você está utilizando está temporariamente indisponível.</p>
       <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #92400e;">Suas campanhas neste domínio podem estar afetadas temporariamente.</p>
       </div>
@@ -215,9 +219,9 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
 
   return sendEmail({
     to: email,
-    subject: `Aviso: Domínio Compartilhado ${domainName} Indisponível - Cleryon`,
+    subject: `Aviso: Domínio compartilhado indisponível - Cleryon`,
     html,
-    text: `Aviso: O domínio compartilhado ${domainName} está temporariamente indisponível.`,
+    text: `Aviso: O domínio compartilhado ${safeDomainName} está temporariamente indisponível.`,
     userId,
     type: 'shared_domain_inactive',
     metadata: { domainName },
