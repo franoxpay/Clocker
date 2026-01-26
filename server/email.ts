@@ -4,8 +4,12 @@ import { emailLogs } from '@shared/schema';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'contato@cleryon.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
+
+function obfuscateDomain(domain: string): string {
+  return domain.replace(/\./g, '[.]');
+}
 
 type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed' | 'domain_removed_policy' | 'domain_removed_inactive' | 'domain_removed_admin' | 'subscription_cancelled' | 'subscription_renewed' | 'payment_failed' | 'account_suspended';
 
@@ -221,6 +225,8 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
 }
 
 export async function sendDomainRemovedEmail(email: string, domainName: string, reason: string, firstName: string, userId?: string) {
+  const safeDomainName = obfuscateDomain(domainName);
+  
   const reasonMessages: Record<string, { pt: string; en: string }> = {
     phishing: {
       pt: 'removido devido a uma denúncia externa por violação de política',
@@ -249,7 +255,7 @@ export async function sendDomainRemovedEmail(email: string, domainName: string, 
       </div>
       <h2 style="color: #ef4444;">Domínio Removido</h2>
       <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
-      <p style="color: #555; line-height: 1.6;">O domínio <strong>${domainName}</strong> foi ${reasonText.pt}.</p>
+      <p style="color: #555; line-height: 1.6;">O domínio <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> foi ${reasonText.pt}.</p>
       <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
         <p style="margin: 0; color: #991b1b;">Suas ofertas vinculadas a este domínio foram desvinculadas e precisam de um novo domínio para continuar funcionando.</p>
       </div>
@@ -266,9 +272,9 @@ export async function sendDomainRemovedEmail(email: string, domainName: string, 
 
   return sendEmail({
     to: email,
-    subject: `Domínio Removido: ${domainName} - Cleryon`,
+    subject: `Atualização sobre seu domínio - Cleryon`,
     html,
-    text: `Olá ${firstName}, o domínio ${domainName} foi ${reasonText.pt}. Acesse sua conta para configurar um novo domínio.`,
+    text: `Olá ${firstName}, o domínio ${safeDomainName} foi ${reasonText.pt}. Acesse sua conta para configurar um novo domínio.`,
     userId,
     type: 'domain_removed',
     metadata: { domainName, reason },
