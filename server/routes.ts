@@ -4031,70 +4031,110 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid domain type. Must be 'user' or 'shared'" });
       }
 
+      // For shared domains, get users who activated this domain BEFORE removing
+      let usersWhoActivatedDomain: Array<{ userId: string; email: string; firstName: string | null }> = [];
+      if (domainType === 'shared') {
+        usersWhoActivatedDomain = await storage.getUsersWithActiveSharedDomain(domainId);
+      }
+
       const result = await storage.removeDomainByAdmin(domainId, domainType, adminId, removalReason);
 
-      // Only send notifications if there are affected offers
-      if (result.affectedOffers.length > 0) {
-        // Group affected offers by user
-        const userOffers = new Map<string, Array<{ offerId: number; offerName: string }>>();
-        for (const offer of result.affectedOffers) {
-          if (!userOffers.has(offer.userId)) {
-            userOffers.set(offer.userId, []);
-          }
-          userOffers.get(offer.userId)!.push({ offerId: offer.offerId, offerName: offer.offerName });
+      // Collect all users to notify (from offers + from activated shared domain)
+      const usersToNotify = new Map<string, { email: string; firstName: string; offers: string[] }>();
+
+      // Add users with affected offers
+      for (const offer of result.affectedOffers) {
+        if (!usersToNotify.has(offer.userId)) {
+          const user = await storage.getUser(offer.userId);
+          usersToNotify.set(offer.userId, {
+            email: user?.email || '',
+            firstName: user?.firstName || 'Usuário',
+            offers: []
+          });
+        }
+        usersToNotify.get(offer.userId)!.offers.push(offer.offerName);
+      }
+
+      // Add users who activated shared domain (even without offers)
+      for (const userActivation of usersWhoActivatedDomain) {
+        if (!usersToNotify.has(userActivation.userId)) {
+          usersToNotify.set(userActivation.userId, {
+            email: userActivation.email,
+            firstName: userActivation.firstName || 'Usuário',
+            offers: []
+          });
+        }
+      }
+
+      // For user domains, add the original owner if not already in the list
+      if (domainType === 'user' && result.originalOwner && !usersToNotify.has(result.originalOwner.id)) {
+        usersToNotify.set(result.originalOwner.id, {
+          email: result.originalOwner.email,
+          firstName: result.originalOwner.firstName || 'Usuário',
+          offers: []
+        });
+      }
+
+      // Send notifications to all users
+      for (const [userId, userData] of usersToNotify.entries()) {
+        const firstName = userData.firstName;
+        const titlePt = "Domínio Removido";
+        const titleEn = "Domain Removed";
+        
+        let messagePt: string;
+        let messageEn: string;
+        const hasOffers = userData.offers.length > 0;
+        const offerNames = userData.offers.join(", ");
+        
+        switch (removalReason) {
+          case 'phishing':
+            messagePt = hasOffers 
+              ? `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`
+              : `Olá ${firstName}, identificamos que o domínio ${result.subdomain} que você havia ativado foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido da plataforma.`;
+            messageEn = hasOffers 
+              ? `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`
+              : `Hello ${firstName}, we identified that the domain ${result.subdomain} you had activated was the target of an external complaint for phishing activity. For this reason, the domain was removed from the platform.`;
+            break;
+          case 'inactive':
+            messagePt = hasOffers
+              ? `Olá ${firstName}, o domínio ${result.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`
+              : `Olá ${firstName}, o domínio ${result.subdomain} que você havia ativado foi identificado como inativo e foi removido da plataforma.`;
+            messageEn = hasOffers
+              ? `Hello ${firstName}, the domain ${result.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`
+              : `Hello ${firstName}, the domain ${result.subdomain} you had activated was identified as inactive and has been removed from the platform.`;
+            break;
+          case 'admin_action':
+          default:
+            messagePt = hasOffers
+              ? `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma por decisão administrativa. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`
+              : `Olá ${firstName}, o domínio ${result.subdomain} que você havia ativado foi removido da plataforma por decisão administrativa.`;
+            messageEn = hasOffers
+              ? `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform by administrative decision. Affected offers: ${offerNames}. Please access your account to configure a new domain.`
+              : `Hello ${firstName}, the domain ${result.subdomain} you had activated was removed from the platform by administrative decision.`;
+            break;
         }
 
-        // Create notifications for affected users
-        for (const [userId, affectedOffers] of userOffers.entries()) {
-          const user = await storage.getUser(userId);
-          const firstName = user?.firstName || "Usuário";
+        await storage.createNotification({
+          userId,
+          type: "domain_removed",
+          titlePt,
+          titleEn,
+          messagePt,
+          messageEn,
+        });
 
-          const titlePt = "Domínio Removido";
-          const titleEn = "Domain Removed";
-          
-          // Customize message based on reason
-          let messagePt: string;
-          let messageEn: string;
-          const offerNames = affectedOffers.map(o => o.offerName).join(", ");
-          
-          switch (removalReason) {
-            case 'phishing':
-              messagePt = `Olá ${firstName}, identificamos que o domínio ${result.subdomain} configurado em sua conta foi alvo de uma denúncia externa por atividade associada a phishing. Por esse motivo, o domínio foi removido para evitar incidentes futuros. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
-              messageEn = `Hello ${firstName}, we identified that the domain ${result.subdomain} configured in your account was the target of an external complaint for phishing activity. For this reason, the domain was removed to prevent future incidents. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
-              break;
-            case 'inactive':
-              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`;
-              messageEn = `Hello ${firstName}, the domain ${result.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`;
-              break;
-            case 'admin_action':
-            default:
-              messagePt = `Olá ${firstName}, o domínio ${result.subdomain} foi removido da plataforma por decisão administrativa. As ofertas afetadas: ${offerNames}. Acesse sua conta para configurar um novo domínio.`;
-              messageEn = `Hello ${firstName}, the domain ${result.subdomain} was removed from the platform by administrative decision. Affected offers: ${offerNames}. Please access your account to configure a new domain.`;
-              break;
-          }
-
-          await storage.createNotification({
-            userId,
-            type: "domain_removed",
-            titlePt,
-            titleEn,
-            messagePt,
-            messageEn,
+        // Send email notification
+        if (userData.email) {
+          sendDomainRemovedEmail(userData.email, result.subdomain, removalReason, firstName, userId).catch(err => {
+            console.error(`[ADMIN] Failed to send domain removed email to ${userData.email}:`, err);
           });
-
-          // Send email notification
-          if (user?.email) {
-            sendDomainRemovedEmail(user.email, result.subdomain, removalReason, firstName, userId).catch(err => {
-              console.error(`[ADMIN] Failed to send domain removed email to ${user.email}:`, err);
-            });
-          }
         }
       }
 
       res.json({
         success: true,
         subdomain: result.subdomain,
-        affectedUsersCount: result.affectedOffers.length > 0 ? new Set(result.affectedOffers.map(o => o.userId)).size : 0,
+        affectedUsersCount: usersToNotify.size,
         affectedOffersCount: result.affectedOffers.length,
       });
     } catch (error) {
