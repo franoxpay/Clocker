@@ -6,6 +6,20 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
+const LOGO_URL = 'https://cleryon.com/images/logo-light.png';
+
+const EMAIL_HEADER = `
+  <div style="text-align: center; margin-bottom: 30px;">
+    <a href="https://cleryon.com" style="text-decoration: none;">
+      <img src="${LOGO_URL}" alt="Cleryon" style="max-width: 180px; height: auto;" />
+    </a>
+  </div>
+`;
+
+const EMAIL_FOOTER = `
+  <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
+  <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+`;
 
 function obfuscateDomain(domain: string): string {
   return domain.replace(/\./g, '[.]');
@@ -91,9 +105,7 @@ export async function sendEmail({ to, subject, html, text, userId, type, metadat
 export async function sendWelcomeEmail(email: string, name: string, userId?: string) {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #333;">Bem-vindo ao Cleryon!</h2>
       <p style="color: #555; line-height: 1.6;">Olá ${name || 'usuário'},</p>
       <p style="color: #555; line-height: 1.6;">Sua conta foi criada com sucesso. Estamos felizes em tê-lo conosco!</p>
@@ -103,8 +115,7 @@ export async function sendWelcomeEmail(email: string, name: string, userId?: str
           Acessar Painel
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -122,9 +133,7 @@ export async function sendWelcomeEmail(email: string, name: string, userId?: str
 export async function sendSubscriptionConfirmationEmail(email: string, planName: string, userId?: string) {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #333;">Assinatura Confirmada!</h2>
       <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong style="color: #6366f1;">${planName}</strong> foi ativada com sucesso.</p>
       <p style="color: #555; line-height: 1.6;">Agora você tem acesso a todos os recursos do seu plano. Aproveite!</p>
@@ -136,8 +145,7 @@ export async function sendSubscriptionConfirmationEmail(email: string, planName:
           Acessar Painel
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -157,9 +165,7 @@ export async function sendDomainInactiveEmail(email: string, domainName: string,
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #ef4444;">Alerta: Domínio Inativo</h2>
       <p style="color: #555; line-height: 1.6;">Detectamos que seu domínio <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> está inativo ou com problemas de configuração.</p>
       <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
@@ -176,8 +182,7 @@ export async function sendDomainInactiveEmail(email: string, domainName: string,
           Verificar Domínios
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -197,9 +202,7 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #f59e0b;">Aviso: Domínio Compartilhado Indisponível</h2>
       <p style="color: #555; line-height: 1.6;">O domínio compartilhado <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> que você está utilizando está temporariamente indisponível.</p>
       <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
@@ -212,8 +215,7 @@ export async function sendSharedDomainInactiveEmail(email: string, domainName: s
           Gerenciar Domínios
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -254,9 +256,7 @@ export async function sendDomainRemovedEmail(email: string, domainName: string, 
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #ef4444;">Domínio Removido</h2>
       <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
       <p style="color: #555; line-height: 1.6;">O domínio <code style="background-color: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${safeDomainName}</code> foi ${reasonText.pt}.</p>
@@ -269,8 +269,7 @@ export async function sendDomainRemovedEmail(email: string, domainName: string, 
           Configurar Novo Domínio
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -294,9 +293,7 @@ export async function sendPlanLimitEmail(email: string, limitType: 'clicks' | 'o
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #f59e0b;">Limite do Plano Atingido</h2>
       <p style="color: #555; line-height: 1.6;">Você atingiu o limite de <strong>${limitLabels[limitType]}</strong> do seu plano <strong>${planName}</strong>.</p>
       <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
@@ -310,8 +307,7 @@ export async function sendPlanLimitEmail(email: string, limitType: 'clicks' | 'o
           Ver Planos
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -329,9 +325,7 @@ export async function sendPlanLimitEmail(email: string, limitType: 'clicks' | 'o
 export async function sendPasswordResetEmail(email: string, resetLink: string, userId?: string) {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #333;">Redefinição de Senha</h2>
       <p style="color: #555; line-height: 1.6;">Você solicitou a redefinição da sua senha.</p>
       <p style="color: #555; line-height: 1.6;">Clique no botão abaixo para criar uma nova senha:</p>
@@ -344,8 +338,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string, u
         <p style="margin: 0; color: #666; font-size: 12px;">Se você não solicitou esta redefinição, ignore este email.</p>
         <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">Este link expira em 1 hora.</p>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
@@ -362,9 +355,7 @@ export async function sendPasswordResetEmail(email: string, resetLink: string, u
 export async function sendNotificationEmail(email: string, title: string, message: string, userId?: string) {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <div style="text-align: center; margin-bottom: 30px;">
-        <h1 style="color: #6366f1; margin: 0;">Cleryon</h1>
-      </div>
+${EMAIL_HEADER}
       <h2 style="color: #333;">${title}</h2>
       <p style="color: #555; line-height: 1.6;">${message}</p>
       <div style="text-align: center; margin: 30px 0;">
@@ -372,8 +363,7 @@ export async function sendNotificationEmail(email: string, title: string, messag
           Acessar Painel
         </a>
       </div>
-      <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
-      <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
+${EMAIL_FOOTER}
     </div>
   `;
 
