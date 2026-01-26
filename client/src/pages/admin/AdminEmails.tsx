@@ -49,11 +49,19 @@ interface EmailStats {
 const EMAIL_TYPES = [
   "welcome",
   "subscription",
+  "subscription_cancelled",
+  "subscription_renewed",
   "domain_inactive",
   "shared_domain_inactive",
+  "domain_removed",
+  "domain_removed_policy",
+  "domain_removed_inactive",
+  "domain_removed_admin",
   "plan_limit",
   "notification",
   "password_reset",
+  "payment_failed",
+  "account_suspended",
 ];
 
 export default function AdminEmails() {
@@ -89,11 +97,19 @@ export default function AdminEmails() {
       "admin.allTypes": { "pt-BR": "Todos os tipos", en: "All types" },
       "admin.welcome": { "pt-BR": "Boas-vindas", en: "Welcome" },
       "admin.subscription": { "pt-BR": "Assinatura", en: "Subscription" },
+      "admin.subscription_cancelled": { "pt-BR": "Assinatura Cancelada", en: "Subscription Cancelled" },
+      "admin.subscription_renewed": { "pt-BR": "Assinatura Renovada", en: "Subscription Renewed" },
       "admin.domain_inactive": { "pt-BR": "Domínio Inativo", en: "Domain Inactive" },
       "admin.shared_domain_inactive": { "pt-BR": "Domínio Compartilhado Inativo", en: "Shared Domain Inactive" },
+      "admin.domain_removed": { "pt-BR": "Domínio Removido", en: "Domain Removed" },
+      "admin.domain_removed_policy": { "pt-BR": "Domínio Removido (Política)", en: "Domain Removed (Policy)" },
+      "admin.domain_removed_inactive": { "pt-BR": "Domínio Removido (Inativo)", en: "Domain Removed (Inactive)" },
+      "admin.domain_removed_admin": { "pt-BR": "Domínio Removido (Admin)", en: "Domain Removed (Admin)" },
       "admin.plan_limit": { "pt-BR": "Limite do Plano", en: "Plan Limit" },
       "admin.notification": { "pt-BR": "Notificação", en: "Notification" },
       "admin.password_reset": { "pt-BR": "Redefinição de Senha", en: "Password Reset" },
+      "admin.payment_failed": { "pt-BR": "Pagamento Falhou", en: "Payment Failed" },
+      "admin.account_suspended": { "pt-BR": "Conta Suspensa", en: "Account Suspended" },
       "admin.sent": { "pt-BR": "Enviado", en: "Sent" },
       "admin.failed": { "pt-BR": "Falha", en: "Failed" },
       "admin.noEmails": { "pt-BR": "Nenhum e-mail encontrado", en: "No emails found" },
@@ -125,11 +141,19 @@ export default function AdminEmails() {
     const typeLabels: Record<string, string> = {
       welcome: t("admin.welcome"),
       subscription: t("admin.subscription"),
+      subscription_cancelled: t("admin.subscription_cancelled"),
+      subscription_renewed: t("admin.subscription_renewed"),
       domain_inactive: t("admin.domain_inactive"),
       shared_domain_inactive: t("admin.shared_domain_inactive"),
+      domain_removed: t("admin.domain_removed"),
+      domain_removed_policy: t("admin.domain_removed_policy"),
+      domain_removed_inactive: t("admin.domain_removed_inactive"),
+      domain_removed_admin: t("admin.domain_removed_admin"),
       plan_limit: t("admin.plan_limit"),
       notification: t("admin.notification"),
       password_reset: t("admin.password_reset"),
+      payment_failed: t("admin.payment_failed"),
+      account_suspended: t("admin.account_suspended"),
     };
     return typeLabels[type] || type;
   };
@@ -138,11 +162,19 @@ export default function AdminEmails() {
     const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
       welcome: "default",
       subscription: "secondary",
+      subscription_cancelled: "destructive",
+      subscription_renewed: "default",
       domain_inactive: "destructive",
       shared_domain_inactive: "destructive",
+      domain_removed: "destructive",
+      domain_removed_policy: "destructive",
+      domain_removed_inactive: "destructive",
+      domain_removed_admin: "destructive",
       plan_limit: "outline",
       notification: "secondary",
       password_reset: "outline",
+      payment_failed: "destructive",
+      account_suspended: "destructive",
     };
     return variants[type] || "default";
   };
