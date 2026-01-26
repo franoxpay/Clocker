@@ -5418,6 +5418,13 @@ export async function registerRoutes(
       // Extract domain using the helper function that checks multiple headers
       const domainToCheck = extractDomainFromRequest(req);
       
+      // Skip if this is the primary app domain (cleryon.com)
+      const primaryAppDomains = ["cleryon.com", "www.cleryon.com"];
+      if (primaryAppDomains.some(d => domainToCheck === d || domainToCheck.endsWith(".replit.dev") || domainToCheck.endsWith(".kirk.replit.dev"))) {
+        console.log(`[Cloak /r/:slug] Skipping - primary app domain: ${domainToCheck}`);
+        return res.status(404).json({ error: "Not found", message: "This endpoint is for cloaking redirects on custom domains only." });
+      }
+      
       console.log(`[Cloak] Looking for domain: ${domainToCheck}`);
       
       domain = await storage.getDomainBySubdomain(domainToCheck);
@@ -5992,14 +5999,24 @@ export async function registerRoutes(
     console.log(`[CLOAK /:slug] Received request for slug: ${slug}`);
     
     // Skip known routes and static files
-    const skipPaths = ["api", "assets", "src", "@", "node_modules", "favicon.ico", "robots.txt"];
-    if (skipPaths.some(p => slug.startsWith(p)) || slug.includes(".")) {
+    const skipPaths = [
+      "api", "assets", "src", "@", "node_modules", "favicon.ico", "robots.txt", "images",
+      "domains", "offers", "logs", "analytics", "subscription", "settings", "confg-admin", "reset-password"
+    ];
+    if (skipPaths.some(p => slug === p || slug.startsWith(p + "/")) || slug.includes(".")) {
       console.log(`[CLOAK /:slug] Skipping - matches skip pattern`);
       return next();
     }
     
     // Use the same helper function to extract domain from request headers
     const domainToCheck = extractDomainFromRequest(req);
+    
+    // Skip if this is the primary app domain (cleryon.com)
+    const primaryAppDomains = ["cleryon.com", "www.cleryon.com"];
+    if (primaryAppDomains.some(d => domainToCheck === d || domainToCheck.endsWith(".replit.dev") || domainToCheck.endsWith(".kirk.replit.dev"))) {
+      console.log(`[CLOAK /:slug] Skipping - primary app domain: ${domainToCheck}`);
+      return next();
+    }
     
     console.log(`[CLOAK /:slug] Host check - domainToCheck: ${domainToCheck}`);
     console.log(`[CLOAK /:slug] All relevant headers: ${JSON.stringify({
