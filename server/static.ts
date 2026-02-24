@@ -16,12 +16,15 @@ export function serveStatic(app: Express) {
     const rawHost = req.get("host") || "";
     const forwardedHost = req.get("x-forwarded-host") || "";
     const host = (forwardedHost || rawHost).split(":")[0].toLowerCase();
-    const mainDomain = (process.env.MAIN_DOMAIN || "clocker.franox.com.br").toLowerCase();
+    const mainDomain = (process.env.MAIN_DOMAIN || "cleryon.com").toLowerCase();
     const easypanelHost = ".easypanel.host";
+    const additionalMainDomains = ["cleryon.com", "www.cleryon.com"];
     
     console.log(`[STATIC FALLBACK] Path: ${req.path}, Host: ${host}, RawHost: ${rawHost}, ForwardedHost: ${forwardedHost}, MainDomain: ${mainDomain}`);
     
     const isMainDomain = host === mainDomain || 
+                         host === `www.${mainDomain}` ||
+                         additionalMainDomains.includes(host) ||
                          host.endsWith(easypanelHost) || 
                          host === "localhost" ||
                          host.includes("replit");
