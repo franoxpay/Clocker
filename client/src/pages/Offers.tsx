@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,6 +100,7 @@ export default function Offers() {
     platform: "facebook",
     domainId: "",
     blackPageUrl: "",
+    blackPages: [{ url: "", percentage: 100 }] as Array<{ url: string; percentage: number }>,
     whitePageUrl: "",
     allowedCountries: ["BR"],
     allowedDevices: ["smartphone"],
@@ -241,6 +242,7 @@ export default function Offers() {
       platform: "facebook",
       domainId: "",
       blackPageUrl: "",
+      blackPages: [{ url: "", percentage: 100 }],
       whitePageUrl: "",
       allowedCountries: ["BR"],
       allowedDevices: ["smartphone"],
@@ -268,12 +270,17 @@ export default function Offers() {
     } else if (offer.domainId) {
       domainIdValue = String(offer.domainId);
     }
+    const existingBlackPages = (offer as any).blackPages && Array.isArray((offer as any).blackPages) && (offer as any).blackPages.length > 0
+      ? (offer as any).blackPages
+      : [{ url: offer.blackPageUrl, percentage: 100 }];
+
     setFormData({
       name: offer.name,
       slug: offer.slug,
       platform: offer.platform,
       domainId: domainIdValue,
       blackPageUrl: offer.blackPageUrl,
+      blackPages: existingBlackPages,
       whitePageUrl: offer.whitePageUrl,
       allowedCountries: offer.allowedCountries,
       allowedDevices: offer.allowedDevices,
@@ -293,10 +300,26 @@ export default function Offers() {
       });
       return;
     }
+
+    for (const bp of formData.blackPages) {
+      if (!bp.url || bp.url.trim() === '') {
+        toast({
+          title: t("common.error"),
+          description: language === "pt-BR" ? "Preencha todas as URLs da Página Black" : "Fill in all Black Page URLs",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const blackPages = formData.blackPages.map(bp => ({ url: bp.url.trim(), percentage: bp.percentage }));
+    const blackPageUrl = blackPages[0].url;
     
     if (viewMode === "edit" && editingOffer) {
       const submitData = {
         ...formData,
+        blackPageUrl,
+        blackPages,
         domainId: formData.domainId,
       };
       updateMutation.mutate({ ...submitData, id: editingOffer.id } as any);
@@ -304,6 +327,8 @@ export default function Offers() {
       const { slug: _slug, ...createData } = formData;
       const submitData = {
         ...createData,
+        blackPageUrl,
+        blackPages,
         domainId: formData.domainId,
       };
       createMutation.mutate(submitData as any);
@@ -538,21 +563,119 @@ export default function Offers() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="blackPage">{t("offers.blackPage")}</Label>
-                  <Input
-                    id="blackPage"
-                    type="url"
-                    value={formData.blackPageUrl}
-                    onChange={(e) => setFormData(prev => ({ ...prev, blackPageUrl: e.target.value }))}
-                    placeholder="https://exemplo.com/pagina-vendas"
-                    required
-                    data-testid="input-black-page"
-                  />
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>{t("offers.blackPage")}</Label>
+                    {formData.blackPages.length < 5 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const newPages = [...formData.blackPages, { url: "", percentage: 0 }];
+                          const equalShare = Math.floor(100 / newPages.length);
+                          const remainder = 100 - equalShare * newPages.length;
+                          const redistributed = newPages.map((bp, i) => ({
+                            ...bp,
+                            percentage: equalShare + (i === 0 ? remainder : 0),
+                          }));
+                          setFormData(prev => ({ ...prev, blackPages: redistributed }));
+                        }}
+                        data-testid="button-add-black-page"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        {language === "pt-BR" ? "Adicionar Outro Link" : "Add Another Link"}
+                      </Button>
+                    )}
+                  </div>
+
+                  {formData.blackPages.map((bp, index) => (
+                    <div key={index} className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <div className={formData.blackPages.length > 1 ? "flex-1" : "w-full"}>
+                          <Input
+                            type="url"
+                            value={bp.url}
+                            onChange={(e) => {
+                              const updated = [...formData.blackPages];
+                              updated[index] = { ...updated[index], url: e.target.value };
+                              setFormData(prev => ({ ...prev, blackPages: updated }));
+                            }}
+                            placeholder={`https://exemplo.com/pagina-vendas${formData.blackPages.length > 1 ? `-${index + 1}` : ""}`}
+                            required
+                            data-testid={`input-black-page-${index}`}
+                          />
+                        </div>
+                        {formData.blackPages.length > 1 && (
+                          <>
+                            <div className="w-20">
+                              <Input
+                                type="number"
+                                min={10}
+                                max={100}
+                                value={bp.percentage}
+                                onChange={(e) => {
+                                  const otherCount = formData.blackPages.length - 1;
+                                  const maxAllowed = 100 - (otherCount * 10);
+                                  const val = Math.max(10, Math.min(maxAllowed, parseInt(e.target.value) || 10));
+                                  const updated = [...formData.blackPages];
+                                  updated[index] = { ...updated[index], percentage: val };
+                                  const remaining = 100 - val;
+                                  const othersCount = updated.length - 1;
+                                  if (othersCount > 0) {
+                                    const equalShare = Math.floor(remaining / othersCount);
+                                    let leftover = remaining - equalShare * othersCount;
+                                    updated.forEach((p, i) => {
+                                      if (i !== index) {
+                                        p.percentage = equalShare + (leftover > 0 ? 1 : 0);
+                                        if (leftover > 0) leftover--;
+                                      }
+                                    });
+                                  }
+                                  setFormData(prev => ({ ...prev, blackPages: updated }));
+                                }}
+                                data-testid={`input-black-page-percentage-${index}`}
+                              />
+                            </div>
+                            <span className="text-sm text-muted-foreground w-4">%</span>
+                            {formData.blackPages.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 text-destructive hover:text-destructive"
+                                onClick={() => {
+                                  const updated = formData.blackPages.filter((_, i) => i !== index);
+                                  if (updated.length === 1) {
+                                    updated[0].percentage = 100;
+                                  } else {
+                                    const equalShare = Math.floor(100 / updated.length);
+                                    const remainder = 100 - equalShare * updated.length;
+                                    updated.forEach((p, i) => {
+                                      p.percentage = equalShare + (i === 0 ? remainder : 0);
+                                    });
+                                  }
+                                  setFormData(prev => ({ ...prev, blackPages: updated }));
+                                }}
+                                data-testid={`button-remove-black-page-${index}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
                   <p className="text-xs text-muted-foreground">
-                    {language === "pt-BR" 
-                      ? "Página real que será exibida para tráfego válido" 
-                      : "Real page shown to valid traffic"}
+                    {formData.blackPages.length > 1
+                      ? (language === "pt-BR"
+                        ? "O tráfego será dividido entre os links conforme as porcentagens definidas"
+                        : "Traffic will be split between links according to the defined percentages")
+                      : (language === "pt-BR" 
+                        ? "Página real que será exibida para tráfego válido" 
+                        : "Real page shown to valid traffic")}
                   </p>
                 </div>
 
@@ -1059,9 +1182,26 @@ export default function Offers() {
                   </div>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground truncate">
-                {previewOffer?.blackPageUrl || "-"}
-              </p>
+              {(() => {
+                const bp = (previewOffer as any)?.blackPages;
+                if (bp && Array.isArray(bp) && bp.length > 1) {
+                  return (
+                    <div className="space-y-1">
+                      {bp.map((page: { url: string; percentage: number }, i: number) => (
+                        <p key={i} className="text-xs text-muted-foreground truncate" data-testid={`text-preview-black-page-${i}`}>
+                          <Badge variant="secondary" className="mr-1 text-[10px] px-1.5 py-0">{page.percentage}%</Badge>
+                          {page.url}
+                        </p>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {previewOffer?.blackPageUrl || "-"}
+                  </p>
+                );
+              })()}
             </div>
 
             <div className="space-y-2">

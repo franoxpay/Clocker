@@ -21,7 +21,7 @@ Key data models include:
 - **Users**: Multi-tenant users with subscription details and usage tracking. Includes `hasUsedCoupon` field for lifetime coupon usage tracking.
 - **Plans**: Subscription tiers defining limits for offers, domains, and clicks.
 - **Domains**: User-owned subdomains for campaign traffic routing.
-- **Offers**: Campaign configurations including targeting rules.
+- **Offers**: Campaign configurations including targeting rules. Supports multiple black page URLs (up to 5) with percentage-based traffic splitting via `blackPages` JSONB column. Falls back to single `blackPageUrl` for legacy offers.
 - **ClickLogs**: Detailed traffic analytics.
 - **DailyClickMetrics**: Aggregated analytics for dashboards.
 - **Notifications**: In-app notification system.

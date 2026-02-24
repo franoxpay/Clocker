@@ -144,6 +144,7 @@ export const offers = pgTable(
     xcode: varchar("xcode").notNull(),
     platform: varchar("platform").notNull(),
     blackPageUrl: text("black_page_url").notNull(),
+    blackPages: jsonb("black_pages").$type<Array<{ url: string; percentage: number }>>(),
     whitePageUrl: text("white_page_url").notNull(),
     allowedCountries: text("allowed_countries").array().default(sql`ARRAY['BR']`).notNull(),
     allowedDevices: text("allowed_devices").array().default(sql`ARRAY['smartphone']`).notNull(),
