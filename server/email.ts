@@ -2,7 +2,7 @@ import { Resend } from 'resend';
 import { db } from './db';
 import { emailLogs } from '@shared/schema';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
@@ -68,6 +68,14 @@ export async function sendEmail({ to, subject, html, text, userId, type, metadat
   let errorLogged = false;
   
   try {
+    if (!resend) {
+      console.warn('Resend not configured, skipping email send');
+      for (const email of toEmails) {
+        await logEmail(userId, email, subject, type, 'failed', undefined, 'Resend not configured', metadata);
+      }
+      return null;
+    }
+
     const { data, error } = await resend.emails.send({
       from: `${FROM_NAME} <${FROM_EMAIL}>`,
       to: toEmails,
