@@ -106,6 +106,8 @@ export default function Offers() {
     isActive: true,
   });
 
+  const isEditMode = viewMode === "edit" && editingOffer !== null;
+
   const { data: offers = [], isLoading } = useQuery<OfferWithDomain[]>({
     queryKey: ["/api/offers"],
   });
@@ -292,14 +294,18 @@ export default function Offers() {
       return;
     }
     
-    const submitData = {
-      ...formData,
-      domainId: formData.domainId,
-    };
-
     if (viewMode === "edit" && editingOffer) {
+      const submitData = {
+        ...formData,
+        domainId: formData.domainId,
+      };
       updateMutation.mutate({ ...submitData, id: editingOffer.id } as any);
     } else {
+      const { slug: _slug, ...createData } = formData;
+      const submitData = {
+        ...createData,
+        domainId: formData.domainId,
+      };
       createMutation.mutate(submitData as any);
     }
   };
@@ -433,22 +439,24 @@ export default function Offers() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="slug">{t("offers.slug")}</Label>
-                  <Input
-                    id="slug"
-                    value={formData.slug}
-                    onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") }))}
-                    placeholder="minha-oferta"
-                    required
-                    data-testid="input-offer-slug"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {language === "pt-BR" 
-                      ? "Será usado na URL: /minha-oferta" 
-                      : "Will be used in URL: /my-offer"}
-                  </p>
-                </div>
+                {isEditMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="slug">{t("offers.slug")}</Label>
+                    <Input
+                      id="slug"
+                      value={formData.slug}
+                      onChange={(e) => setFormData(prev => ({ ...prev, slug: e.target.value.replace(/[^a-zA-Z0-9-]/g, "") }))}
+                      placeholder="h3D-ewj"
+                      required
+                      data-testid="input-offer-slug"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {language === "pt-BR" 
+                        ? "Slug usada na URL. Gerada automaticamente, mas pode ser editada." 
+                        : "Slug used in URL. Auto-generated, but can be edited."}
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="platform">{t("offers.platform")}</Label>

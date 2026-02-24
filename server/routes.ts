@@ -888,6 +888,39 @@ function generateXcode(): string {
   return `${part1}-${part2}`;
 }
 
+function generateSlug(): string {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const partLength = 3;
+  let part1 = "";
+  let part2 = "";
+  for (let i = 0; i < partLength; i++) {
+    part1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    part2 += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${part1}-${part2}`;
+}
+
+async function generateUniqueSlug(
+  storage: any,
+  domainId: number | null,
+  sharedDomainId: number | null,
+  maxRetries: number = 20
+): Promise<string> {
+  for (let i = 0; i < maxRetries; i++) {
+    const slug = generateSlug();
+    let existing = null;
+    if (sharedDomainId) {
+      existing = await storage.getOfferBySlugAndSharedDomain(slug, sharedDomainId);
+    } else {
+      existing = await storage.getOfferBySlugAndDomain(slug, domainId);
+    }
+    if (!existing) {
+      return slug;
+    }
+  }
+  throw new Error("Failed to generate a unique slug after multiple attempts");
+}
+
 function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   const uaLower = ua.toLowerCase();
   if (/android.*mobile|iphone|ipod|blackberry|windows phone/i.test(uaLower)) {
@@ -1983,9 +2016,8 @@ export async function registerRoutes(
   app.post("/api/offers", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const { name, slug, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
+      const { name, platform, domainId, blackPageUrl, whitePageUrl, allowedCountries, allowedDevices, isActive } = req.body;
 
-      // Check if user can create more offers
       const canCreate = await storage.canUserCreateOffer(userId);
       if (!canCreate.allowed) {
         if (canCreate.reason === 'user_suspended') {
@@ -2026,18 +2058,7 @@ export async function registerRoutes(
         }
       }
 
-      if (parsedSharedDomainId) {
-        const existingOffer = await storage.getOfferBySlugAndSharedDomain(slug, parsedSharedDomainId);
-        if (existingOffer) {
-          return res.status(400).json({ message: "Slug already exists on this shared domain" });
-        }
-      } else {
-        const existingOffer = await storage.getOfferBySlugAndDomain(slug, parsedDomainId);
-        if (existingOffer) {
-          return res.status(400).json({ message: "Slug already exists on this domain" });
-        }
-      }
-
+      const slug = await generateUniqueSlug(storage, parsedDomainId, parsedSharedDomainId);
       const xcode = generateXcode();
       const offer = await storage.createOffer({
         userId,
