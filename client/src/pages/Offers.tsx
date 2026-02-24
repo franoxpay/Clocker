@@ -312,6 +312,20 @@ export default function Offers() {
       }
     }
 
+    if (formData.blackPages.length > 1) {
+      const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
+      if (total !== 100) {
+        toast({
+          title: t("common.error"),
+          description: language === "pt-BR" 
+            ? `A soma das porcentagens deve ser 100%. Atual: ${total}%` 
+            : `Percentages must sum to 100%. Current: ${total}%`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const blackPages = formData.blackPages.map(bp => ({ url: bp.url.trim(), percentage: bp.percentage }));
     const blackPageUrl = blackPages[0].url;
     
@@ -572,14 +586,7 @@ export default function Offers() {
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          const newPages = [...formData.blackPages, { url: "", percentage: 0 }];
-                          const equalShare = Math.floor(100 / newPages.length);
-                          const remainder = 100 - equalShare * newPages.length;
-                          const redistributed = newPages.map((bp, i) => ({
-                            ...bp,
-                            percentage: equalShare + (i === 0 ? remainder : 0),
-                          }));
-                          setFormData(prev => ({ ...prev, blackPages: redistributed }));
+                          setFormData(prev => ({ ...prev, blackPages: [...prev.blackPages, { url: "", percentage: 0 }] }));
                         }}
                         data-testid="button-add-black-page"
                       >
@@ -615,23 +622,9 @@ export default function Offers() {
                                 max={100}
                                 value={bp.percentage}
                                 onChange={(e) => {
-                                  const otherCount = formData.blackPages.length - 1;
-                                  const maxAllowed = 100 - (otherCount * 10);
-                                  const val = Math.max(10, Math.min(maxAllowed, parseInt(e.target.value) || 10));
+                                  const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                                   const updated = [...formData.blackPages];
                                   updated[index] = { ...updated[index], percentage: val };
-                                  const remaining = 100 - val;
-                                  const othersCount = updated.length - 1;
-                                  if (othersCount > 0) {
-                                    const equalShare = Math.floor(remaining / othersCount);
-                                    let leftover = remaining - equalShare * othersCount;
-                                    updated.forEach((p, i) => {
-                                      if (i !== index) {
-                                        p.percentage = equalShare + (leftover > 0 ? 1 : 0);
-                                        if (leftover > 0) leftover--;
-                                      }
-                                    });
-                                  }
                                   setFormData(prev => ({ ...prev, blackPages: updated }));
                                 }}
                                 data-testid={`input-black-page-percentage-${index}`}
@@ -648,12 +641,6 @@ export default function Offers() {
                                   const updated = formData.blackPages.filter((_, i) => i !== index);
                                   if (updated.length === 1) {
                                     updated[0].percentage = 100;
-                                  } else {
-                                    const equalShare = Math.floor(100 / updated.length);
-                                    const remainder = 100 - equalShare * updated.length;
-                                    updated.forEach((p, i) => {
-                                      p.percentage = equalShare + (i === 0 ? remainder : 0);
-                                    });
                                   }
                                   setFormData(prev => ({ ...prev, blackPages: updated }));
                                 }}
@@ -668,11 +655,21 @@ export default function Offers() {
                     </div>
                   ))}
 
+                  {formData.blackPages.length > 1 && (() => {
+                    const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
+                    const isValid = total === 100;
+                    return (
+                      <div className={`text-sm font-medium ${isValid ? "text-green-600 dark:text-green-400" : "text-destructive"}`} data-testid="text-percentage-total">
+                        {language === "pt-BR" ? "Total" : "Total"}: {total}% {isValid ? "✓" : (language === "pt-BR" ? "(deve ser 100%)" : "(must be 100%)")}
+                      </div>
+                    );
+                  })()}
+
                   <p className="text-xs text-muted-foreground">
                     {formData.blackPages.length > 1
                       ? (language === "pt-BR"
-                        ? "O tráfego será dividido entre os links conforme as porcentagens definidas"
-                        : "Traffic will be split between links according to the defined percentages")
+                        ? "O tráfego será dividido entre os links conforme as porcentagens definidas. A soma deve ser 100%."
+                        : "Traffic will be split between links according to the defined percentages. Total must be 100%.")
                       : (language === "pt-BR" 
                         ? "Página real que será exibida para tráfego válido" 
                         : "Real page shown to valid traffic")}
