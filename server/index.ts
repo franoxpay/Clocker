@@ -335,6 +335,35 @@ app.use((req, res, next) => {
   next();
 });
 
+async function ensureFreePlanExists() {
+  try {
+    const freePlan = await storage.getFreePlan();
+    if (!freePlan) {
+      console.log("[Seed] Creating default free plan...");
+      await storage.createPlan({
+        name: "Free",
+        nameEn: "Free",
+        price: 0,
+        maxOffers: 0,
+        maxDomains: 0,
+        maxClicks: 0,
+        hasTrial: false,
+        trialDays: 0,
+        isActive: true,
+        isUnlimited: false,
+        isPopular: false,
+        isFree: true,
+        isDefault: true,
+        stripePriceId: null,
+        stripeProductId: null,
+      });
+      console.log("[Seed] Free plan created.");
+    }
+  } catch (err: any) {
+    console.error("[Seed] Failed to ensure free plan:", err.message);
+  }
+}
+
 (async () => {
   await initStripe();
   initEasyPanel();
@@ -344,6 +373,8 @@ app.use((req, res, next) => {
   if (redisClient) {
     console.log("[Redis] Initializing connection...");
   }
+  
+  await ensureFreePlanExists();
   
   setupWebSocket(httpServer);
   startDomainMonitor();

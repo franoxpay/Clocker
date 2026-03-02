@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   gracePeriodEndsAt: timestamp("grace_period_ends_at"),
   hasUsedCoupon: boolean("has_used_coupon").default(false).notNull(),
   usedCouponId: integer("used_coupon_id"),
+  offersDeactivatedBySystem: boolean("offers_deactivated_by_system").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -67,6 +68,8 @@ export const plans = pgTable("plans", {
   isActive: boolean("is_active").default(true).notNull(),
   isUnlimited: boolean("is_unlimited").default(false).notNull(),
   isPopular: boolean("is_popular").default(false).notNull(),
+  isFree: boolean("is_free").default(false).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(),
   stripePriceId: varchar("stripe_price_id"),
   stripeProductId: varchar("stripe_product_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

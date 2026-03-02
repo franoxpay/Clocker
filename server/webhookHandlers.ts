@@ -271,17 +271,17 @@ export class WebhookHandlers {
       }
     }
 
+    const isNowActive = status === 'active' || status === 'trialing';
+
     // Auto-unsuspend if user upgraded and new plan accommodates their usage
-    if (status === 'active' && user.suspendedAt && newPlan) {
+    if (isNowActive && user.suspendedAt && newPlan) {
       const clicksThisMonth = user.clicksUsedThisMonth || 0;
       
-      // Check if new plan can accommodate the user's current click usage
       if (newPlan.isUnlimited || clicksThisMonth <= newPlan.maxClicks) {
         updateData.suspendedAt = null;
         updateData.suspensionReason = null;
         updateData.gracePeriodEndsAt = null;
         
-        // Log the unsuspension
         await storage.createSuspensionHistoryEntry({
           userId: user.id,
           event: 'unsuspended',
@@ -296,13 +296,28 @@ export class WebhookHandlers {
       }
     }
 
-    await storage.updateUser(user.id, updateData);
-    console.log(`[WebhookHandlers] Updated user ${user.id} with subscription update:`, updateData);
+    // Restore offers if subscription became active again after being on free plan
+    if (isNowActive && newPlan) {
+      updateData.gracePeriodEndsAt = null;
+      await storage.updateUser(user.id, updateData);
+      await storage.restoreUserSubscription(user.id, newPlan.id, status);
+      console.log(`[WebhookHandlers] Restored subscription and offers for user ${user.id} — plan: ${newPlan.name}`);
+    } else {
+      // For inactive/canceled statuses, downgrade to free plan immediately
+      if (!isNowActive) {
+        await storage.updateUser(user.id, updateData);
+        await storage.downgradeUserToFreePlan(user.id);
+        console.log(`[WebhookHandlers] Subscription became inactive for user ${user.id}, downgraded to free plan`);
+      } else {
+        await storage.updateUser(user.id, updateData);
+      }
+    }
+
+    console.log(`[WebhookHandlers] Updated user ${user.id} with subscription update — status: ${status}`);
   }
 
   private static async handleSubscriptionDeleted(subscription: any): Promise<void> {
     const customerId = subscription.customer;
-    const subscriptionId = subscription.id;
 
     console.log(`[WebhookHandlers] subscription.deleted - customerId: ${customerId}`);
 
@@ -312,32 +327,25 @@ export class WebhookHandlers {
       return;
     }
 
-    // Start 3-day grace period for renewal
-    const gracePeriodEndsAt = new Date();
-    gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 72);
-
-    const updateData: any = {
-      subscriptionStatus: 'canceled',
-      subscriptionEndDate: subscription.ended_at 
-        ? new Date(subscription.ended_at * 1000) 
+    // Immediately downgrade to free plan — no grace period
+    await storage.updateUser(user.id, {
+      subscriptionEndDate: subscription.ended_at
+        ? new Date(subscription.ended_at * 1000)
         : new Date(),
-      gracePeriodEndsAt,
-    };
+    });
+    await storage.downgradeUserToFreePlan(user.id);
 
-    await storage.updateUser(user.id, updateData);
-    
-    // Log the grace period start
     await storage.createSuspensionHistoryEntry({
       userId: user.id,
       event: 'grace_started',
       reason: 'subscription_canceled',
-      details: `Subscription canceled. Grace period for renewal until ${gracePeriodEndsAt.toISOString()} (3 days)`,
+      details: `Subscription canceled. User immediately downgraded to free plan and offers deactivated.`,
       actorType: 'system',
       clicksAtEvent: user.clicksUsedThisMonth,
       planIdAtEvent: user.planId,
     });
-    
-    console.log(`[WebhookHandlers] Updated user ${user.id} - subscription canceled, grace period until ${gracePeriodEndsAt.toISOString()}`);
+
+    console.log(`[WebhookHandlers] User ${user.id} downgraded to free plan — offers deactivated immediately`);
 
     // Reverse pending commissions for this user (if they used a referral)
     await this.reversePendingCommissionsForUser(user.id, 'subscription_canceled_early');

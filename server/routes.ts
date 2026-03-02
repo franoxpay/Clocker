@@ -1720,11 +1720,12 @@ export async function registerRoutes(
       const { password, ...userWithoutPassword } = user;
       const isSuspended = user.suspendedAt !== null;
       const isTrialing = user.trialEndsAt !== null && new Date(user.trialEndsAt) > new Date();
+      const isSubscriptionActive = ['active', 'trialing'].includes(user.subscriptionStatus ?? '');
       
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
       const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
       
-      res.json({ ...userWithoutPassword, isSuspended, isTrialing, isAdmin });
+      res.json({ ...userWithoutPassword, isSuspended, isTrialing, isAdmin, isSubscriptionActive });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -2065,6 +2066,12 @@ export async function registerRoutes(
             code: "USER_SUSPENDED"
           });
         }
+        if (canCreate.reason === 'subscription_inactive') {
+          return res.status(403).json({ 
+            message: "Your subscription is inactive. Please renew your plan to create offers.",
+            code: "SUBSCRIPTION_INACTIVE"
+          });
+        }
         if (canCreate.reason === 'no_active_plan') {
           return res.status(403).json({ 
             message: "You need an active plan to create offers.",
@@ -2365,6 +2372,12 @@ export async function registerRoutes(
           return res.status(403).json({ 
             message: "Your account is suspended. Please upgrade your plan to continue.",
             code: "USER_SUSPENDED"
+          });
+        }
+        if (canCreate.reason === 'subscription_inactive') {
+          return res.status(403).json({ 
+            message: "Your subscription is inactive. Please renew your plan to add domains.",
+            code: "SUBSCRIPTION_INACTIVE"
           });
         }
         if (canCreate.reason === 'no_active_plan') {
@@ -5556,11 +5569,18 @@ export async function registerRoutes(
       // PLAN LIMITS AND SUSPENSION CHECK
       // ==========================================
       
+      // Block if subscription is not active — return 404 immediately
+      const activeSubStatuses = ['active', 'trialing'];
+      if (!activeSubStatuses.includes(currentOwner.subscriptionStatus ?? '')) {
+        console.log(`[Cloak] User ${currentOwner.id} has inactive subscription (${currentOwner.subscriptionStatus}) — returning 404`);
+        return res.status(404).send("Not found");
+      }
+
       // Get plan limits first (needed for reset logic)
       const planForLimits = currentOwner.planId ? await storage.getPlan(currentOwner.planId) : null;
-      if (!planForLimits) {
-        // No active plan - return 404
-        console.log(`[Cloak] User ${currentOwner.id} has no active plan - returning 404`);
+      if (!planForLimits || planForLimits.isFree) {
+        // No paid plan - return 404
+        console.log(`[Cloak] User ${currentOwner.id} has no active paid plan - returning 404`);
         return res.status(404).send("Not found");
       }
 
@@ -5591,11 +5611,9 @@ export async function registerRoutes(
         return res.status(404).send("Not found");
       }
 
-      // Check grace period expiration
+      // Grace period no longer used — kept for legacy graceful handling if still set
       if (currentOwner.gracePeriodEndsAt && new Date() > currentOwner.gracePeriodEndsAt) {
-        // Grace period has expired - suspend user
-        console.log(`[Cloak] User ${currentOwner.id} grace period expired - suspending`);
-        await storage.suspendUser(currentOwner.id, 'grace_period_expired');
+        console.log(`[Cloak] User ${currentOwner.id} legacy grace period expired — returning 404`);
         return res.status(404).send("Not found");
       }
 
@@ -6199,24 +6217,30 @@ export async function registerRoutes(
       const isSuspended = owner.suspendedAt !== null;
       if (isSuspended) {
         console.log(`[Cloak] User suspended: ${offer.userId}`);
-        return res.redirect(302, offer.whitePageUrl);
+        return res.status(404).send("Not found");
+      }
+
+      // Block if subscription is not active — return 404 immediately
+      const activeSubscriptionStatuses = ['active', 'trialing'];
+      if (!activeSubscriptionStatuses.includes(owner.subscriptionStatus ?? '')) {
+        console.log(`[Cloak] User ${offer.userId} has inactive subscription (${owner.subscriptionStatus}) — returning 404`);
+        return res.status(404).send("Not found");
       }
 
       // Check click limits
       const plan = owner.planId ? await storage.getPlan(owner.planId) : null;
-      if (plan && !plan.isUnlimited) {
+      if (!plan || plan.isFree) {
+        console.log(`[Cloak] User ${offer.userId} has no paid plan — returning 404`);
+        return res.status(404).send("Not found");
+      }
+
+      if (!plan.isUnlimited) {
         const userOffers = await storage.getOffersByUserId(offer.userId);
         const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
         
         if (totalClicks >= plan.maxClicks) {
-          const gracePeriodEnd = owner.subscriptionEndDate 
-            ? new Date(new Date(owner.subscriptionEndDate).getTime() + 3 * 24 * 60 * 60 * 1000)
-            : null;
-          
-          if (!gracePeriodEnd || new Date() > gracePeriodEnd) {
-            console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-            return res.redirect(302, offer.whitePageUrl);
-          }
+          console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
+          return res.redirect(302, offer.whitePageUrl);
         }
       }
 

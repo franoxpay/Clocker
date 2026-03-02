@@ -259,6 +259,14 @@ export interface IStorage {
   canUserCreateDomain(userId: string): Promise<{ allowed: boolean; reason?: string; currentCount: number; limit: number | null }>;
   canUserDowngradeToPlan(userId: string, newPlanId: number): Promise<{ allowed: boolean; reason?: string; offersExcess?: number; domainsExcess?: number }>;
 
+  // Subscription enforcement
+  isUserSubscriptionActive(userId: string): Promise<boolean>;
+  getFreePlan(): Promise<Plan | undefined>;
+  deactivateUserOffers(userId: string): Promise<void>;
+  reactivateUserOffers(userId: string): Promise<void>;
+  downgradeUserToFreePlan(userId: string): Promise<void>;
+  restoreUserSubscription(userId: string, planId: number, subscriptionStatus: string): Promise<void>;
+
   // Admin domain management
   getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string; status?: 'active' | 'inactive' }): Promise<Array<{
     id: number;
@@ -1813,8 +1821,14 @@ export class DatabaseStorage implements IStorage {
       return { allowed: false, reason: 'user_suspended', currentCount: 0, limit: null };
     }
 
+    // Check subscription is active
+    const activeStatuses = ['active', 'trialing'];
+    if (!activeStatuses.includes(user.subscriptionStatus ?? '')) {
+      return { allowed: false, reason: 'subscription_inactive', currentCount: 0, limit: null };
+    }
+
     const plan = user.planId ? await this.getPlan(user.planId) : null;
-    if (!plan) {
+    if (!plan || plan.isFree) {
       return { allowed: false, reason: 'no_active_plan', currentCount: 0, limit: null };
     }
 
@@ -1845,8 +1859,14 @@ export class DatabaseStorage implements IStorage {
       return { allowed: false, reason: 'user_suspended', currentCount: 0, limit: null };
     }
 
+    // Check subscription is active
+    const activeStatuses = ['active', 'trialing'];
+    if (!activeStatuses.includes(user.subscriptionStatus ?? '')) {
+      return { allowed: false, reason: 'subscription_inactive', currentCount: 0, limit: null };
+    }
+
     const plan = user.planId ? await this.getPlan(user.planId) : null;
-    if (!plan) {
+    if (!plan || plan.isFree) {
       return { allowed: false, reason: 'no_active_plan', currentCount: 0, limit: null };
     }
 
@@ -2525,6 +2545,84 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  // ================== SUBSCRIPTION ENFORCEMENT ==================
+
+  async isUserSubscriptionActive(userId: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) return false;
+    const activeStatuses = ['active', 'trialing'];
+    return activeStatuses.includes(user.subscriptionStatus ?? '');
+  }
+
+  async getFreePlan(): Promise<Plan | undefined> {
+    const [plan] = await db
+      .select()
+      .from(plans)
+      .where(and(eq(plans.isFree, true), eq(plans.isDefault, true)))
+      .limit(1);
+    return plan;
+  }
+
+  async deactivateUserOffers(userId: string): Promise<void> {
+    await db
+      .update(offers)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(and(eq(offers.userId, userId), eq(offers.isActive, true)));
+
+    await db
+      .update(users)
+      .set({ offersDeactivatedBySystem: true, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    console.log(`[SubscriptionEnforcement] Deactivated all offers for user ${userId}`);
+  }
+
+  async reactivateUserOffers(userId: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user?.offersDeactivatedBySystem) return;
+
+    await db
+      .update(offers)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(offers.userId, userId));
+
+    await db
+      .update(users)
+      .set({ offersDeactivatedBySystem: false, updatedAt: new Date() })
+      .where(eq(users.id, userId));
+
+    console.log(`[SubscriptionEnforcement] Reactivated all offers for user ${userId}`);
+  }
+
+  async downgradeUserToFreePlan(userId: string): Promise<void> {
+    const freePlan = await this.getFreePlan();
+    const updateData: any = {
+      subscriptionStatus: 'inactive',
+      stripeSubscriptionId: null,
+      gracePeriodEndsAt: null,
+    };
+    if (freePlan) {
+      updateData.planId = freePlan.id;
+    }
+    await db.update(users).set({ ...updateData, updatedAt: new Date() }).where(eq(users.id, userId));
+    await this.deactivateUserOffers(userId);
+    console.log(`[SubscriptionEnforcement] Downgraded user ${userId} to free plan`);
+  }
+
+  async restoreUserSubscription(userId: string, planId: number, subscriptionStatus: string): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        planId,
+        subscriptionStatus,
+        offersDeactivatedBySystem: false,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+    await this.reactivateUserOffers(userId);
+    console.log(`[SubscriptionEnforcement] Restored subscription for user ${userId} to plan ${planId}`);
   }
 }
 

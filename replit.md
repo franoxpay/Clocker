@@ -43,6 +43,14 @@ The platform includes a complete affiliate/referral system:
 - **User Dashboard**: Settings > Referrals tab shows affiliate statistics and coupons
 - **Stripe Integration**: Dynamic coupon creation during checkout, webhook handlers for commission creation/reversal
 
+### Subscription Enforcement
+- **Plans schema**: Added `isFree` and `isDefault` boolean fields to identify the free tier.
+- **Users schema**: Added `offersDeactivatedBySystem` boolean field to track system-initiated offer pausing.
+- **Free plan auto-seeding**: On server startup, `ensureFreePlanExists()` creates a free plan (if none exists) with zero offer/domain/click limits.
+- **Cloaking route protection**: Both `/r/:slug` and `/:slug` cloaking routes now immediately return 404 if the offer owner has an inactive subscription status (anything other than `active` or `trialing`) or is on the free plan. Grace period logic replaced with direct blocking.
+- **Subscription banner**: `SubscriptionBanner` component shown in the app layout (non-admin routes) when user's subscription is not active. Shows renewal button pointing to `/subscription`. Adapts text for canceled vs expired state, and indicates if offers were deactivated by the system.
+- **API response**: `/api/auth/user` now includes `isSubscriptionActive` computed field.
+
 ### Routing Strategy
 The platform uses distinct routing for public access, authenticated user dashboards (e.g., `/offers`, `/domains`), admin functionalities (`/confg-admin/*`), and a dedicated click tracking endpoint (`/r/:slug`) for traffic routing.
 

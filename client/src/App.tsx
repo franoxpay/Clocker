@@ -12,6 +12,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
+import { SubscriptionBanner } from "@/components/SubscriptionBanner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -151,6 +152,12 @@ function AuthenticatedLayout() {
                 <ThemeToggle />
               </div>
             </header>
+            {!isAdminRoute && (
+              <SubscriptionBanner
+                subscriptionStatus={user?.subscriptionStatus}
+                offersDeactivatedBySystem={(user as any)?.offersDeactivatedBySystem ?? false}
+              />
+            )}
             {showLimitAlert && (
               <div className="flex items-center justify-between gap-3 px-4 py-2 bg-destructive/10 border-b border-destructive/20" data-testid="alert-click-limit-exceeded">
                 <div className="flex items-center gap-2 text-sm">
