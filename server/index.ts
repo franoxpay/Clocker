@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { isStripeConfigured, getStripeSync } from "./stripeClient";
+import { isStripeConfigured, getStripeSync, getStripeClient } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
@@ -364,6 +364,65 @@ async function ensureFreePlanExists() {
   }
 }
 
+async function reconcileStaleSubscriptions() {
+  try {
+    const stripeAvailable = await isStripeConfigured();
+    if (!stripeAvailable) {
+      console.log("[Reconcile] Stripe not configured, skipping subscription reconciliation");
+      return;
+    }
+
+    const staleUsers = await storage.getUsersWithStaleActiveSubscription();
+    if (staleUsers.length === 0) {
+      console.log("[Reconcile] No stale subscriptions found");
+      return;
+    }
+
+    console.log(`[Reconcile] Found ${staleUsers.length} user(s) with stale active subscription — checking Stripe...`);
+    const stripe = await getStripeClient();
+
+    for (const user of staleUsers) {
+      try {
+        if (!user.stripeSubscriptionId) continue;
+
+        const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const stripeStatus = sub.status;
+        const periodEndTs = (sub as any).current_period_end;
+        const endedAtTs = (sub as any).ended_at;
+        const stripeEndDate = periodEndTs ? new Date(periodEndTs * 1000) : null;
+        const stripeEndedAt = endedAtTs ? new Date(endedAtTs * 1000) : null;
+
+        console.log(`[Reconcile] User ${user.id} (${user.email}): Stripe status=${stripeStatus}, period_end=${stripeEndDate?.toISOString() ?? 'null'}`);
+
+        const isActive = stripeStatus === 'active' || stripeStatus === 'trialing';
+
+        if (isActive && stripeEndDate) {
+          // Subscription is still active in Stripe — just update our end date
+          await storage.updateUser(user.id, {
+            subscriptionStatus: stripeStatus,
+            subscriptionEndDate: stripeEndDate,
+          });
+          console.log(`[Reconcile] Updated user ${user.id} end date to ${stripeEndDate.toISOString()} (still active in Stripe)`);
+        } else {
+          // Subscription is not active in Stripe — downgrade immediately
+          await storage.updateUser(user.id, {
+            subscriptionStatus: stripeStatus,
+            subscriptionEndDate: stripeEndedAt ?? stripeEndDate ?? new Date(),
+          });
+          await storage.downgradeUserToFreePlan(user.id);
+          console.log(`[Reconcile] Downgraded user ${user.id} to free plan — Stripe status: ${stripeStatus}`);
+        }
+      } catch (userErr: any) {
+        console.error(`[Reconcile] Failed to reconcile user ${user.id}:`, userErr.message);
+      }
+    }
+
+    console.log("[Reconcile] Subscription reconciliation complete");
+  } catch (err: any) {
+    console.error("[Reconcile] Failed to run reconciliation:", err.message);
+  }
+}
+
 (async () => {
   await initStripe();
   initEasyPanel();
@@ -375,6 +434,9 @@ async function ensureFreePlanExists() {
   }
   
   await ensureFreePlanExists();
+  reconcileStaleSubscriptions().catch((err: any) =>
+    console.error("[Reconcile] Unhandled error:", err.message)
+  );
   
   setupWebSocket(httpServer);
   startDomainMonitor();

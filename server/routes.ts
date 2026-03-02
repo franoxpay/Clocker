@@ -3599,6 +3599,44 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/users/:id/sync-stripe", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.stripeSubscriptionId) return res.status(400).json({ message: "User has no Stripe subscription" });
+
+      const stripe = await getStripeClient();
+      const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+      const stripeStatus = sub.status;
+      const periodEndTs = (sub as any).current_period_end;
+      const endedAtTs = (sub as any).ended_at;
+      const stripeEndDate = periodEndTs ? new Date(periodEndTs * 1000) : null;
+      const stripeEndedAt = endedAtTs ? new Date(endedAtTs * 1000) : null;
+      const isActive = stripeStatus === 'active' || stripeStatus === 'trialing';
+
+      if (isActive && stripeEndDate) {
+        await storage.updateUser(userId, {
+          subscriptionStatus: stripeStatus,
+          subscriptionEndDate: stripeEndDate,
+        });
+        console.log(`[Admin sync-stripe] User ${userId} is still active in Stripe, updated end date`);
+        return res.json({ status: stripeStatus, subscriptionEndDate: stripeEndDate, action: 'updated' });
+      } else {
+        await storage.updateUser(userId, {
+          subscriptionStatus: stripeStatus,
+          subscriptionEndDate: stripeEndedAt ?? stripeEndDate ?? new Date(),
+        });
+        await storage.downgradeUserToFreePlan(userId);
+        console.log(`[Admin sync-stripe] Downgraded user ${userId} to free plan — Stripe status: ${stripeStatus}`);
+        return res.json({ status: stripeStatus, action: 'downgraded' });
+      }
+    } catch (error: any) {
+      console.error("Error syncing Stripe subscription:", error);
+      res.status(500).json({ message: error.message || "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/users/:id/change-password", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.params.id;

@@ -61,6 +61,7 @@ export interface IStorage {
   updateUserPassword(id: string, hashedPassword: string): Promise<void>;
   upsertUser(user: UpsertUser): Promise<User>;
   getAllUsers(page: number, limit: number, search?: string): Promise<{ users: User[]; total: number }>;
+  getUsersWithStaleActiveSubscription(): Promise<User[]>;
   deleteUserWithCascade(userId: string): Promise<void>;
   getUserUsage(userId: string): Promise<{
     offers: { used: number; limit: number | null };
@@ -429,6 +430,21 @@ export class DatabaseStorage implements IStorage {
     const result = await query.orderBy(desc(users.createdAt)).limit(limit).offset(offset);
     
     return { users: result, total: Number(count) };
+  }
+
+  async getUsersWithStaleActiveSubscription(): Promise<User[]> {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    return db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.subscriptionStatus, 'active'),
+          sql`${users.subscriptionEndDate} IS NOT NULL`,
+          sql`${users.subscriptionEndDate} < ${oneHourAgo.toISOString()}`,
+          sql`${users.stripeSubscriptionId} IS NOT NULL`,
+        )
+      );
   }
 
   async deleteUserWithCascade(userId: string): Promise<void> {
