@@ -50,6 +50,10 @@ export const users = pgTable("users", {
   hasUsedCoupon: boolean("has_used_coupon").default(false).notNull(),
   usedCouponId: integer("used_coupon_id"),
   offersDeactivatedBySystem: boolean("offers_deactivated_by_system").default(false).notNull(),
+  reminderSent3DaysBefore: timestamp("reminder_sent_3_days_before"),
+  reminderSentOnExpiry: timestamp("reminder_sent_on_expiry"),
+  reminderSent2DaysAfter: timestamp("reminder_sent_2_days_after"),
+  reminderSent7DaysAfter: timestamp("reminder_sent_7_days_after"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

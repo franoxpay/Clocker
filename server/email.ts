@@ -25,7 +25,7 @@ function obfuscateDomain(domain: string): string {
   return domain.replace(/\./g, '[.]');
 }
 
-type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed' | 'domain_removed_policy' | 'domain_removed_inactive' | 'domain_removed_admin' | 'subscription_cancelled' | 'subscription_renewed' | 'payment_failed' | 'account_suspended';
+type EmailType = 'welcome' | 'subscription' | 'domain_inactive' | 'shared_domain_inactive' | 'plan_limit' | 'notification' | 'password_reset' | 'domain_removed' | 'domain_removed_policy' | 'domain_removed_inactive' | 'domain_removed_admin' | 'subscription_cancelled' | 'subscription_renewed' | 'payment_failed' | 'account_suspended' | 'subscription_expiring_3days' | 'subscription_expired_today' | 'subscription_expired_2days' | 'subscription_expired_7days';
 
 interface SendEmailOptions {
   to: string | string[];
@@ -383,6 +383,126 @@ ${EMAIL_FOOTER}
     userId,
     type: 'notification',
     metadata: { title },
+  });
+}
+
+export async function sendSubscriptionExpiring3DaysEmail(email: string, firstName: string, planName: string, expiryDate: string, userId?: string) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #f59e0b;">⏳ Sua assinatura vence em 3 dias</h2>
+      <p style="color: #555; line-height: 1.6;">Olá, <strong>${firstName}</strong>!</p>
+      <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong style="color: #6366f1;">${planName}</strong> vence em <strong>${expiryDate}</strong>.</p>
+      <div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #92400e;">Para manter suas ofertas ativas e o tráfego funcionando sem interrupção, renove sua assinatura antes do vencimento.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Renovar Agora
+        </a>
+      </div>
+${EMAIL_FOOTER}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `⏳ Sua assinatura Cleryon vence em 3 dias`,
+    html,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} vence em ${expiryDate}. Acesse https://cleryon.com/subscription para renovar.`,
+    userId,
+    type: 'subscription_expiring_3days',
+    metadata: { planName, expiryDate },
+  });
+}
+
+export async function sendSubscriptionExpiredTodayEmail(email: string, firstName: string, planName: string, userId?: string) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">🔴 Sua assinatura expirou hoje</h2>
+      <p style="color: #555; line-height: 1.6;">Olá, <strong>${firstName}</strong>!</p>
+      <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong style="color: #6366f1;">${planName}</strong> expirou hoje.</p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;"><strong>Atenção:</strong> Suas ofertas foram pausadas e o tráfego está bloqueado. Renove agora para reativar tudo automaticamente.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Renovar e Reativar
+        </a>
+      </div>
+${EMAIL_FOOTER}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `🔴 Sua assinatura Cleryon expirou hoje`,
+    html,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou hoje. Suas ofertas estão pausadas. Acesse https://cleryon.com/subscription para renovar.`,
+    userId,
+    type: 'subscription_expired_today',
+    metadata: { planName },
+  });
+}
+
+export async function sendSubscriptionExpired2DaysEmail(email: string, firstName: string, planName: string, userId?: string) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">🚨 Conta pausada há 2 dias</h2>
+      <p style="color: #555; line-height: 1.6;">Olá, <strong>${firstName}</strong>!</p>
+      <p style="color: #555; line-height: 1.6;">Faz 2 dias que sua assinatura do plano <strong style="color: #6366f1;">${planName}</strong> expirou e suas campanhas continuam pausadas.</p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;">Cada dia sem assinatura ativa é uma oportunidade perdida. Renove agora e volte a converter tráfego imediatamente.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Reativar Minha Conta
+        </a>
+      </div>
+${EMAIL_FOOTER}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `🚨 Sua conta Cleryon está pausada há 2 dias`,
+    html,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou há 2 dias. Acesse https://cleryon.com/subscription para renovar.`,
+    userId,
+    type: 'subscription_expired_2days',
+    metadata: { planName },
+  });
+}
+
+export async function sendSubscriptionExpired7DaysEmail(email: string, firstName: string, planName: string, userId?: string) {
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">📢 1 semana sem assinatura ativa</h2>
+      <p style="color: #555; line-height: 1.6;">Olá, <strong>${firstName}</strong>!</p>
+      <p style="color: #555; line-height: 1.6;">Faz 1 semana que sua assinatura do plano <strong style="color: #6366f1;">${planName}</strong> expirou. Sentimos sua falta!</p>
+      <div style="background-color: #f3f4f6; border-left: 4px solid #6366f1; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #374151;">Volte agora e todas as suas ofertas e domínios serão reativados automaticamente assim que você renovar.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+          Voltar ao Cleryon
+        </a>
+      </div>
+${EMAIL_FOOTER}
+    </div>
+  `;
+
+  return sendEmail({
+    to: email,
+    subject: `📢 Sentimos sua falta! Volte ao Cleryon`,
+    html,
+    text: `Olá ${firstName}, faz 1 semana que sua assinatura do plano ${planName} expirou. Acesse https://cleryon.com/subscription para renovar.`,
+    userId,
+    type: 'subscription_expired_7days',
+    metadata: { planName },
   });
 }
 

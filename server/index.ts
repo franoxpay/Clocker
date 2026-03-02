@@ -9,6 +9,7 @@ import { setupWebSocket } from "./websocketService";
 import { initEasyPanel } from "./easypanel";
 import { storage } from "./storage";
 import { startDomainMonitor } from "./domainMonitor";
+import { startSubscriptionReminder } from "./subscriptionReminder";
 import { getRedisClient } from "./redis";
 
 const app = express();
@@ -440,6 +441,7 @@ async function reconcileStaleSubscriptions() {
   
   setupWebSocket(httpServer);
   startDomainMonitor();
+  startSubscriptionReminder();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
