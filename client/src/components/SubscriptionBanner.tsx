@@ -37,17 +37,17 @@ export function SubscriptionBanner({ subscriptionStatus, offersDeactivatedBySyst
 
   return (
     <div
-      className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-500/10 border-b border-amber-500/30"
+      className="flex items-center justify-between gap-3 px-4 py-2 bg-red-600 border-b border-red-700"
       data-testid="banner-subscription-inactive"
     >
       <div className="flex items-center gap-2 text-sm min-w-0">
-        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-        <span className="font-semibold text-amber-600 dark:text-amber-400 shrink-0">{title}:</span>
-        <span className="text-muted-foreground truncate">{description}</span>
+        <AlertTriangle className="h-4 w-4 text-white shrink-0" />
+        <span className="font-semibold text-white shrink-0">{title}:</span>
+        <span className="text-white/90 truncate">{description}</span>
       </div>
       <Button
         size="sm"
-        className="bg-amber-500 hover:bg-amber-600 text-white shrink-0"
+        className="bg-white hover:bg-white/90 text-red-600 font-semibold shrink-0"
         onClick={() => navigate("/subscription")}
         data-testid="button-renew-subscription"
       >
