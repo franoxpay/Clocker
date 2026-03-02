@@ -103,7 +103,7 @@ function AuthenticatedLayout() {
   const [location, navigate] = useLocation();
   const { language } = useLanguage();
   const { user } = useAuth();
-  const isAdminRoute = location.startsWith("/confg-admin");
+  const isAdminRoute = location.startsWith("/confg-admin") && !!user?.isAdmin;
   const [dismissedAlert, setDismissedAlert] = useState(false);
 
   const { data: usage } = useQuery<UserUsage>({
@@ -189,7 +189,7 @@ function AuthenticatedLayout() {
               </div>
             )}
             <main className="flex-1 overflow-auto">
-              {isAdminRoute ? <AdminRoutes /> : <UserRoutes />}
+              {isAdminRoute ? (user?.isAdmin ? <AdminRoutes /> : <NotFound />) : <UserRoutes />}
             </main>
           </div>
         </div>
