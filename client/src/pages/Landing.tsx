@@ -369,24 +369,45 @@ export default function Landing() {
           </div>
         </section>
 
-        <section id="features" className="py-20 bg-muted/30">
-          <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center mb-12">
+        <section id="features" className="py-20">
+          <div className="max-w-7xl mx-auto px-6">
+            <h2 className="text-3xl font-bold text-center mb-4">
               {language === "pt-BR" ? "Por que escolher nossa plataforma?" : "Why choose our platform?"}
             </h2>
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
+              {language === "pt-BR"
+                ? "Tudo que você precisa para proteger suas campanhas e escalar com segurança"
+                : "Everything you need to protect your campaigns and scale safely"}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 relative z-10">
               {features.map((feature, index) => (
-                <Card key={index} className="bg-card">
-                  <CardHeader>
-                    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                      <feature.icon className="w-6 h-6 text-primary" />
-                    </div>
-                    <CardTitle className="text-lg">{feature.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <CardDescription>{feature.description}</CardDescription>
-                  </CardContent>
-                </Card>
+                <div
+                  key={index}
+                  className={cn(
+                    "flex flex-col lg:border-r py-10 relative group/feature dark:border-neutral-800 border-border",
+                    (index === 0 || index === 4) && "lg:border-l dark:border-neutral-800 border-border",
+                    index < 4 && "lg:border-b dark:border-neutral-800 border-border"
+                  )}
+                >
+                  {index < 4 && (
+                    <div className="opacity-0 group-hover/feature:opacity-100 transition duration-200 absolute inset-0 h-full w-full bg-gradient-to-t from-muted to-transparent pointer-events-none" />
+                  )}
+                  {index >= 4 && (
+                    <div className="opacity-0 group-hover/feature:opacity-100 transition duration-200 absolute inset-0 h-full w-full bg-gradient-to-b from-muted to-transparent pointer-events-none" />
+                  )}
+                  <div className="mb-4 relative z-10 px-10 text-muted-foreground">
+                    <feature.icon className="w-6 h-6" />
+                  </div>
+                  <div className="text-lg font-bold mb-2 relative z-10 px-10">
+                    <div className="absolute left-0 inset-y-0 h-6 group-hover/feature:h-8 w-1 rounded-tr-full rounded-br-full bg-border group-hover/feature:bg-primary transition-all duration-200 origin-center" />
+                    <span className="group-hover/feature:translate-x-2 transition duration-200 inline-block text-foreground">
+                      {feature.title}
+                    </span>
+                  </div>
+                  <p className="text-sm text-muted-foreground max-w-xs relative z-10 px-10">
+                    {feature.description}
+                  </p>
+                </div>
               ))}
             </div>
           </div>
