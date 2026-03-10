@@ -457,7 +457,7 @@ export default function Landing() {
     <div className="min-h-screen bg-background">
       <HeroHeader onLogin={() => setShowAuth(true)} theme={theme} />
 
-      <main className="overflow-hidden">
+      <main className="overflow-x-hidden">
         <div
           aria-hidden
           className="z-[2] absolute inset-0 pointer-events-none isolate opacity-50 contain-strict hidden lg:block"
@@ -468,7 +468,7 @@ export default function Landing() {
         </div>
 
         <section>
-          <div className="relative pt-24 md:pt-36">
+          <div className="relative pt-24 md:pt-36 pb-16">
             <AnimatedGroup
               variants={{
                 container: { visible: { transition: { delayChildren: 0.8 } } },
@@ -490,107 +490,80 @@ export default function Landing() {
             <div aria-hidden className="absolute inset-0 -z-10 size-full [background:radial-gradient(125%_125%_at_50%_100%,transparent_0%,var(--background)_75%)]" />
 
             <div className="mx-auto max-w-7xl px-6">
-              <div className="text-center sm:mx-auto lg:mr-auto lg:mt-0">
-                <AnimatedGroup variants={transitionVariants}>
-                  <button
-                    onClick={() => setShowAuth(true)}
-                    className="hover:bg-background dark:hover:border-t-border bg-muted group mx-auto flex w-fit items-center gap-4 rounded-full border p-1 pl-4 shadow-md shadow-black/5 transition-all duration-300 dark:border-t-white/5 dark:shadow-zinc-950"
-                  >
-                    <span className="text-foreground text-sm">
-                      {language === "pt-BR" ? "🚀 A plataforma de cloaking mais segura do mercado" : "🚀 The safest cloaking platform on the market"}
-                    </span>
-                    <span className="dark:border-background block h-4 w-0.5 border-l bg-white dark:bg-zinc-700" />
-                    <div className="bg-background group-hover:bg-muted size-6 overflow-hidden rounded-full duration-500">
-                      <div className="flex w-12 -translate-x-1/2 duration-500 ease-in-out group-hover:translate-x-0">
-                        <span className="flex size-6"><ArrowRight className="m-auto size-3" /></span>
-                        <span className="flex size-6"><ArrowRight className="m-auto size-3" /></span>
+              <div className="flex flex-col lg:flex-row items-center gap-12 lg:gap-16">
+
+                {/* Left: hero text */}
+                <div className="flex-1 min-w-0 flex flex-col items-start text-left">
+                  <AnimatedGroup variants={transitionVariants}>
+                    <button
+                      onClick={() => setShowAuth(true)}
+                      className="hover:bg-background dark:hover:border-t-border bg-muted group flex w-fit items-center gap-4 rounded-full border p-1 pl-4 shadow-md shadow-black/5 transition-all duration-300 dark:border-t-white/5 dark:shadow-zinc-950"
+                    >
+                      <span className="text-foreground text-sm">
+                        {language === "pt-BR" ? "🚀 A plataforma de cloaking mais segura do mercado" : "🚀 The safest cloaking platform on the market"}
+                      </span>
+                      <span className="dark:border-background block h-4 w-0.5 border-l bg-white dark:bg-zinc-700" />
+                      <div className="bg-background group-hover:bg-muted size-6 overflow-hidden rounded-full duration-500">
+                        <div className="flex w-12 -translate-x-1/2 duration-500 ease-in-out group-hover:translate-x-0">
+                          <span className="flex size-6"><ArrowRight className="m-auto size-3" /></span>
+                          <span className="flex size-6"><ArrowRight className="m-auto size-3" /></span>
+                        </div>
                       </div>
+                    </button>
+
+                    <h1 className="mt-8 text-balance text-5xl font-bold md:text-6xl lg:mt-10 xl:text-[5rem] leading-tight">
+                      {language === "pt-BR"
+                        ? "Proteja seus anúncios com o cloaker mais inteligente"
+                        : "Protect your ads with the smartest cloaker"}
+                    </h1>
+                    <p className="mt-6 max-w-xl text-balance text-lg text-muted-foreground">
+                      {language === "pt-BR"
+                        ? "Filtragem avançada por país, dispositivo e parâmetros de anúncio para TikTok e Facebook Ads — com analytics em tempo real."
+                        : "Advanced filtering by country, device and ad parameters for TikTok and Facebook Ads — with real-time analytics."}
+                    </p>
+                  </AnimatedGroup>
+
+                  <AnimatedGroup
+                    variants={{
+                      container: { visible: { transition: { staggerChildren: 0.05, delayChildren: 0.75 } } },
+                      ...transitionVariants,
+                    }}
+                    className="mt-10 flex flex-col items-start gap-2 sm:flex-row"
+                  >
+                    <div className="bg-foreground/10 rounded-[14px] border p-0.5">
+                      <Button
+                        size="lg"
+                        className="rounded-xl px-5 text-base"
+                        onClick={() => setShowAuth(true)}
+                        data-testid="button-start-now"
+                      >
+                        <span className="text-nowrap">{language === "pt-BR" ? "Começar Agora" : "Start Now"}</span>
+                      </Button>
                     </div>
-                  </button>
-
-                  <h1 className="mt-8 max-w-4xl mx-auto text-balance text-5xl font-bold md:text-6xl lg:mt-16 xl:text-[5rem]">
-                    {language === "pt-BR"
-                      ? "Proteja seus anúncios com o cloaker mais inteligente"
-                      : "Protect your ads with the smartest cloaker"}
-                  </h1>
-                  <p className="mx-auto mt-8 max-w-2xl text-balance text-lg text-muted-foreground">
-                    {language === "pt-BR"
-                      ? "Filtragem avançada por país, dispositivo e parâmetros de anúncio para TikTok e Facebook Ads — com analytics em tempo real."
-                      : "Advanced filtering by country, device and ad parameters for TikTok and Facebook Ads — with real-time analytics."}
-                  </p>
-                </AnimatedGroup>
-
-                <AnimatedGroup
-                  variants={{
-                    container: { visible: { transition: { staggerChildren: 0.05, delayChildren: 0.75 } } },
-                    ...transitionVariants,
-                  }}
-                  className="mt-12 flex flex-col items-center justify-center gap-2 md:flex-row"
-                >
-                  <div className="bg-foreground/10 rounded-[14px] border p-0.5">
                     <Button
                       size="lg"
-                      className="rounded-xl px-5 text-base"
-                      onClick={() => setShowAuth(true)}
-                      data-testid="button-start-now"
+                      variant="ghost"
+                      className="rounded-xl px-5"
+                      asChild
+                      data-testid="button-learn-more"
                     >
-                      <span className="text-nowrap">{language === "pt-BR" ? "Começar Agora" : "Start Now"}</span>
+                      <a href="#pricing">
+                        <span className="text-nowrap">{language === "pt-BR" ? "Ver Planos" : "View Plans"}</span>
+                      </a>
                     </Button>
-                  </div>
-                  <Button
-                    size="lg"
-                    variant="ghost"
-                    className="rounded-xl px-5"
-                    asChild
-                    data-testid="button-learn-more"
-                  >
-                    <a href="#pricing">
-                      <span className="text-nowrap">{language === "pt-BR" ? "Ver Planos" : "View Plans"}</span>
-                    </a>
-                  </Button>
-                </AnimatedGroup>
+                  </AnimatedGroup>
+                </div>
+
+                {/* Right: orbiting platforms */}
+                <div className="flex-shrink-0 flex flex-col items-center justify-center pr-8 lg:pr-10">
+                  <OrbitingPlatforms centerLogo={theme === "dark" ? logoBranca : logoPreta} />
+                  <p className="text-center text-sm text-muted-foreground -mt-4">
+                    {language === "pt-BR" ? "Compatível com as principais plataformas de anúncios" : "Compatible with the main ad platforms"}
+                  </p>
+                </div>
+
               </div>
             </div>
-
-            <AnimatedGroup
-              variants={{
-                container: { visible: { transition: { staggerChildren: 0.05, delayChildren: 0.75 } } },
-                ...transitionVariants,
-              }}
-            >
-              <div className="relative -mr-56 mt-8 overflow-hidden px-2 sm:mr-0 sm:mt-12 md:mt-20">
-                <div aria-hidden className="bg-gradient-to-b to-background absolute inset-0 z-10 from-transparent from-35%" />
-                <div className="inset-shadow-2xs ring-background dark:inset-shadow-white/20 bg-background relative mx-auto max-w-6xl overflow-hidden rounded-2xl border p-4 shadow-lg shadow-zinc-950/15 ring-1">
-                  <img
-                    className="bg-background aspect-15/8 relative hidden rounded-2xl dark:block"
-                    src="https://tailark.com//_next/image?url=%2Fmail2.png&w=3840&q=75"
-                    alt="dashboard"
-                    width="2700"
-                    height="1440"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                  <img
-                    className="z-2 border-border/25 aspect-15/8 relative rounded-2xl border dark:hidden"
-                    src="https://tailark.com/_next/image?url=%2Fmail2-light.png&w=3840&q=75"
-                    alt="dashboard"
-                    width="2700"
-                    height="1440"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-              </div>
-            </AnimatedGroup>
-          </div>
-        </section>
-
-        <section className="bg-background pb-8 pt-4 md:pb-16">
-          <div className="flex flex-col items-center gap-2">
-            <OrbitingPlatforms centerLogo={theme === "dark" ? logoBranca : logoPreta} />
-            <p className="text-center text-base text-muted-foreground -mt-6">
-              {language === "pt-BR" ? "Compatível com as principais plataformas de anúncios" : "Compatible with the main ad platforms"}
-            </p>
           </div>
         </section>
 
