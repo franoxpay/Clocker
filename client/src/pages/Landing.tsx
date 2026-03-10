@@ -14,9 +14,10 @@ import Auth from "./Auth";
 import facebookLogo from "../assets/facebook-logo.png";
 import instagramLogo from "../assets/instagram-logo.png";
 import tiktokLogo from "../assets/tiktok-logo.png";
+import cleryonLogo from "@assets/cleryon-_2__1773155296486.webp";
 
-const logoPreta = "/images/logo-dark.png";
-const logoBranca = "/images/logo-light.png";
+const logoPreta = cleryonLogo;
+const logoBranca = cleryonLogo;
 
 const plans = [
   {
@@ -367,9 +368,6 @@ function HeroHeader({ onLogin, theme }: { onLogin: () => void; theme: string }) 
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
-
-  const logoPreta = "/images/logo-dark.png";
-  const logoBranca = "/images/logo-light.png";
 
   const menuItems = [
     { label: language === "pt-BR" ? "Recursos" : "Features", href: "#features" },
