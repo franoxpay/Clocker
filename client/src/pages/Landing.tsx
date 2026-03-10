@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, memo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { Shield, Zap, Globe, BarChart3, Check, Headphones, Gift, ArrowRight, Menu, X } from "lucide-react";
+import { Shield, Zap, Globe, BarChart3, CheckCircle2, Gift, ArrowRight, Menu, X, Star } from "lucide-react";
 import { AnimatedGroup } from "@/components/ui/animated-group";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { motion, Transition } from "framer-motion";
 import { cn } from "@/lib/utils";
 import Auth from "./Auth";
 
@@ -22,7 +22,8 @@ const plans = [
   {
     id: 1,
     nameKey: "plan.basic",
-    price: 197,
+    infoKey: "plan.basic.info",
+    price: { monthly: 197, yearly: Math.round(197 * 10) },
     offers: 2,
     domains: 1,
     clicks: "30.000",
@@ -33,7 +34,8 @@ const plans = [
   {
     id: 2,
     nameKey: "plan.advanced",
-    price: 497,
+    infoKey: "plan.advanced.info",
+    price: { monthly: 497, yearly: Math.round(497 * 10) },
     offers: 5,
     domains: 3,
     clicks: "100.000",
@@ -45,7 +47,8 @@ const plans = [
   {
     id: 3,
     nameKey: "plan.prescale",
-    price: 997,
+    infoKey: "plan.prescale.info",
+    price: { monthly: 997, yearly: Math.round(997 * 10) },
     offers: 15,
     domains: 10,
     clicks: "250.000",
@@ -56,7 +59,8 @@ const plans = [
   {
     id: 4,
     nameKey: "plan.scale",
-    price: 1997,
+    infoKey: "plan.scale.info",
+    price: { monthly: 1997, yearly: Math.round(1997 * 10) },
     offers: "∞",
     domains: 20,
     clicks: "750.000",
@@ -67,7 +71,8 @@ const plans = [
   {
     id: 5,
     nameKey: "plan.unlimited",
-    price: 2497,
+    infoKey: "plan.unlimited.info",
+    price: { monthly: 2497, yearly: Math.round(2497 * 10) },
     offers: "∞",
     domains: "∞",
     clicks: "∞",
@@ -94,6 +99,30 @@ const transitionVariants = {
     },
   },
 };
+
+function BorderTrail({
+  className,
+  size = 60,
+  transition,
+  style,
+}: {
+  className?: string;
+  size?: number;
+  transition?: Transition;
+  style?: React.CSSProperties;
+}) {
+  const BASE_TRANSITION: Transition = { repeat: Infinity, duration: 5, ease: "linear" };
+  return (
+    <div className="pointer-events-none absolute inset-0 rounded-[inherit] border border-transparent [mask-clip:padding-box,border-box] [mask-composite:intersect] [mask-image:linear-gradient(transparent,transparent),linear-gradient(#000,#000)]">
+      <motion.div
+        className={cn("absolute aspect-square bg-white/60", className)}
+        style={{ width: size, offsetPath: `rect(0 auto auto 0 round ${size}px)`, ...style }}
+        animate={{ offsetDistance: ["0%", "100%"] }}
+        transition={transition ?? BASE_TRANSITION}
+      />
+    </div>
+  );
+}
 
 const platformsConfig = [
   { id: "facebook", logo: facebookLogo, alt: "Facebook Ads", phase: 0 },
@@ -180,6 +209,153 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
     </div>
   );
 });
+
+function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: string) => string; onSelectPlan: () => void }) {
+  const [freq, setFreq] = useState<"monthly" | "yearly">("monthly");
+  const isPT = language === "pt-BR";
+
+  return (
+    <div className="flex w-full flex-col items-center justify-center space-y-8 px-4">
+      <div className="mx-auto max-w-xl space-y-2">
+        <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">
+          {isPT ? "Escolha seu plano" : "Choose your plan"}
+        </h2>
+        <p className="text-muted-foreground text-center text-sm md:text-base">
+          {isPT ? "Planos flexíveis para todos os tamanhos de operação" : "Flexible plans for all operation sizes"}
+        </p>
+      </div>
+
+      <div className="bg-muted/30 mx-auto flex w-fit rounded-full border p-1">
+        {(["monthly", "yearly"] as const).map((f) => (
+          <button key={f} onClick={() => setFreq(f)} className="relative px-5 py-1.5 text-sm">
+            <span className="relative z-10">
+              {f === "monthly" ? (isPT ? "Mensal" : "Monthly") : (isPT ? "Anual" : "Yearly")}
+            </span>
+            {freq === f && (
+              <motion.span
+                layoutId="pricing-freq"
+                transition={{ type: "spring", duration: 0.4 }}
+                className="bg-foreground absolute inset-0 z-0 rounded-full mix-blend-difference"
+              />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {freq === "yearly" && (
+        <p className="text-sm text-green-500 font-medium -mt-4">
+          {isPT ? "2 meses grátis no plano anual" : "2 months free on yearly plan"}
+        </p>
+      )}
+
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        {plans.map((plan) => {
+          const currentPrice = plan.price[freq];
+          const monthlyEquiv = freq === "yearly" ? Math.round(currentPrice / 10) : currentPrice;
+          const savings = freq === "yearly"
+            ? Math.round(((plan.price.monthly * 12 - plan.price.yearly) / (plan.price.monthly * 12)) * 100)
+            : 0;
+          const planInfos: Record<number, [string, string]> = {
+            1: ["Para iniciantes", "For beginners"],
+            2: ["Para quem está crescendo", "For growing businesses"],
+            3: ["Para escalar com segurança", "To scale safely"],
+            4: ["Para grandes operações", "For large operations"],
+            5: ["Sem limites", "No limits"],
+          };
+          const features = [
+            { text: `${plan.offers} ${isPT ? "oferta(s)" : "offer(s)"}`, tooltip: isPT ? "Quantidade de ofertas ativas" : "Number of active offers" },
+            { text: `${plan.domains} ${isPT ? "domínio(s)" : "domain(s)"}`, tooltip: isPT ? "Domínios para cloaking" : "Domains for cloaking" },
+            { text: `${plan.clicks} ${isPT ? "clicks/mês" : "clicks/month"}`, tooltip: isPT ? "Volume de clicks monitorados" : "Volume of monitored clicks" },
+            { text: plan.support === "vip" ? (isPT ? "Suporte VIP 24/7" : "24/7 VIP Support") : (isPT ? "Suporte normal" : "Normal support"), tooltip: plan.support === "vip" ? (isPT ? "Atendimento prioritário via chat" : "Priority support via chat") : undefined },
+            { text: isPT ? "Analytics em tempo real" : "Real-time analytics" },
+            ...(plan.trafficSources.includes("tiktok") ? [{ text: "TikTok Ads", tooltip: isPT ? "Suporte a campanhas TikTok Ads" : "TikTok Ads campaign support" }] : []),
+          ];
+          return (
+            <div
+              key={plan.id}
+              className={cn("relative flex w-full flex-col rounded-lg border", plan.popular && "shadow-lg shadow-primary/10")}
+              data-testid={`card-plan-${plan.id}`}
+            >
+              {plan.popular && (
+                <BorderTrail style={{ boxShadow: "0px 0px 60px 30px rgb(255 255 255 / 20%), 0 0 100px 60px rgb(0 0 0 / 50%)" }} size={80} />
+              )}
+
+              <div className={cn("bg-muted/20 rounded-t-lg border-b p-4", plan.popular && "bg-muted/40")}>
+                <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 flex-wrap justify-end max-w-[60%]">
+                  {plan.popular && (
+                    <span className="bg-background flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
+                      <Star className="h-3 w-3 fill-current" /> Popular
+                    </span>
+                  )}
+                  {plan.bonus && (
+                    <span className="flex items-center gap-1 rounded-md bg-gradient-to-r from-amber-500 to-orange-500 px-2 py-0.5 text-xs text-white">
+                      <Gift className="h-3 w-3" /> {isPT ? "Bônus" : "Bonus"}
+                    </span>
+                  )}
+                  {freq === "yearly" && savings > 0 && (
+                    <span className="bg-green-500 text-white rounded-md px-2 py-0.5 text-xs">{savings}% off</span>
+                  )}
+                </div>
+
+                <div className="text-lg font-medium">{t(plan.nameKey)}</div>
+                <p className="text-muted-foreground text-sm">{isPT ? planInfos[plan.id][0] : planInfos[plan.id][1]}</p>
+                <h3 className="mt-2 flex items-end gap-1">
+                  <span className="text-3xl font-bold">R${monthlyEquiv.toLocaleString("pt-BR")}</span>
+                  <span className="text-muted-foreground text-sm">/mês</span>
+                </h3>
+                {freq === "yearly" && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    R${currentPrice.toLocaleString("pt-BR")} {isPT ? "cobrado anualmente" : "billed yearly"}
+                  </p>
+                )}
+              </div>
+
+              <div className={cn("text-muted-foreground space-y-3 px-4 py-5 text-sm flex-grow", plan.popular && "bg-muted/10")}>
+                <TooltipProvider>
+                  {features.map((feature, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <CheckCircle2 className="text-foreground h-4 w-4 flex-shrink-0" />
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          <p className={cn(feature.tooltip && "cursor-pointer border-b border-dashed border-muted-foreground/40")}>
+                            {feature.text}
+                          </p>
+                        </TooltipTrigger>
+                        {feature.tooltip && <TooltipContent><p>{feature.tooltip}</p></TooltipContent>}
+                      </Tooltip>
+                    </div>
+                  ))}
+                </TooltipProvider>
+
+                <div className="pt-2 border-t">
+                  <p className="text-xs text-muted-foreground mb-2">{isPT ? "FONTES DE TRÁFEGO" : "TRAFFIC SOURCES"}</p>
+                  <div className="flex gap-2">
+                    {plan.trafficSources.map((source) => (
+                      <div key={source} className="w-7 h-7 rounded-lg bg-background border flex items-center justify-center">
+                        <img src={trafficSourceLogos[source]} alt={source} className="w-5 h-5 object-contain" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className={cn("mt-auto w-full border-t p-3", plan.popular && "bg-muted/40")}>
+                <Button
+                  className="w-full"
+                  variant={plan.popular ? "default" : "outline"}
+                  onClick={onSelectPlan}
+                  data-testid={`button-select-plan-${plan.id}`}
+                >
+                  {t("plan.select")}
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function HeroHeader({ onLogin, theme }: { onLogin: () => void; theme: string }) {
   const { t, language } = useLanguage();
@@ -490,103 +666,7 @@ export default function Landing() {
         </section>
 
         <section id="pricing" className="py-20">
-          <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold text-center mb-4">
-              {language === "pt-BR" ? "Escolha seu plano" : "Choose your plan"}
-            </h2>
-            <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
-              {language === "pt-BR"
-                ? "Planos flexíveis para todos os tamanhos de operação"
-                : "Flexible plans for all operation sizes"}
-            </p>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
-              {plans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  className={`relative flex flex-col h-full bg-card ${plan.popular ? "border-primary border-2" : ""}`}
-                  data-testid={`card-plan-${plan.id}`}
-                >
-                  {plan.popular && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10" variant="default">
-                      {language === "pt-BR" ? "Mais Popular" : "Most Popular"}
-                    </Badge>
-                  )}
-                  {plan.bonus && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 gap-1 bg-gradient-to-r from-amber-500 to-orange-500 border-0" variant="default">
-                      <Gift className="w-3 h-3" />
-                      {language === "pt-BR" ? "Bônus" : "Bonus"}
-                    </Badge>
-                  )}
-                  <CardHeader className={`text-center pb-2 flex-shrink-0 ${plan.popular || plan.bonus ? "pt-6" : ""}`}>
-                    <CardTitle className="text-lg">{t(plan.nameKey)}</CardTitle>
-                    <div className="mt-3">
-                      <span className="text-3xl font-bold">R${plan.price}</span>
-                      <span className="text-muted-foreground text-sm">/mês</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-0 flex-grow flex flex-col">
-                    <ul className="space-y-2 text-sm">
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>
-                          {plan.offers} {t("plan.offers")}
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>
-                          {plan.domains} {t("plan.domains")}
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>
-                          {plan.clicks} {t("plan.clicks")}
-                        </span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Headphones className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span>
-                          {language === "pt-BR" 
-                            ? (plan.support === "vip" ? "Suporte VIP" : "Suporte Normal")
-                            : (plan.support === "vip" ? "VIP Support" : "Normal Support")}
-                        </span>
-                      </li>
-                    </ul>
-                    
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-xs text-muted-foreground mb-2 text-center">
-                        {language === "pt-BR" ? "FONTES DE TRÁFEGO" : "TRAFFIC SOURCES"}
-                      </p>
-                      <div className="flex justify-center gap-2">
-                        {plan.trafficSources.map((source) => (
-                          <div 
-                            key={source} 
-                            className="w-8 h-8 rounded-lg overflow-hidden bg-background flex items-center justify-center"
-                          >
-                            <img 
-                              src={trafficSourceLogos[source]} 
-                              alt={source} 
-                              className="w-6 h-6 object-contain"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <Button
-                      className="w-full mt-4"
-                      variant={plan.popular ? "default" : "outline"}
-                      onClick={() => setShowAuth(true)}
-                      data-testid={`button-select-plan-${plan.id}`}
-                    >
-                      {t("plan.select")}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+          <PricingGrid language={language} t={t} onSelectPlan={() => setShowAuth(true)} />
         </section>
       </main>
 
