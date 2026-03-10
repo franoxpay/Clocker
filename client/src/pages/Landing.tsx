@@ -121,13 +121,13 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const RADIUS = 130;
+  const RADIUS = 160;
 
   return (
     <div className="flex flex-col items-center gap-4">
       <div
         className="relative flex items-center justify-center"
-        style={{ width: 320, height: 320 }}
+        style={{ width: 400, height: 400 }}
         onMouseEnter={() => { pausedRef.current = true; }}
         onMouseLeave={() => { pausedRef.current = false; }}
       >
@@ -138,21 +138,21 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
           <div
             className="absolute inset-0 rounded-full"
             style={{
-              border: "1px solid rgba(99,102,241,0.25)",
-              boxShadow: "0 0 40px rgba(99,102,241,0.12), inset 0 0 40px rgba(99,102,241,0.06)",
+              border: "1px solid rgba(59,130,246,0.3)",
+              boxShadow: "0 0 60px rgba(59,130,246,0.15), inset 0 0 60px rgba(59,130,246,0.08)",
             }}
           />
           <div
             className="absolute inset-0 rounded-full animate-pulse"
             style={{
-              background: "radial-gradient(circle, transparent 30%, rgba(99,102,241,0.08) 70%, rgba(99,102,241,0.15) 100%)",
+              background: "radial-gradient(circle, transparent 30%, rgba(59,130,246,0.1) 70%, rgba(59,130,246,0.18) 100%)",
             }}
           />
         </div>
 
-        <div className="relative z-10 w-16 h-16 rounded-full flex items-center justify-center bg-background border border-border shadow-lg">
-          <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
-          <img src={centerLogo} alt="Cleryon" className="w-10 h-10 object-contain relative z-10" />
+        <div className="relative z-10 w-20 h-20 rounded-full flex items-center justify-center bg-background border border-border shadow-lg">
+          <div className="absolute inset-0 rounded-full bg-blue-500/25 blur-2xl animate-pulse" />
+          <img src={centerLogo} alt="Cleryon" className="w-12 h-12 object-contain relative z-10" />
         </div>
 
         {platformsConfig.map((p) => {
@@ -164,14 +164,14 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
               key={p.id}
               className="absolute top-1/2 left-1/2 transition-transform duration-75"
               style={{
-                width: 52,
-                height: 52,
+                width: 62,
+                height: 62,
                 transform: `translate(calc(${x}px - 50%), calc(${y}px - 50%))`,
                 zIndex: 10,
               }}
             >
               <div className="w-full h-full rounded-full bg-background border border-border shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200 cursor-pointer">
-                <img src={p.logo} alt={p.alt} className="w-7 h-7 object-contain" />
+                <img src={p.logo} alt={p.alt} className="w-8 h-8 object-contain" />
               </div>
             </div>
           );
@@ -439,7 +439,7 @@ export default function Landing() {
         <section className="bg-background pb-8 pt-4 md:pb-16">
           <div className="flex flex-col items-center gap-2">
             <OrbitingPlatforms centerLogo={theme === "dark" ? logoBranca : logoPreta} />
-            <p className="text-center text-sm text-muted-foreground -mt-4">
+            <p className="text-center text-base text-muted-foreground -mt-6">
               {language === "pt-BR" ? "Compatível com as principais plataformas de anúncios" : "Compatible with the main ad platforms"}
             </p>
           </div>
