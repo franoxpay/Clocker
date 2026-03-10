@@ -213,13 +213,20 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
 });
 
 function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: string) => string; onSelectPlan: () => void }) {
-  const [freq, setFreq] = useState<"monthly" | "yearly">("monthly");
   const isPT = language === "pt-BR";
+
+  const planInfos: Record<number, [string, string]> = {
+    1: ["Para iniciantes", "For beginners"],
+    2: ["Para quem está crescendo", "For growing businesses"],
+    3: ["Para escalar com segurança", "To scale safely"],
+    4: ["Para grandes operações", "For large operations"],
+    5: ["Sem limites", "No limits"],
+  };
 
   return (
     <div className="flex w-full flex-col items-center justify-center space-y-8 px-4">
       <div className="mx-auto max-w-xl space-y-2">
-        <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl">
+        <h2 className="text-center text-3xl font-bold tracking-tight md:text-4xl text-foreground">
           {isPT ? "Escolha seu plano" : "Choose your plan"}
         </h2>
         <p className="text-muted-foreground text-center text-sm md:text-base">
@@ -227,44 +234,9 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
         </p>
       </div>
 
-      <div className="bg-muted/30 mx-auto flex w-fit rounded-full border p-1">
-        {(["monthly", "yearly"] as const).map((f) => (
-          <button key={f} onClick={() => setFreq(f)} className="relative px-5 py-1.5 text-sm">
-            <span className="relative z-10">
-              {f === "monthly" ? (isPT ? "Mensal" : "Monthly") : (isPT ? "Anual" : "Yearly")}
-            </span>
-            {freq === f && (
-              <motion.span
-                layoutId="pricing-freq"
-                transition={{ type: "spring", duration: 0.4 }}
-                className="bg-foreground absolute inset-0 z-0 rounded-full mix-blend-difference"
-              />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {freq === "yearly" && (
-        <p className="text-sm text-green-500 font-medium -mt-4">
-          {isPT ? "2 meses grátis no plano anual" : "2 months free on yearly plan"}
-        </p>
-      )}
-
       <TooltipProvider>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {plans.map((plan) => {
-          const currentPrice = plan.price[freq];
-          const monthlyEquiv = freq === "yearly" ? Math.round(currentPrice / 10) : currentPrice;
-          const savings = freq === "yearly"
-            ? Math.round(((plan.price.monthly * 12 - plan.price.yearly) / (plan.price.monthly * 12)) * 100)
-            : 0;
-          const planInfos: Record<number, [string, string]> = {
-            1: ["Para iniciantes", "For beginners"],
-            2: ["Para quem está crescendo", "For growing businesses"],
-            3: ["Para escalar com segurança", "To scale safely"],
-            4: ["Para grandes operações", "For large operations"],
-            5: ["Sem limites", "No limits"],
-          };
           const features = [
             { text: `${plan.offers} ${isPT ? "oferta(s)" : "offer(s)"}`, tooltip: isPT ? "Quantidade de ofertas ativas" : "Number of active offers" },
             { text: `${plan.domains} ${isPT ? "domínio(s)" : "domain(s)"}`, tooltip: isPT ? "Domínios para cloaking" : "Domains for cloaking" },
@@ -276,17 +248,17 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
           return (
             <div
               key={plan.id}
-              className={cn("relative flex w-full flex-col rounded-lg border", plan.popular && "shadow-lg shadow-primary/10")}
+              className={cn("relative flex w-full flex-col rounded-lg border bg-card text-card-foreground", plan.popular && "shadow-lg shadow-primary/10")}
               data-testid={`card-plan-${plan.id}`}
             >
               {plan.popular && (
                 <BorderTrail style={{ boxShadow: "0px 0px 60px 30px rgb(255 255 255 / 20%), 0 0 100px 60px rgb(0 0 0 / 50%)" }} size={80} />
               )}
 
-              <div className={cn("bg-muted/20 rounded-t-lg border-b p-4", plan.popular && "bg-muted/40")}>
+              <div className={cn("rounded-t-lg border-b p-4 bg-muted/30 dark:bg-muted/20")}>
                 <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 flex-wrap justify-end max-w-[60%]">
                   {plan.popular && (
-                    <span className="bg-background flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
+                    <span className="bg-card text-card-foreground flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
                       <Star className="h-3 w-3 fill-current" /> Popular
                     </span>
                   )}
@@ -295,44 +267,36 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
                       <Gift className="h-3 w-3" /> {isPT ? "Bônus" : "Bonus"}
                     </span>
                   )}
-                  {freq === "yearly" && savings > 0 && (
-                    <span className="bg-green-500 text-white rounded-md px-2 py-0.5 text-xs">{savings}% off</span>
-                  )}
                 </div>
 
-                <div className="text-lg font-medium">{t(plan.nameKey)}</div>
+                <div className="text-lg font-semibold text-card-foreground">{t(plan.nameKey)}</div>
                 <p className="text-muted-foreground text-sm">{isPT ? planInfos[plan.id][0] : planInfos[plan.id][1]}</p>
                 <h3 className="mt-2 flex items-end gap-1">
-                  <span className="text-3xl font-bold">R${monthlyEquiv.toLocaleString("pt-BR")}</span>
+                  <span className="text-3xl font-bold text-card-foreground">R${plan.price.monthly.toLocaleString("pt-BR")}</span>
                   <span className="text-muted-foreground text-sm">/mês</span>
                 </h3>
-                {freq === "yearly" && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    R${currentPrice.toLocaleString("pt-BR")} {isPT ? "cobrado anualmente" : "billed yearly"}
-                  </p>
-                )}
               </div>
 
-              <div className={cn("text-muted-foreground space-y-3 px-4 py-5 text-sm flex-grow", plan.popular && "bg-muted/10")}>
-                  {features.map((feature, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <CheckCircle2 className="text-foreground h-4 w-4 flex-shrink-0" />
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <p className={cn(feature.tooltip && "cursor-pointer border-b border-dashed border-muted-foreground/40")}>
-                            {feature.text}
-                          </p>
-                        </TooltipTrigger>
-                        {feature.tooltip && <TooltipContent><p>{feature.tooltip}</p></TooltipContent>}
-                      </Tooltip>
-                    </div>
-                  ))}
+              <div className="space-y-3 px-4 py-5 text-sm flex-grow">
+                {features.map((feature, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <CheckCircle2 className="text-primary h-4 w-4 flex-shrink-0" />
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <p className={cn("text-muted-foreground", feature.tooltip && "cursor-pointer border-b border-dashed border-muted-foreground/40")}>
+                          {feature.text}
+                        </p>
+                      </TooltipTrigger>
+                      {feature.tooltip && <TooltipContent><p>{feature.tooltip}</p></TooltipContent>}
+                    </Tooltip>
+                  </div>
+                ))}
 
-                <div className="pt-2 border-t">
-                  <p className="text-xs text-muted-foreground mb-2">{isPT ? "FONTES DE TRÁFEGO" : "TRAFFIC SOURCES"}</p>
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wide">{isPT ? "Fontes de Tráfego" : "Traffic Sources"}</p>
                   <div className="flex gap-2">
                     {plan.trafficSources.map((source) => (
-                      <div key={source} className="w-7 h-7 rounded-lg bg-background border flex items-center justify-center">
+                      <div key={source} className="w-7 h-7 rounded-lg bg-background border border-border flex items-center justify-center">
                         <img src={trafficSourceLogos[source]} alt={source} className="w-5 h-5 object-contain" />
                       </div>
                     ))}
@@ -340,7 +304,7 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
                 </div>
               </div>
 
-              <div className={cn("mt-auto w-full border-t p-3", plan.popular && "bg-muted/40")}>
+              <div className="mt-auto w-full border-t border-border p-3">
                 <Button
                   className="w-full"
                   variant={plan.popular ? "default" : "outline"}
