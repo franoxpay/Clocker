@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -94,6 +94,92 @@ const transitionVariants = {
     },
   },
 };
+
+const platformsConfig = [
+  { id: "facebook", logo: facebookLogo, alt: "Facebook Ads", phase: 0 },
+  { id: "instagram", logo: instagramLogo, alt: "Instagram Ads", phase: (2 * Math.PI) / 3 },
+  { id: "tiktok", logo: tiktokLogo, alt: "TikTok Ads", phase: (4 * Math.PI) / 3 },
+];
+
+const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { centerLogo: string }) {
+  const timeRef = useRef(0);
+  const rafRef = useRef<number>(0);
+  const [, forceUpdate] = useState(0);
+  const pausedRef = useRef(false);
+
+  useEffect(() => {
+    let lastTime = performance.now();
+    const animate = (now: number) => {
+      if (!pausedRef.current) {
+        timeRef.current += (now - lastTime) / 1000;
+        forceUpdate(t => t + 1);
+      }
+      lastTime = now;
+      rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const RADIUS = 130;
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div
+        className="relative flex items-center justify-center"
+        style={{ width: 320, height: 320 }}
+        onMouseEnter={() => { pausedRef.current = true; }}
+        onMouseLeave={() => { pausedRef.current = false; }}
+      >
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+          style={{ width: RADIUS * 2, height: RADIUS * 2 }}
+        >
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              border: "1px solid rgba(99,102,241,0.25)",
+              boxShadow: "0 0 40px rgba(99,102,241,0.12), inset 0 0 40px rgba(99,102,241,0.06)",
+            }}
+          />
+          <div
+            className="absolute inset-0 rounded-full animate-pulse"
+            style={{
+              background: "radial-gradient(circle, transparent 30%, rgba(99,102,241,0.08) 70%, rgba(99,102,241,0.15) 100%)",
+            }}
+          />
+        </div>
+
+        <div className="relative z-10 w-16 h-16 rounded-full flex items-center justify-center bg-background border border-border shadow-lg">
+          <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-pulse" />
+          <img src={centerLogo} alt="Cleryon" className="w-10 h-10 object-contain relative z-10" />
+        </div>
+
+        {platformsConfig.map((p) => {
+          const angle = timeRef.current * 0.5 + p.phase;
+          const x = Math.cos(angle) * RADIUS;
+          const y = Math.sin(angle) * RADIUS;
+          return (
+            <div
+              key={p.id}
+              className="absolute top-1/2 left-1/2 transition-transform duration-75"
+              style={{
+                width: 52,
+                height: 52,
+                transform: `translate(calc(${x}px - 50%), calc(${y}px - 50%))`,
+                zIndex: 10,
+              }}
+            >
+              <div className="w-full h-full rounded-full bg-background border border-border shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200 cursor-pointer">
+                <img src={p.logo} alt={p.alt} className="w-7 h-7 object-contain" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 function HeroHeader({ onLogin, theme }: { onLogin: () => void; theme: string }) {
   const { t, language } = useLanguage();
@@ -350,20 +436,10 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="bg-background pb-16 pt-16 md:pb-24">
-          <div className="group relative m-auto max-w-5xl px-6">
-            <div className="mx-auto mt-6 grid max-w-2xl grid-cols-3 gap-x-12 gap-y-8 sm:gap-x-16 sm:gap-y-14 place-items-center">
-              <div className="flex items-center justify-center">
-                <img src={facebookLogo} alt="Facebook Ads" className="h-8 w-auto object-contain" />
-              </div>
-              <div className="flex items-center justify-center">
-                <img src={instagramLogo} alt="Instagram Ads" className="h-8 w-auto object-contain" />
-              </div>
-              <div className="flex items-center justify-center">
-                <img src={tiktokLogo} alt="TikTok Ads" className="h-8 w-auto object-contain" />
-              </div>
-            </div>
-            <p className="text-center text-sm text-muted-foreground mt-6">
+        <section className="bg-background pb-8 pt-4 md:pb-16">
+          <div className="flex flex-col items-center gap-2">
+            <OrbitingPlatforms centerLogo={theme === "dark" ? logoBranca : logoPreta} />
+            <p className="text-center text-sm text-muted-foreground -mt-4">
               {language === "pt-BR" ? "Compatível com as principais plataformas de anúncios" : "Compatible with the main ad platforms"}
             </p>
           </div>
