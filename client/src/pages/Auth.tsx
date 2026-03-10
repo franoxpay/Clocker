@@ -8,9 +8,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { Link as LinkIcon, Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useTheme } from "@/contexts/ThemeContext";
+import cleryonLogo from "@assets/cleryon-_2__1773155296486.webp";
 
 interface AuthProps {
   onBack?: () => void;
@@ -18,6 +20,7 @@ interface AuthProps {
 
 export default function Auth({ onBack }: AuthProps) {
   const { language } = useLanguage();
+  const { theme } = useTheme();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
@@ -157,17 +160,19 @@ export default function Auth({ onBack }: AuthProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-4">
-          <button 
+      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+          <button
             onClick={onBack}
-            className="flex items-center gap-3 hover-elevate rounded-md px-2 py-1"
+            className="flex items-center"
             data-testid="button-back-home"
           >
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <LinkIcon className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-semibold text-lg">Cloaker</span>
+            <img
+              src={cleryonLogo}
+              alt="Cleryon"
+              className="h-7 w-auto"
+              style={theme === "light" ? { filter: "invert(1)" } : undefined}
+            />
           </button>
           <div className="flex items-center gap-2">
             <LanguageToggle />
