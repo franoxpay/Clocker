@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, memo, lazy, Suspense, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -9,7 +9,8 @@ import { AnimatedGroup } from "@/components/ui/animated-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, Transition } from "framer-motion";
 import { cn } from "@/lib/utils";
-import Auth from "./Auth";
+
+const Auth = lazy(() => import("./Auth"));
 
 import facebookLogo from "../assets/facebook-logo.png";
 import instagramLogo from "../assets/instagram-logo.png";
@@ -131,31 +132,40 @@ const platformsConfig = [
   { id: "tiktok", logo: tiktokLogo, alt: "TikTok Ads", phase: (4 * Math.PI) / 3 },
 ];
 
+const ORBIT_RADIUS = 160;
+
 const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { centerLogo: string }) {
-  const timeRef = useRef(0);
+  const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number>(0);
-  const [, forceUpdate] = useState(0);
+  const timeRef = useRef(0);
+  const lastTimeRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
 
   useEffect(() => {
-    let lastTime = performance.now();
     const animate = (now: number) => {
-      if (!pausedRef.current) {
-        timeRef.current += (now - lastTime) / 1000;
-        forceUpdate(t => t + 1);
+      if (lastTimeRef.current !== null && !pausedRef.current) {
+        timeRef.current += (now - lastTimeRef.current) / 1000;
+        const t = timeRef.current * 0.5;
+        const nodes = containerRef.current?.querySelectorAll<HTMLElement>("[data-orbit]");
+        nodes?.forEach((el, i) => {
+          const phase = (i * 2 * Math.PI) / 3;
+          const angle = t + phase;
+          const x = Math.cos(angle) * ORBIT_RADIUS;
+          const y = Math.sin(angle) * ORBIT_RADIUS;
+          el.style.transform = `translate(calc(${x}px - 50%), calc(${y}px - 50%))`;
+        });
       }
-      lastTime = now;
+      lastTimeRef.current = now;
       rafRef.current = requestAnimationFrame(animate);
     };
     rafRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
-  const RADIUS = 160;
-
   return (
     <div className="flex flex-col items-center gap-4">
       <div
+        ref={containerRef}
         className="relative flex items-center justify-center"
         style={{ width: 400, height: 400 }}
         onMouseEnter={() => { pausedRef.current = true; }}
@@ -163,7 +173,7 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
       >
         <div
           className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
-          style={{ width: RADIUS * 2, height: RADIUS * 2 }}
+          style={{ width: ORBIT_RADIUS * 2, height: ORBIT_RADIUS * 2 }}
         >
           <div
             className="absolute inset-0 rounded-full"
@@ -185,27 +195,18 @@ const OrbitingPlatforms = memo(function OrbitingPlatforms({ centerLogo }: { cent
           <img src={centerLogo} alt="Cleryon" className="w-12 h-12 object-contain relative z-10" />
         </div>
 
-        {platformsConfig.map((p) => {
-          const angle = timeRef.current * 0.5 + p.phase;
-          const x = Math.cos(angle) * RADIUS;
-          const y = Math.sin(angle) * RADIUS;
-          return (
-            <div
-              key={p.id}
-              className="absolute top-1/2 left-1/2 transition-transform duration-75"
-              style={{
-                width: 62,
-                height: 62,
-                transform: `translate(calc(${x}px - 50%), calc(${y}px - 50%))`,
-                zIndex: 10,
-              }}
-            >
-              <div className="w-full h-full rounded-full bg-background border border-border shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200 cursor-pointer">
-                <img src={p.logo} alt={p.alt} className="w-8 h-8 object-contain" />
-              </div>
+        {platformsConfig.map((p, i) => (
+          <div
+            key={p.id}
+            data-orbit={i}
+            className="absolute top-1/2 left-1/2"
+            style={{ width: 62, height: 62, transform: "translate(-50%, -50%)", zIndex: 10 }}
+          >
+            <div className="w-full h-full rounded-full bg-background border border-border shadow-md flex items-center justify-center hover:scale-110 transition-transform duration-200 cursor-pointer">
+              <img src={p.logo} alt={p.alt} className="w-8 h-8 object-contain" />
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -249,6 +250,7 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
         </p>
       )}
 
+      <TooltipProvider>
       <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {plans.map((plan) => {
           const currentPrice = plan.price[freq];
@@ -312,7 +314,6 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
               </div>
 
               <div className={cn("text-muted-foreground space-y-3 px-4 py-5 text-sm flex-grow", plan.popular && "bg-muted/10")}>
-                <TooltipProvider>
                   {features.map((feature, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <CheckCircle2 className="text-foreground h-4 w-4 flex-shrink-0" />
@@ -326,7 +327,6 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
                       </Tooltip>
                     </div>
                   ))}
-                </TooltipProvider>
 
                 <div className="pt-2 border-t">
                   <p className="text-xs text-muted-foreground mb-2">{isPT ? "FONTES DE TRÁFEGO" : "TRAFFIC SOURCES"}</p>
@@ -354,6 +354,7 @@ function PricingGrid({ language, t, onSelectPlan }: { language: string; t: (k: s
           );
         })}
       </div>
+      </TooltipProvider>
     </div>
   );
 }
@@ -449,11 +450,11 @@ export default function Landing() {
   const { theme } = useTheme();
   const [showAuth, setShowAuth] = useState(false);
 
-  const features = [
+  const features = useMemo(() => [
     {
       icon: Shield,
       title: language === "pt-BR" ? "Proteção Avançada" : "Advanced Protection",
-      description: language === "pt-BR" 
+      description: language === "pt-BR"
         ? "Sistema inteligente de filtragem por país, dispositivo e parâmetros de anúncio"
         : "Intelligent filtering system by country, device and ad parameters",
     },
@@ -478,10 +479,14 @@ export default function Landing() {
         ? "Acompanhe todos os clicks em tempo real com logs completos"
         : "Track all clicks in real time with complete logs",
     },
-  ];
+  ], [language]);
 
   if (showAuth) {
-    return <Auth onBack={() => setShowAuth(false)} />;
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-background" />}>
+        <Auth onBack={() => setShowAuth(false)} />
+      </Suspense>
+    );
   }
 
   return (
@@ -513,6 +518,8 @@ export default function Landing() {
                 className="absolute inset-x-0 top-56 -z-20 hidden lg:top-32 dark:block"
                 width="3276"
                 height="4095"
+                loading="lazy"
+                decoding="async"
               />
             </AnimatedGroup>
 
@@ -596,6 +603,8 @@ export default function Landing() {
                     alt="dashboard"
                     width="2700"
                     height="1440"
+                    loading="lazy"
+                    decoding="async"
                   />
                   <img
                     className="z-2 border-border/25 aspect-15/8 relative rounded-2xl border dark:hidden"
@@ -603,6 +612,8 @@ export default function Landing() {
                     alt="dashboard"
                     width="2700"
                     height="1440"
+                    loading="lazy"
+                    decoding="async"
                   />
                 </div>
               </div>
