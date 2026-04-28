@@ -2,6 +2,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+ENV NODE_ENV=production
+
 COPY package*.json ./
 RUN npm ci
 
@@ -16,10 +18,10 @@ ENV NODE_ENV=production
 ENV PORT=80
 
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 80
 
-CMD ["npm", "run", "start"]
+CMD ["node", "dist/index.cjs"]
