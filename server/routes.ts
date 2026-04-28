@@ -5906,8 +5906,12 @@ export async function registerRoutes(
       let countryAllowed = true;
       
       if (offer.platform !== "tiktok") {
-        country = await getCountryFromIP(ip);
-        countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+        if (offer.allowedCountries.includes("ALL")) {
+          countryAllowed = true;
+        } else {
+          country = await getCountryFromIP(ip);
+          countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+        }
       }
 
       // Determine redirect type
@@ -6393,8 +6397,12 @@ export async function registerRoutes(
       let countryAllowed = true;
       
       if (offer.platform !== "tiktok") {
-        country = await getCountryFromIP(ip);
-        countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+        if (offer.allowedCountries.includes("ALL")) {
+          countryAllowed = true;
+        } else {
+          country = await getCountryFromIP(ip);
+          countryAllowed = offer.allowedCountries.includes(country) || country === 'XX';
+        }
       }
 
       // Bot detected = always go to WHITE

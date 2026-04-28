@@ -40,6 +40,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +62,7 @@ import {
   Settings2,
   Eye,
   AlertTriangle,
+  Globe,
 } from "lucide-react";
 import {
   Tooltip,
@@ -728,55 +730,89 @@ export default function Offers() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder={language === "pt-BR" ? "Buscar país..." : "Search country..."}
-                    value={countrySearch}
-                    onChange={(e) => setCountrySearch(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-country-search"
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">
+                      {language === "pt-BR" ? "Todos os países" : "All countries"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {language === "pt-BR"
+                        ? "Desativa o filtro — qualquer visitante passa"
+                        : "Disables the filter — any visitor gets through"}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={formData.allowedCountries.includes("ALL")}
+                    onCheckedChange={(checked) => {
+                      setFormData(prev => ({
+                        ...prev,
+                        allowedCountries: checked ? ["ALL"] : ["BR"],
+                      }));
+                    }}
+                    data-testid="switch-all-countries"
                   />
                 </div>
-                
-                {formData.allowedCountries.length > 0 && (
-                  <div className="flex flex-wrap gap-1 pb-2 border-b">
-                    {formData.allowedCountries.map(code => {
-                      return (
-                        <Badge 
-                          key={code} 
-                          variant="secondary" 
-                          className="cursor-pointer"
-                          onClick={() => toggleCountry(code)}
-                        >
-                          {code}
-                        </Badge>
-                      );
-                    })}
+
+                {formData.allowedCountries.includes("ALL") ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
+                    <Globe className="w-4 h-4 shrink-0" />
+                    <span className="text-sm font-medium">
+                      {language === "pt-BR"
+                        ? "Filtro de país desativado — todos os países permitidos"
+                        : "Country filter disabled — all countries allowed"}
+                    </span>
                   </div>
-                )}
-                
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                  {displayedCountries.map((country) => (
-                    <div key={country.code} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={country.code}
-                        checked={formData.allowedCountries.includes(country.code)}
-                        onCheckedChange={() => toggleCountry(country.code)}
-                        data-testid={`checkbox-country-${country.code}`}
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input
+                        placeholder={language === "pt-BR" ? "Buscar país..." : "Search country..."}
+                        value={countrySearch}
+                        onChange={(e) => setCountrySearch(e.target.value)}
+                        className="pl-10"
+                        data-testid="input-country-search"
                       />
-                      <Label htmlFor={country.code} className="cursor-pointer text-sm truncate">
-                        {language === "pt-BR" ? country.namePt : country.name}
-                      </Label>
                     </div>
-                  ))}
-                </div>
-                {hasMoreCountries && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    {language === "pt-BR" 
-                      ? `+ ${countries.length - displayedCountries.length} países. Use a busca para encontrar mais.`
-                      : `+ ${countries.length - displayedCountries.length} countries. Use search to find more.`}
-                  </p>
+
+                    {formData.allowedCountries.length > 0 && (
+                      <div className="flex flex-wrap gap-1 pb-2 border-b">
+                        {formData.allowedCountries.map(code => (
+                          <Badge
+                            key={code}
+                            variant="secondary"
+                            className="cursor-pointer"
+                            onClick={() => toggleCountry(code)}
+                          >
+                            {code}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                      {displayedCountries.map((country) => (
+                        <div key={country.code} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={country.code}
+                            checked={formData.allowedCountries.includes(country.code)}
+                            onCheckedChange={() => toggleCountry(country.code)}
+                            data-testid={`checkbox-country-${country.code}`}
+                          />
+                          <Label htmlFor={country.code} className="cursor-pointer text-sm truncate">
+                            {language === "pt-BR" ? country.namePt : country.name}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                    {hasMoreCountries && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        {language === "pt-BR"
+                          ? `+ ${countries.length - displayedCountries.length} países. Use a busca para encontrar mais.`
+                          : `+ ${countries.length - displayedCountries.length} countries. Use search to find more.`}
+                      </p>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
