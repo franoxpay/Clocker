@@ -837,7 +837,7 @@ function generateChallengeHTML(token: string, honeypotId: string, baseUrl?: stri
 async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
   console.log(`[DNS] Verifying domain: ${subdomain}`);
   
-  const EXPECTED_CNAME_TARGET = "cleryon.com";
+  const EXPECTED_CNAME_TARGET = (process.env.MAIN_DOMAIN || "clerion.app").split(",")[0].trim();
   
   // First try CNAME - this is the expected configuration
   try {
@@ -2936,7 +2936,7 @@ export async function registerRoutes(
           expiresAt,
         });
 
-        const baseUrl = process.env.BASE_URL || "https://cleryon.com";
+        const baseUrl = process.env.BASE_URL || "https://clerion.app";
         const resetLink = `${baseUrl}/reset-password?token=${token}`;
         
         await sendPasswordResetEmail(user.email, resetLink, user.id);
@@ -4869,7 +4869,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -4888,7 +4888,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -4912,7 +4912,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -4931,7 +4931,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -4955,7 +4955,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configurar Novo Domínio</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -4974,7 +4974,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Please access your account to configure a new domain and restore your campaigns.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
+    <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Configure New Domain</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -4998,7 +4998,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Sentimos sua falta! Se mudar de ideia, você pode reativar sua assinatura a qualquer momento.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reativar Assinatura</a>
+    <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reativar Assinatura</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -5017,7 +5017,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">We miss you! If you change your mind, you can reactivate your subscription at any time.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reactivate Subscription</a>
+    <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reactivate Subscription</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -5041,7 +5041,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Obrigado por continuar conosco! Seu acesso a todos os recursos continua ativo.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Dashboard</a>
+    <a href="https://clerion.app/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Dashboard</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -5060,7 +5060,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Thank you for staying with us! Your access to all features remains active.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Access Dashboard</a>
+    <a href="https://clerion.app/dashboard" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Access Dashboard</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -5084,7 +5084,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Acesse sua conta para atualizar o método de pagamento.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Atualizar Pagamento</a>
+    <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Atualizar Pagamento</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -5103,7 +5103,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Access your account to update your payment method.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Update Payment</a>
+    <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Update Payment</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -5127,7 +5127,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">Se você acredita que isso foi um erro, entre em contato com nosso suporte.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="mailto:suporte@cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contatar Suporte</a>
+    <a href="mailto:suporte@clerion.app" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contatar Suporte</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Atenciosamente,<br/>Equipe Cleryon</p>
@@ -5146,7 +5146,7 @@ export async function registerRoutes(
   </div>
   <p style="color: #555; line-height: 1.6;">If you believe this was an error, please contact our support.</p>
   <div style="text-align: center; margin: 30px 0;">
-    <a href="mailto:suporte@cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contact Support</a>
+    <a href="mailto:suporte@clerion.app" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Contact Support</a>
   </div>
   <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;" />
   <p style="color: #999; font-size: 12px;">Best regards,<br/>Cleryon Team</p>
@@ -5288,7 +5288,7 @@ export async function registerRoutes(
       const resend = new Resend(process.env.RESEND_API_KEY);
       
       const { data, error } = await resend.emails.send({
-        from: `Cleryon <${process.env.FROM_EMAIL || 'noreply@cleryon.com'}>`,
+        from: `Cleryon <${process.env.FROM_EMAIL || 'noreply@clerion.app'}>`,
         to: [targetEmail],
         subject,
         html: htmlContent,
@@ -5549,8 +5549,8 @@ export async function registerRoutes(
       // Extract domain using the helper function that checks multiple headers
       const domainToCheck = extractDomainFromRequest(req);
       
-      // Skip if this is the primary app domain (cleryon.com)
-      const primaryAppDomains = ["cleryon.com", "www.cleryon.com"];
+      // Skip if this is the primary app domain (clerion.app)
+      const primaryAppDomains = ["clerion.app", "www.clerion.app"];
       if (primaryAppDomains.some(d => domainToCheck === d || domainToCheck.endsWith(".replit.dev") || domainToCheck.endsWith(".kirk.replit.dev"))) {
         console.log(`[Cloak /r/:slug] Skipping - primary app domain: ${domainToCheck}`);
         return res.status(404).json({ error: "Not found", message: "This endpoint is for cloaking redirects on custom domains only." });
@@ -6151,8 +6151,8 @@ export async function registerRoutes(
     // Use the same helper function to extract domain from request headers
     const domainToCheck = extractDomainFromRequest(req);
     
-    // Skip if this is the primary app domain (cleryon.com)
-    const primaryAppDomains = ["cleryon.com", "www.cleryon.com"];
+    // Skip if this is the primary app domain (clerion.app)
+    const primaryAppDomains = ["clerion.app", "www.clerion.app"];
     if (primaryAppDomains.some(d => domainToCheck === d || domainToCheck.endsWith(".replit.dev") || domainToCheck.endsWith(".kirk.replit.dev"))) {
       console.log(`[CLOAK /:slug] Skipping - primary app domain: ${domainToCheck}`);
       return next();

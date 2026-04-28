@@ -86,7 +86,7 @@ export default function AdminDomains() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const DNS_DESTINATION = "cleryon.com";
+  const DNS_DESTINATION = "clerion.app";
 
   const { data: domains, isLoading } = useQuery<SystemDomain[]>({
     queryKey: ["/api/admin/domains", typeFilter, searchTerm, statusFilter],
@@ -163,7 +163,7 @@ export default function AdminDomains() {
           title: language === "pt-BR" ? "Domínio marcado como inativo" : "Domain marked as inactive",
           description: data.error 
             ? (language === "pt-BR" ? `DNS inválido: ${data.error}` : `Invalid DNS: ${data.error}`)
-            : (language === "pt-BR" ? "Nenhum CNAME apontando para cleryon.com foi encontrado" : "No CNAME pointing to cleryon.com was found"),
+            : (language === "pt-BR" ? "Nenhum CNAME apontando para clerion.app foi encontrado" : "No CNAME pointing to clerion.app was found"),
           variant: "destructive",
         });
       }

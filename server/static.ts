@@ -16,9 +16,9 @@ export function serveStatic(app: Express) {
     const rawHost = req.get("host") || "";
     const forwardedHost = req.get("x-forwarded-host") || "";
     const host = (forwardedHost || rawHost).split(":")[0].toLowerCase();
-    const mainDomain = (process.env.MAIN_DOMAIN || "cleryon.com").toLowerCase();
+    const mainDomain = (process.env.MAIN_DOMAIN || "clerion.app").toLowerCase();
     const easypanelHost = ".easypanel.host";
-    const additionalMainDomains = ["cleryon.com", "www.cleryon.com"];
+    const additionalMainDomains = ["clerion.app", "www.clerion.app"];
     
     console.log(`[STATIC FALLBACK] Path: ${req.path}, Host: ${host}, RawHost: ${rawHost}, ForwardedHost: ${forwardedHost}, MainDomain: ${mainDomain}`);
     

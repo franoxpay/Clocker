@@ -4,13 +4,13 @@ import { emailLogs } from '@shared/schema';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
-const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@cleryon.com';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'noreply@clerion.app';
 const FROM_NAME = process.env.FROM_NAME || 'Cleryon';
-const LOGO_URL = 'https://cleryon.com/images/logo-dark.png';
+const LOGO_URL = 'https://clerion.app/images/logo-dark.png';
 
 const EMAIL_HEADER = `
   <div style="text-align: center; margin-bottom: 30px;">
-    <a href="https://cleryon.com" style="text-decoration: none;">
+    <a href="https://clerion.app" style="text-decoration: none;">
       <img src="${LOGO_URL}" alt="Cleryon" style="max-width: 180px; height: auto;" />
     </a>
   </div>
@@ -119,7 +119,7 @@ ${EMAIL_HEADER}
       <p style="color: #555; line-height: 1.6;">Sua conta foi criada com sucesso. Estamos felizes em tê-lo conosco!</p>
       <p style="color: #555; line-height: 1.6;">Comece a criar suas campanhas agora mesmo acessando seu painel.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Acessar Painel
         </a>
       </div>
@@ -149,7 +149,7 @@ ${EMAIL_HEADER}
         <p style="margin: 0; color: #333;"><strong>Plano:</strong> ${planName}</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Acessar Painel
         </a>
       </div>
@@ -186,7 +186,7 @@ ${EMAIL_HEADER}
         <li>Aguarde alguns minutos e tente novamente</li>
       </ul>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Verificar Domínios
         </a>
       </div>
@@ -219,7 +219,7 @@ ${EMAIL_HEADER}
       <p style="color: #555; line-height: 1.6;">Nossa equipe já foi notificada e está trabalhando para resolver o problema. Você será notificado quando o domínio voltar ao normal.</p>
       <p style="color: #555; line-height: 1.6;"><strong>Alternativa:</strong> Você pode configurar um domínio próprio para evitar interrupções futuras.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Gerenciar Domínios
         </a>
       </div>
@@ -273,7 +273,7 @@ ${EMAIL_HEADER}
       </div>
       <p style="color: #555; line-height: 1.6;">Acesse sua conta para configurar um novo domínio e restaurar suas campanhas.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/domains" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Configurar Novo Domínio
         </a>
       </div>
@@ -311,7 +311,7 @@ ${EMAIL_HEADER}
       </div>
       <p style="color: #555; line-height: 1.6;">Para continuar usando todos os recursos da plataforma, considere fazer upgrade do seu plano.</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Ver Planos
         </a>
       </div>
@@ -367,7 +367,7 @@ ${EMAIL_HEADER}
       <h2 style="color: #333;">${title}</h2>
       <p style="color: #555; line-height: 1.6;">${message}</p>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Acessar Painel
         </a>
       </div>
@@ -397,7 +397,7 @@ ${EMAIL_HEADER}
         <p style="margin: 0; color: #92400e;">Para manter suas ofertas ativas e o tráfego funcionando sem interrupção, renove sua assinatura antes do vencimento.</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Renovar Agora
         </a>
       </div>
@@ -409,7 +409,7 @@ ${EMAIL_FOOTER}
     to: email,
     subject: `⏳ Sua assinatura Cleryon vence em 3 dias`,
     html,
-    text: `Olá ${firstName}, sua assinatura do plano ${planName} vence em ${expiryDate}. Acesse https://cleryon.com/subscription para renovar.`,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} vence em ${expiryDate}. Acesse https://clerion.app/subscription para renovar.`,
     userId,
     type: 'subscription_expiring_3days',
     metadata: { planName, expiryDate },
@@ -427,7 +427,7 @@ ${EMAIL_HEADER}
         <p style="margin: 0; color: #991b1b;"><strong>Atenção:</strong> Suas ofertas foram pausadas e o tráfego está bloqueado. Renove agora para reativar tudo automaticamente.</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #ef4444; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Renovar e Reativar
         </a>
       </div>
@@ -439,7 +439,7 @@ ${EMAIL_FOOTER}
     to: email,
     subject: `🔴 Sua assinatura Cleryon expirou hoje`,
     html,
-    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou hoje. Suas ofertas estão pausadas. Acesse https://cleryon.com/subscription para renovar.`,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou hoje. Suas ofertas estão pausadas. Acesse https://clerion.app/subscription para renovar.`,
     userId,
     type: 'subscription_expired_today',
     metadata: { planName },
@@ -457,7 +457,7 @@ ${EMAIL_HEADER}
         <p style="margin: 0; color: #991b1b;">Cada dia sem assinatura ativa é uma oportunidade perdida. Renove agora e volte a converter tráfego imediatamente.</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Reativar Minha Conta
         </a>
       </div>
@@ -469,7 +469,7 @@ ${EMAIL_FOOTER}
     to: email,
     subject: `🚨 Sua conta Cleryon está pausada há 2 dias`,
     html,
-    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou há 2 dias. Acesse https://cleryon.com/subscription para renovar.`,
+    text: `Olá ${firstName}, sua assinatura do plano ${planName} expirou há 2 dias. Acesse https://clerion.app/subscription para renovar.`,
     userId,
     type: 'subscription_expired_2days',
     metadata: { planName },
@@ -487,7 +487,7 @@ ${EMAIL_HEADER}
         <p style="margin: 0; color: #374151;">Volte agora e todas as suas ofertas e domínios serão reativados automaticamente assim que você renovar.</p>
       </div>
       <div style="text-align: center; margin: 30px 0;">
-        <a href="https://cleryon.com/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+        <a href="https://clerion.app/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">
           Voltar ao Cleryon
         </a>
       </div>
@@ -499,7 +499,7 @@ ${EMAIL_FOOTER}
     to: email,
     subject: `📢 Sentimos sua falta! Volte ao Cleryon`,
     html,
-    text: `Olá ${firstName}, faz 1 semana que sua assinatura do plano ${planName} expirou. Acesse https://cleryon.com/subscription para renovar.`,
+    text: `Olá ${firstName}, faz 1 semana que sua assinatura do plano ${planName} expirou. Acesse https://clerion.app/subscription para renovar.`,
     userId,
     type: 'subscription_expired_7days',
     metadata: { planName },
