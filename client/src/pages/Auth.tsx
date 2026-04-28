@@ -12,7 +12,7 @@ import { Loader2, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useTheme } from "@/contexts/ThemeContext";
-import cleryonLogo from "@assets/cleryon-_2__1773155296486.webp";
+import cleryonLogo from "@/assets/cleryon-logo.webp";
 
 interface AuthProps {
   onBack?: () => void;

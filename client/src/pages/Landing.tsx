@@ -15,7 +15,7 @@ const Auth = lazy(() => import("./Auth"));
 import facebookLogo from "../assets/facebook-logo.png";
 import instagramLogo from "../assets/instagram-logo.png";
 import tiktokLogo from "../assets/tiktok-logo.png";
-import cleryonLogo from "@assets/cleryon-_2__1773155296486.webp";
+import cleryonLogo from "@/assets/cleryon-logo.webp";
 
 const logoPreta = cleryonLogo;
 const logoBranca = cleryonLogo;

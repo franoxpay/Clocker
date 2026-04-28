@@ -1,0 +1,263 @@
+Commit: Add option to allow all countries and disable country filtering
+
+Implements an "All countries" toggle in the frontend offer form and modifies backend route handlers to bypass country checks when this option is enabled, setting `countryAllowed` to true.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: 4540481e-8254-42a8-be19-8af2c03ee5b0
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: 9bb6ea82-9f20-49ae-a6e7-400af49f1de8
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/8e991394-e265-4483-9986-8c3d6526a270/4540481e-8254-42a8-be19-8af2c03ee5b0/r1PnANw 
+##########################################
+### Download Github Archive Started...
+### Tue, 28 Apr 2026 17:04:05 GMT
+##########################################
+
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 358B 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 2.1s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 126B done
+#3 DONE 0.0s
+
+#4 [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 resolve docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 0.0s done
+#4 sha256:11cedc39e663e7c5d5cb9cc77a461a0d2adc25537b94e6831a6108f09cb2001b 6.52kB / 6.52kB done
+#4 sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 7.67kB / 7.67kB done
+#4 sha256:afdf98210b07b586eb71fa22ba2e432e058e4cd1304d31ed60888755b8c865fb 1.72kB / 1.72kB done
+#4 DONE 0.3s
+
+#5 [internal] load build context
+#5 transferring context: 3.00MB 0.1s done
+#5 DONE 0.2s
+
+#6 [builder 2/6] WORKDIR /app
+#6 DONE 0.1s
+
+#7 [builder 3/6] COPY package*.json ./
+#7 DONE 0.3s
+
+#8 [runner 4/5] RUN npm ci --only=production
+#8 0.673 npm warn config only Use `--omit=dev` to omit dev dependencies from the install.
+#8 ...
+
+#9 [builder 4/6] RUN npm ci
+#9 17.51 npm warn deprecated @esbuild-kit/esm-loader@2.6.5: Merged into tsx: https://tsx.is
+#9 17.60 npm warn deprecated @esbuild-kit/core-utils@3.3.2: Merged into tsx: https://tsx.is
+#9 ...
+
+#8 [runner 4/5] RUN npm ci --only=production
+#8 36.33 
+#8 36.33 added 496 packages, and audited 497 packages in 36s
+#8 36.33 
+#8 36.33 60 packages are looking for funding
+#8 36.33   run `npm fund` for details
+#8 36.54 
+#8 36.54 38 vulnerabilities (3 low, 8 moderate, 26 high, 1 critical)
+#8 36.54 
+#8 36.54 To address issues that do not require attention, run:
+#8 36.54   npm audit fix
+#8 36.54 
+#8 36.54 To address all issues (including breaking changes), run:
+#8 36.54   npm audit fix --force
+#8 36.54 
+#8 36.54 Run `npm audit` for details.
+#8 36.54 npm notice
+#8 36.54 npm notice New major version of npm available! 10.8.2 -> 11.13.0
+#8 36.54 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.13.0
+#8 36.54 npm notice To update run: npm install -g npm@11.13.0
+#8 36.54 npm notice
+#8 DONE 37.2s
+
+#9 [builder 4/6] RUN npm ci
+#9 41.50 
+#9 41.50 added 605 packages, and audited 606 packages in 41s
+#9 41.50 
+#9 41.50 72 packages are looking for funding
+#9 41.50   run `npm fund` for details
+#9 41.79 
+#9 41.79 44 vulnerabilities (3 low, 13 moderate, 27 high, 1 critical)
+#9 41.79 
+#9 41.79 To address issues that do not require attention, run:
+#9 41.79   npm audit fix
+#9 41.79 
+#9 41.79 To address all issues (including breaking changes), run:
+#9 41.79   npm audit fix --force
+#9 41.79 
+#9 41.79 Run `npm audit` for details.
+#9 41.79 npm notice
+#9 41.79 npm notice New major version of npm available! 10.8.2 -> 11.13.0
+#9 41.79 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.13.0
+#9 41.79 npm notice To update run: npm install -g npm@11.13.0
+#9 41.79 npm notice
+#9 DONE 42.3s
+
+#10 [builder 5/6] COPY . .
+#10 DONE 0.1s
+
+#11 [builder 6/6] RUN npm run build
+#11 0.583 
+#11 0.583 > rest-express@1.0.0 build
+#11 0.583 > tsx script/build.ts
+#11 0.583 
+#11 2.705 building client...
+#11 2.881 vite v5.4.20 building for production...
+#11 4.340 transforming...
+#11 4.614 Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+#11 4.614   npx update-browserslist-db@latest
+#11 4.614   Why you should do it regularly: https://github.com/browserslist/update-db#readme
+#11 9.241 
+#11 9.241 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+#11 13.66 ✓ 1648 modules transformed.
+#11 16.00 x Build failed in 11.83s
+#11 16.01 [vite:asset] Could not load /app/attached_assets/cleryon-_2__1773155296486.webp (imported by client/src/pages/Landing.tsx): ENOENT: no such file or directory, open '/app/attached_assets/cleryon-_2__1773155296486.webp'
+#11 16.01     at async open (node:internal/fs/promises:637:25)
+#11 16.01     at async Object.readFile (node:internal/fs/promises:1249:14)
+#11 16.01     at async fileToBuiltUrl (/app/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:20428:19)
+#11 16.01     at async Object.load (/app/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:20328:17)
+#11 16.01     at async PluginDriver.hookFirstAndGetPlugin (/app/node_modules/rollup/dist/es/shared/node-entry.js:20689:28)
+#11 16.01     at async <anonymous> (/app/node_modules/rollup/dist/es/shared/node-entry.js:19809:33)
+#11 16.01     at async Queue.work (/app/node_modules/rollup/dist/es/shared/node-entry.js:20899:32) {
+#11 16.01   errno: -2,
+#11 16.01   code: 'PLUGIN_ERROR',
+#11 16.01   syscall: 'open',
+#11 16.01   path: '/app/attached_assets/cleryon-_2__1773155296486.webp',
+#11 16.01   pluginCode: 'ENOENT',
+#11 16.01   plugin: 'vite:asset',
+#11 16.01   hook: 'load',
+#11 16.01   watchFiles: [
+#11 16.01     '/app/client/index.html',
+#11 16.01     '/app/client/src/main.tsx',
+#11 16.01     '/app/package.json',
+#11 16.01     '/app/node_modules/react/jsx-runtime.js',
+#11 16.01     '/app/node_modules/react-dom/client.js',
+#11 16.01     '/app/client/src/App.tsx',
+#11 16.01     '/app/client/src/index.css',
+#11 16.01     '/app/node_modules/react/cjs/react-jsx-runtime.production.min.js',
+#11 16.01     '/app/node_modules/wouter/esm/index.js',
+#11 16.01     '/app/node_modules/@tanstack/react-query/build/modern/index.js',
+#11 16.01     '/app/node_modules/react-dom/index.js',
+#11 16.01     '/app/node_modules/lucide-react/dist/esm/lucide-react.js',
+#11 16.01     '/app/node_modules/react/index.js',
+#11 16.01     '/app/client/src/lib/queryClient.ts',
+#11 16.01     '/app/client/src/components/ui/toaster.tsx',
+#11 16.01     '/app/client/src/components/ui/tooltip.tsx',
+#11 16.01     '/app/client/src/contexts/LanguageContext.tsx',
+#11 16.01     '/app/client/src/contexts/ThemeContext.tsx',
+#11 16.01     '/app/client/src/components/ui/sidebar.tsx',
+#11 16.01     '/app/client/src/components/AppSidebar.tsx',
+#11 16.01     '/app/client/src/hooks/useAuth.ts',
+#11 16.01     '/app/client/src/components/ThemeToggle.tsx',
+#11 16.01     '/app/client/src/components/LanguageToggle.tsx',
+#11 16.01     '/app/client/src/components/NotificationBell.tsx',
+#11 16.01     '/app/client/src/components/ImpersonationBanner.tsx',
+#11 16.01     '/app/client/src/components/SubscriptionBanner.tsx',
+#11 16.01     '/app/client/src/components/ErrorBoundary.tsx',
+#11 16.01     '/app/client/src/hooks/use-toast.ts',
+#11 16.01     '/app/client/src/hooks/use-websocket.ts',
+#11 16.01     '/app/client/src/lib/authUtils.ts',
+#11 16.01     '/app/client/src/lib/countries.ts',
+#11 16.01     '/app/client/src/lib/utils.ts',
+#11 16.01     '/app/client/src/hooks/use-mobile.tsx',
+#11 16.01     '/app/client/src/pages/Analytics.tsx',
+#11 16.01     '/app/client/src/pages/Auth.tsx',
+#11 16.01     '/app/client/src/pages/Dashboard.tsx',
+#11 16.01     '/app/client/src/pages/Domains.tsx',
+#11 16.01     '/app/client/src/pages/Landing.tsx',
+#11 16.01     '/app/client/src/pages/Logs.tsx',
+#11 16.01     '/app/client/src/pages/Offers.tsx',
+#11 16.01     '/app/client/src/pages/ResetPassword.tsx',
+#11 16.01     '/app/client/src/pages/Settings.tsx',
+#11 16.01     '/app/client/src/pages/Subscription.tsx',
+#11 16.01     '/app/client/src/pages/not-found.tsx',
+#11 16.01     '/app/client/src/components/ui/accordion.tsx',
+#11 16.01     '/app/client/src/components/ui/alert-dialog.tsx',
+#11 16.01     '/app/client/src/components/ui/alert.tsx',
+#11 16.01     '/app/client/src/components/ui/animated-group.tsx',
+#11 16.01     '/app/client/src/components/ui/aspect-ratio.tsx',
+#11 16.01     '/app/client/src/components/ui/avatar.tsx',
+#11 16.01     '/app/client/src/components/ui/badge.tsx',
+#11 16.01     '/app/client/src/components/ui/breadcrumb.tsx',
+#11 16.01     '/app/client/src/components/ui/button.tsx',
+#11 16.01     '/app/client/src/components/ui/calendar.tsx',
+#11 16.01     '/app/client/src/components/ui/card.tsx',
+#11 16.01     '/app/client/src/components/ui/carousel.tsx',
+#11 16.01     '/app/client/src/components/ui/chart.tsx',
+#11 16.01     '/app/client/src/components/ui/checkbox.tsx',
+#11 16.01     '/app/client/src/components/ui/collapsible.tsx',
+#11 16.01     '/app/client/src/components/ui/command.tsx',
+#11 16.01     '/app/client/src/components/ui/context-menu.tsx',
+#11 16.01     '/app/client/src/components/ui/dialog.tsx',
+#11 16.01     '/app/client/src/components/ui/drawer.tsx',
+#11 16.01     '/app/client/src/components/ui/dropdown-menu.tsx',
+#11 16.01     '/app/client/src/components/ui/form.tsx',
+#11 16.01     '/app/client/src/components/ui/hover-card.tsx',
+#11 16.01     '/app/client/src/components/ui/input-otp.tsx',
+#11 16.01     '/app/client/src/components/ui/input.tsx',
+#11 16.01     '/app/client/src/components/ui/label.tsx',
+#11 16.01     '/app/client/src/components/ui/menubar.tsx',
+#11 16.01     '/app/client/src/components/ui/navigation-menu.tsx',
+#11 16.01     '/app/client/src/components/ui/pagination.tsx',
+#11 16.01     '/app/client/src/components/ui/popover.tsx',
+#11 16.01     '/app/client/src/components/ui/progress.tsx',
+#11 16.01     '/app/client/src/components/ui/radio-group.tsx',
+#11 16.01     '/app/client/src/components/ui/resizable.tsx',
+#11 16.01     '/app/client/src/components/ui/scroll-area.tsx',
+#11 16.01     '/app/client/src/components/ui/select.tsx',
+#11 16.01     '/app/client/src/components/ui/separator.tsx',
+#11 16.01     '/app/client/src/components/ui/sheet.tsx',
+#11 16.01     '/app/client/src/components/ui/skeleton.tsx',
+#11 16.01     '/app/client/src/components/ui/slider.tsx',
+#11 16.01     '/app/client/src/components/ui/switch.tsx',
+#11 16.01     '/app/client/src/components/ui/table.tsx',
+#11 16.01     '/app/client/src/components/ui/tabs.tsx',
+#11 16.01     '/app/client/src/components/ui/textarea.tsx',
+#11 16.01     '/app/client/src/components/ui/toast.tsx',
+#11 16.01     '/app/client/src/components/ui/toggle-group.tsx',
+#11 16.01     '/app/client/src/components/ui/toggle.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminBilling.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminDashboard.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminDomains.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminEmails.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminMonitoring.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminPlans.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminReferrals.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminSettings.tsx',
+#11 16.01     '/app/client/src/pages/admin/AdminUsers.tsx',
+#11 16.01     '/app/tailwind.config.ts',
+#11 16.01     '/app/node_modules/wouter/esm/use-browser-location.js',
+#11 16.01     ... 1590 more items
+#11 16.01   ]
+#11 16.01 }
+#11 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+------
+ > [builder 6/6] RUN npm run build:
+16.01     '/app/client/src/pages/admin/AdminMonitoring.tsx',
+16.01     '/app/client/src/pages/admin/AdminPlans.tsx',
+16.01     '/app/client/src/pages/admin/AdminReferrals.tsx',
+16.01     '/app/client/src/pages/admin/AdminSettings.tsx',
+16.01     '/app/client/src/pages/admin/AdminUsers.tsx',
+16.01     '/app/tailwind.config.ts',
+16.01     '/app/node_modules/wouter/esm/use-browser-location.js',
+16.01     ... 1590 more items
+16.01   ]
+16.01 }
+------
+Dockerfile:9
+--------------------
+   7 |     
+   8 |     COPY . .
+   9 | >>> RUN npm run build
+  10 |     
+  11 |     FROM node:20-alpine AS runner
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 1
+##########################################
+### Error
+### Tue, 28 Apr 2026 17:05:12 GMT
+##########################################
