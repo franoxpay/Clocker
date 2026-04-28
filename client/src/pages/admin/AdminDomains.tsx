@@ -8,8 +8,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw, Info } from "lucide-react";
+import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw, Info, CheckSquare } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 import {
@@ -85,8 +86,14 @@ export default function AdminDomains() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteStep, setBulkDeleteStep] = useState<0 | 1 | 2>(0);
+  const [bulkReason, setBulkReason] = useState<string>("admin_action");
+  const [bulkConfirmInput, setBulkConfirmInput] = useState<string>("");
 
   const DNS_DESTINATION = "clerion.app";
+
+  const domainKey = (d: SystemDomain) => `${d.type}-${d.id}`;
 
   const { data: domains, isLoading } = useQuery<SystemDomain[]>({
     queryKey: ["/api/admin/domains", typeFilter, searchTerm, statusFilter],
@@ -206,6 +213,34 @@ export default function AdminDomains() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async ({ domains, reason }: { domains: Array<{ id: number; type: 'user' | 'shared' }>; reason: string }) => {
+      const res = await apiRequest("DELETE", "/api/admin/domains/bulk", { domains, reason });
+      return res.json() as Promise<{ deletedCount: number; affectedUsersCount: number; affectedOffersCount: number }>;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/domains/history"] });
+      setSelectedIds(new Set());
+      setBulkDeleteStep(0);
+      setBulkReason("admin_action");
+      setBulkConfirmInput("");
+      toast({
+        title: language === "pt-BR" ? "Domínios Removidos" : "Domains Removed",
+        description: language === "pt-BR"
+          ? `${data.deletedCount} domínio(s) removidos. ${data.affectedOffersCount} oferta(s) afetadas, ${data.affectedUsersCount} usuário(s) notificado(s).`
+          : `${data.deletedCount} domain(s) removed. ${data.affectedOffersCount} offer(s) affected, ${data.affectedUsersCount} user(s) notified.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: language === "pt-BR" ? "Erro" : "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteClick = (domain: SystemDomain) => {
     setDomainToDelete(domain);
     setConfirmInput("");
@@ -222,6 +257,35 @@ export default function AdminDomains() {
   const handleCreateSharedDomain = () => {
     if (!newDomain.trim()) return;
     createSharedDomainMutation.mutate(newDomain.trim().toLowerCase());
+  };
+
+  const selectedDomains = domains?.filter(d => selectedIds.has(domainKey(d))) ?? [];
+  const totalSelectedOffers = selectedDomains.reduce((sum, d) => sum + d.offersCount, 0);
+  const allVisibleSelected = domains && domains.length > 0 && domains.every(d => selectedIds.has(domainKey(d)));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelect = (d: SystemDomain) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(domainKey(d))) next.delete(domainKey(d));
+      else next.add(domainKey(d));
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(domains?.map(domainKey) ?? []));
+    }
+  };
+
+  const handleBulkDeleteConfirm = () => {
+    bulkDeleteMutation.mutate({
+      domains: selectedDomains.map(d => ({ id: d.id, type: d.type })),
+      reason: bulkReason,
+    });
   };
 
   const handleCopy = (text: string, field: string) => {
@@ -373,6 +437,35 @@ export default function AdminDomains() {
             </Button>
           </div>
 
+          {someSelected && (
+            <div className="flex items-center justify-between px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-md">
+              <span className="text-sm font-medium text-destructive">
+                {language === "pt-BR"
+                  ? `${selectedIds.size} domínio(s) selecionado(s)`
+                  : `${selectedIds.size} domain(s) selected`}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                  data-testid="button-clear-selection"
+                >
+                  {language === "pt-BR" ? "Limpar seleção" : "Clear selection"}
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => { setBulkDeleteStep(1); setBulkReason("admin_action"); setBulkConfirmInput(""); }}
+                  data-testid="button-bulk-delete"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  {language === "pt-BR" ? "Deletar selecionados" : "Delete selected"}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
@@ -384,6 +477,14 @@ export default function AdminDomains() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px]">
+                      <Checkbox
+                        checked={allVisibleSelected}
+                        onCheckedChange={toggleSelectAll}
+                        data-testid="checkbox-select-all"
+                        aria-label={language === "pt-BR" ? "Selecionar todos" : "Select all"}
+                      />
+                    </TableHead>
                     <TableHead>{language === "pt-BR" ? "Domínio" : "Domain"}</TableHead>
                     <TableHead>{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
                     <TableHead>{language === "pt-BR" ? "Status" : "Status"}</TableHead>
@@ -395,7 +496,19 @@ export default function AdminDomains() {
                 </TableHeader>
                 <TableBody>
                   {domains.map((domain) => (
-                    <TableRow key={`${domain.type}-${domain.id}`} data-testid={`row-domain-${domain.id}`}>
+                    <TableRow
+                      key={`${domain.type}-${domain.id}`}
+                      data-testid={`row-domain-${domain.id}`}
+                      className={selectedIds.has(domainKey(domain)) ? "bg-destructive/5" : ""}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(domainKey(domain))}
+                          onCheckedChange={() => toggleSelect(domain)}
+                          data-testid={`checkbox-domain-${domain.id}`}
+                          aria-label={`Select ${domain.subdomain}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Globe className="w-4 h-4 text-muted-foreground" />
@@ -696,6 +809,135 @@ export default function AdminDomains() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Bulk Delete Dialog — Step 1: Review & Reason */}
+      <AlertDialog open={bulkDeleteStep === 1} onOpenChange={(open) => { if (!open) setBulkDeleteStep(0); }}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              {language === "pt-BR" ? "Deletar Domínios Selecionados" : "Delete Selected Domains"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-4">
+                <p className="text-sm">
+                  {language === "pt-BR"
+                    ? `Você selecionou ${selectedIds.size} domínio(s) para remoção.`
+                    : `You selected ${selectedIds.size} domain(s) for removal.`}
+                </p>
+
+                {totalSelectedOffers > 0 && (
+                  <div className="p-3 bg-destructive/10 rounded-md">
+                    <p className="text-destructive font-medium text-sm">
+                      {language === "pt-BR"
+                        ? `${totalSelectedOffers} oferta(s) serão afetadas e pararão de funcionar.`
+                        : `${totalSelectedOffers} offer(s) will be affected and will stop working.`}
+                    </p>
+                  </div>
+                )}
+
+                <div className="max-h-40 overflow-y-auto rounded-md border divide-y text-sm">
+                  {selectedDomains.map(d => (
+                    <div key={domainKey(d)} className="flex items-center justify-between px-3 py-2">
+                      <span className="font-mono text-xs font-medium">{d.subdomain}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={d.type === 'shared' ? 'secondary' : 'outline'} className="text-xs">
+                          {d.type === 'shared' ? (language === "pt-BR" ? "Compartilhado" : "Shared") : (language === "pt-BR" ? "Usuário" : "User")}
+                        </Badge>
+                        {d.offersCount > 0 && (
+                          <Badge variant="destructive" className="text-xs">{d.offersCount} {language === "pt-BR" ? "oferta(s)" : "offer(s)"}</Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {language === "pt-BR" ? "Motivo da remoção:" : "Removal reason:"}
+                  </p>
+                  <Select value={bulkReason} onValueChange={setBulkReason}>
+                    <SelectTrigger data-testid="select-bulk-reason">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin_action">
+                        {language === "pt-BR" ? "Ação administrativa" : "Admin action"}
+                      </SelectItem>
+                      <SelectItem value="phishing">
+                        {language === "pt-BR" ? "Denúncia de phishing" : "Phishing complaint"}
+                      </SelectItem>
+                      <SelectItem value="inactive">
+                        {language === "pt-BR" ? "Inatividade do domínio" : "Domain inactivity"}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkDeleteStep(0)} data-testid="button-bulk-step1-cancel">
+              {language === "pt-BR" ? "Cancelar" : "Cancel"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => setBulkDeleteStep(2)}
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-bulk-step1-next"
+            >
+              {language === "pt-BR" ? "Continuar" : "Continue"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Dialog — Step 2: Final Confirmation */}
+      <AlertDialog open={bulkDeleteStep === 2} onOpenChange={(open) => { if (!open) setBulkDeleteStep(0); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              {language === "pt-BR" ? "Confirmação Final" : "Final Confirmation"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p className="text-sm">
+                  {language === "pt-BR"
+                    ? `Esta ação é irreversível. Para confirmar, digite "DELETAR" abaixo:`
+                    : `This action is irreversible. To confirm, type "DELETE" below:`}
+                </p>
+                <Input
+                  value={bulkConfirmInput}
+                  onChange={(e) => setBulkConfirmInput(e.target.value)}
+                  placeholder={language === "pt-BR" ? "DELETAR" : "DELETE"}
+                  data-testid="input-bulk-confirm"
+                  className="font-mono"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkDeleteStep(1)} data-testid="button-bulk-step2-back">
+              {language === "pt-BR" ? "Voltar" : "Back"}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDeleteConfirm}
+              disabled={
+                (language === "pt-BR" ? bulkConfirmInput !== "DELETAR" : bulkConfirmInput !== "DELETE")
+                || bulkDeleteMutation.isPending
+              }
+              className="bg-destructive hover:bg-destructive/90"
+              data-testid="button-bulk-step2-confirm"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" />{language === "pt-BR" ? "Deletando..." : "Deleting..."}</>
+              ) : (
+                language === "pt-BR" ? "Deletar permanentemente" : "Delete permanently"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-auto">

@@ -4371,6 +4371,135 @@ export async function registerRoutes(
     }
   });
 
+  // Admin Domain Management - Bulk delete domains
+  app.delete("/api/admin/domains/bulk", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { domains: domainsToDelete, reason } = req.body as {
+        domains: Array<{ id: number; type: 'user' | 'shared' }>;
+        reason: string;
+      };
+      const adminId = req.user!.id;
+      const removalReason = reason || 'admin_action';
+
+      if (!Array.isArray(domainsToDelete) || domainsToDelete.length === 0) {
+        return res.status(400).json({ message: "No domains provided" });
+      }
+
+      let totalAffectedOffers = 0;
+      const allUsersToNotify = new Map<string, { email: string; firstName: string; offers: string[]; subdomains: string[] }>();
+
+      for (const domainEntry of domainsToDelete) {
+        const { id, type } = domainEntry;
+        if (!['user', 'shared'].includes(type)) continue;
+
+        let usersWhoActivatedDomain: Array<{ userId: string; email: string; firstName: string | null }> = [];
+        if (type === 'shared') {
+          usersWhoActivatedDomain = await storage.getUsersWithActiveSharedDomain(id);
+        }
+
+        const result = await storage.removeDomainByAdmin(id, type, adminId, removalReason);
+        totalAffectedOffers += result.affectedOffers.length;
+
+        for (const offer of result.affectedOffers) {
+          if (!allUsersToNotify.has(offer.userId)) {
+            const user = await storage.getUser(offer.userId);
+            allUsersToNotify.set(offer.userId, {
+              email: user?.email || '',
+              firstName: user?.firstName || 'Usuário',
+              offers: [],
+              subdomains: [],
+            });
+          }
+          const u = allUsersToNotify.get(offer.userId)!;
+          u.offers.push(offer.offerName);
+          if (!u.subdomains.includes(result.subdomain)) u.subdomains.push(result.subdomain);
+        }
+
+        for (const userActivation of usersWhoActivatedDomain) {
+          if (!allUsersToNotify.has(userActivation.userId)) {
+            allUsersToNotify.set(userActivation.userId, {
+              email: userActivation.email,
+              firstName: userActivation.firstName || 'Usuário',
+              offers: [],
+              subdomains: [],
+            });
+          }
+          const u = allUsersToNotify.get(userActivation.userId)!;
+          if (!u.subdomains.includes(result.subdomain)) u.subdomains.push(result.subdomain);
+        }
+
+        if (type === 'user' && result.originalOwner && !allUsersToNotify.has(result.originalOwner.id)) {
+          allUsersToNotify.set(result.originalOwner.id, {
+            email: result.originalOwner.email,
+            firstName: result.originalOwner.firstName || 'Usuário',
+            offers: [],
+            subdomains: [result.subdomain],
+          });
+        }
+      }
+
+      for (const [userId, userData] of allUsersToNotify.entries()) {
+        const firstName = userData.firstName;
+        const subdomainList = userData.subdomains.join(", ");
+        const offerNames = userData.offers.join(", ");
+        const hasOffers = userData.offers.length > 0;
+
+        let messagePt: string;
+        let messageEn: string;
+
+        switch (removalReason) {
+          case 'phishing':
+            messagePt = hasOffers
+              ? `Olá ${firstName}, os domínios ${subdomainList} configurados em sua conta foram removidos por violação de política. Ofertas afetadas: ${offerNames}. Acesse sua conta para configurar novos domínios.`
+              : `Olá ${firstName}, os domínios ${subdomainList} foram removidos por violação de política.`;
+            messageEn = hasOffers
+              ? `Hello ${firstName}, the domains ${subdomainList} configured in your account were removed for policy violation. Affected offers: ${offerNames}. Please access your account to configure new domains.`
+              : `Hello ${firstName}, the domains ${subdomainList} were removed for policy violation.`;
+            break;
+          case 'inactive':
+            messagePt = `Olá ${firstName}, os domínios ${subdomainList} foram identificados como inativos e removidos. ${hasOffers ? `Ofertas afetadas: ${offerNames}.` : ''} Verifique sua conta.`;
+            messageEn = `Hello ${firstName}, the domains ${subdomainList} were identified as inactive and removed. ${hasOffers ? `Affected offers: ${offerNames}.` : ''} Please check your account.`;
+            break;
+          default:
+            messagePt = hasOffers
+              ? `Olá ${firstName}, os domínios ${subdomainList} foram removidos por decisão administrativa. Ofertas afetadas: ${offerNames}. Acesse sua conta para configurar novos domínios.`
+              : `Olá ${firstName}, os domínios ${subdomainList} foram removidos por decisão administrativa.`;
+            messageEn = hasOffers
+              ? `Hello ${firstName}, the domains ${subdomainList} were removed by administrative decision. Affected offers: ${offerNames}. Please access your account to configure new domains.`
+              : `Hello ${firstName}, the domains ${subdomainList} were removed by administrative decision.`;
+            break;
+        }
+
+        await storage.createNotification({
+          userId,
+          type: "domain_removed",
+          titlePt: "Domínios Removidos",
+          titleEn: "Domains Removed",
+          messagePt,
+          messageEn,
+        });
+
+        if (userData.email) {
+          for (const subdomain of userData.subdomains) {
+            sendDomainRemovedEmail(userData.email, subdomain, removalReason, firstName, userId).catch(err => {
+              console.error(`[ADMIN] Failed to send bulk domain removed email to ${userData.email}:`, err);
+            });
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        deletedCount: domainsToDelete.length,
+        affectedUsersCount: allUsersToNotify.size,
+        affectedOffersCount: totalAffectedOffers,
+      });
+    } catch (error) {
+      console.error("Error bulk removing domains:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Admin Domain Management - Get removed domains history
   app.get("/api/admin/domains/history", isAdmin, async (req: Request, res: Response) => {
     try {
