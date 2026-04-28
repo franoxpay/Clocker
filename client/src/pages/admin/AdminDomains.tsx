@@ -85,7 +85,6 @@ export default function AdminDomains() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [verifyingDomainId, setVerifyingDomainId] = useState<number | null>(null);
 
   const DNS_DESTINATION = "cleryon.com";
 
@@ -144,35 +143,33 @@ export default function AdminDomains() {
 
   const verifyDomainMutation = useMutation({
     mutationFn: async ({ id, type }: { id: number; type: 'user' | 'shared' }) => {
-      setVerifyingDomainId(id);
       const endpoint = type === 'shared' 
         ? `/api/admin/shared-domains/${id}/verify`
         : `/api/admin/domains/${id}/verify`;
       return apiRequest("POST", endpoint);
     },
     onSuccess: () => {
-      setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains/inactive"] });
       toast({
         title: language === "pt-BR" ? "Verificação concluída" : "Verification complete",
-        description: language === "pt-BR" ? "Status do domínio atualizado" : "Domain status updated",
+        description: language === "pt-BR" ? "Status do domínio atualizado com sucesso" : "Domain status updated successfully",
       });
     },
     onError: (error: Error) => {
-      setVerifyingDomainId(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       let errorMsg = error.message;
       try {
-        const match = error.message.match(/"message"\s*:\s*"([^"]+)"/);
-        if (match) {
-          errorMsg = match[1];
+        const jsonStart = error.message.indexOf('{');
+        if (jsonStart !== -1) {
+          const parsed = JSON.parse(error.message.slice(jsonStart));
+          if (parsed.message) errorMsg = parsed.message;
         }
       } catch {}
       toast({
         title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
-        description: language === "pt-BR" 
+        description: language === "pt-BR"
           ? (errorMsg.includes("Domain not found") ? "Domínio não encontrado - verifique se o DNS está apontando corretamente" : errorMsg)
           : errorMsg,
         variant: "destructive",
@@ -299,10 +296,10 @@ export default function AdminDomains() {
                       variant="outline"
                       size="sm"
                       onClick={() => verifyDomainMutation.mutate({ id: domain.id, type: 'shared' })}
-                      disabled={verifyingDomainId === domain.id}
+                      disabled={verifyDomainMutation.isPending && verifyDomainMutation.variables?.id === domain.id}
                       data-testid={`button-verify-inactive-${domain.id}`}
                     >
-                      {verifyingDomainId === domain.id ? (
+                      {verifyDomainMutation.isPending && verifyDomainMutation.variables?.id === domain.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
                       ) : (
                         <RefreshCw className="w-3 h-3" />
@@ -454,10 +451,10 @@ export default function AdminDomains() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => verifyDomainMutation.mutate({ id: domain.id, type: domain.type })}
-                                  disabled={verifyingDomainId === domain.id}
+                                  disabled={verifyDomainMutation.isPending && verifyDomainMutation.variables?.id === domain.id}
                                   data-testid={`button-verify-domain-${domain.id}`}
                                 >
-                                  {verifyingDomainId === domain.id ? (
+                                  {verifyDomainMutation.isPending && verifyDomainMutation.variables?.id === domain.id ? (
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                   ) : (
                                     <RefreshCw className="w-4 h-4" />
