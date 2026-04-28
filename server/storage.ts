@@ -2058,10 +2058,12 @@ export class DatabaseStorage implements IStorage {
     subdomain: string;
     affectedOffers: Array<{ offerId: number; userId: string; offerName: string }>;
     originalOwner: { id: string; email: string; firstName: string | null } | null;
+    easypanelDomainId: string | null;
   }> {
     let subdomain: string;
     let originalOwner: { id: string; email: string; firstName: string | null } | null = null;
     let affectedOffers: Array<{ offerId: number; userId: string; offerName: string }> = [];
+    let easypanelDomainId: string | null = null;
 
     if (domainType === 'user') {
       // Get domain info
@@ -2069,6 +2071,7 @@ export class DatabaseStorage implements IStorage {
       if (!domain) throw new Error('Domain not found');
       
       subdomain = domain.subdomain;
+      easypanelDomainId = domain.easypanelDomainId || null;
       
       // Get owner info
       const [owner] = await db.select().from(users).where(eq(users.id, domain.userId));
@@ -2096,6 +2099,7 @@ export class DatabaseStorage implements IStorage {
       if (!sharedDomain) throw new Error('Shared domain not found');
       
       subdomain = sharedDomain.subdomain;
+      easypanelDomainId = sharedDomain.easypanelDomainId || null;
 
       // Get affected offers
       const affectedOffersQuery = await db
@@ -2123,7 +2127,7 @@ export class DatabaseStorage implements IStorage {
       removalReason,
     });
 
-    return { subdomain, affectedOffers, originalOwner };
+    return { subdomain, affectedOffers, originalOwner, easypanelDomainId };
   }
 
   async getRemovedDomainsHistory(page: number, limit: number): Promise<{

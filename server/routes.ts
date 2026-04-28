@@ -4359,6 +4359,16 @@ export async function registerRoutes(
         }
       }
 
+      // Remove from EasyPanel
+      if (result.easypanelDomainId) {
+        const { easypanelService } = await import("./easypanel");
+        if (easypanelService.isConfigured()) {
+          easypanelService.removeDomain(result.easypanelDomainId).catch(err => {
+            console.error(`[ADMIN] Failed to remove domain from EasyPanel: ${err.message}`);
+          });
+        }
+      }
+
       res.json({
         success: true,
         subdomain: result.subdomain,
@@ -4399,6 +4409,16 @@ export async function registerRoutes(
 
         const result = await storage.removeDomainByAdmin(id, type, adminId, removalReason);
         totalAffectedOffers += result.affectedOffers.length;
+
+        // Remove from EasyPanel
+        if (result.easypanelDomainId) {
+          const { easypanelService } = await import("./easypanel");
+          if (easypanelService.isConfigured()) {
+            easypanelService.removeDomain(result.easypanelDomainId).catch(err => {
+              console.error(`[ADMIN BULK] Failed to remove domain ${result.subdomain} from EasyPanel: ${err.message}`);
+            });
+          }
+        }
 
         for (const offer of result.affectedOffers) {
           if (!allUsersToNotify.has(offer.userId)) {
