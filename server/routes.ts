@@ -2213,6 +2213,25 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/offers/:id/extra-params", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = parseInt(req.params.id);
+      const { extraParams } = req.body;
+
+      const offer = await storage.getOffer(offerId);
+      if (!offer || offer.userId !== userId) {
+        return res.status(404).json({ message: "Offer not found" });
+      }
+
+      const updated = await storage.updateOffer(offerId, { extraParams: extraParams || "" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error saving extra params:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/offers/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;

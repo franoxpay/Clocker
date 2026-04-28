@@ -155,6 +155,7 @@ export const offers = pgTable(
     whitePageUrl: text("white_page_url").notNull(),
     allowedCountries: text("allowed_countries").array().default(sql`ARRAY['BR']`).notNull(),
     allowedDevices: text("allowed_devices").array().default(sql`ARRAY['smartphone']`).notNull(),
+    extraParams: varchar("extra_params").default("").notNull(),
     isActive: boolean("is_active").default(true).notNull(),
     totalClicks: integer("total_clicks").default(0).notNull(),
     blackClicks: integer("black_clicks").default(0).notNull(),

@@ -237,6 +237,27 @@ export default function Offers() {
     },
   });
 
+  const saveExtraParamsMutation = useMutation({
+    mutationFn: async ({ offerId, extraParams }: { offerId: number; extraParams: string }) => {
+      const res = await apiRequest("PATCH", `/api/offers/${offerId}/extra-params`, { extraParams });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/offers"] });
+      toast({
+        title: language === "pt-BR" ? "Salvo!" : "Saved!",
+        description: language === "pt-BR" ? "Parâmetros salvos na oferta" : "Parameters saved to offer",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: language === "pt-BR" ? "Erro ao salvar parâmetros" : "Error saving parameters",
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       name: "",
@@ -369,10 +390,9 @@ export default function Offers() {
 
   const getOfferParams = (offer: OfferWithDomain) => {
     if (offer.platform === "tiktok") {
-      // New TikTok UTM format with __CALLBACK_PARAM__ and __CID_NAME__
-      return `?src=__CSITE__&ttclid=__CALLBACK_PARAM__&utm_medium=__AID_NAME__&utm_content=__CID_NAME__&utm_campaign=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
+      return `src=__CSITE__&ttclid=__CALLBACK_PARAM__&utm_medium=__AID_NAME__&utm_content=__CID_NAME__&utm_campaign=__CAMPAIGN_NAME__&xcode=${offer.xcode}`;
     }
-    return `?fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
+    return `fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
   };
 
   const getMergedParams = () => {
@@ -386,7 +406,7 @@ export default function Offers() {
 
   const openMergeModal = (offer: OfferWithDomain) => {
     setMergeParamsOffer(offer);
-    setAdditionalParams("");
+    setAdditionalParams(offer.extraParams || "");
   };
 
   const closeMergeModal = () => {
@@ -1162,9 +1182,22 @@ export default function Offers() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
               {language === "pt-BR" ? "Fechar" : "Close"}
+            </Button>
+            <Button
+              onClick={() => {
+                if (!mergeParamsOffer) return;
+                const cleanAdditional = additionalParams.trim().replace(/^[?&]/, "");
+                saveExtraParamsMutation.mutate({ offerId: mergeParamsOffer.id, extraParams: cleanAdditional });
+              }}
+              disabled={saveExtraParamsMutation.isPending}
+              data-testid="button-save-extra-params"
+            >
+              {saveExtraParamsMutation.isPending
+                ? (language === "pt-BR" ? "Salvando..." : "Saving...")
+                : (language === "pt-BR" ? "Salvar" : "Save")}
             </Button>
           </DialogFooter>
         </DialogContent>
