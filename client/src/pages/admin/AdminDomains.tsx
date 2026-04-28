@@ -95,7 +95,7 @@ export default function AdminDomains() {
       if (typeFilter !== "all") params.set("type", typeFilter);
       if (searchTerm) params.set("search", searchTerm);
       if (statusFilter !== "all") params.set("status", statusFilter);
-      const res = await fetch(`/api/admin/domains?${params.toString()}`, { credentials: "include" });
+      const res = await fetch(`/api/admin/domains?${params.toString()}`, { credentials: "include", cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch domains");
       return res.json();
     },
@@ -146,32 +146,33 @@ export default function AdminDomains() {
       const endpoint = type === 'shared' 
         ? `/api/admin/shared-domains/${id}/verify`
         : `/api/admin/domains/${id}/verify`;
-      return apiRequest("POST", endpoint);
+      const res = await apiRequest("POST", endpoint);
+      return res.json() as Promise<{ verified: boolean; error: string | null; domain: any }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains/inactive"] });
-      toast({
-        title: language === "pt-BR" ? "Verificação concluída" : "Verification complete",
-        description: language === "pt-BR" ? "Status do domínio atualizado com sucesso" : "Domain status updated successfully",
-      });
+      if (data.verified) {
+        toast({
+          title: language === "pt-BR" ? "Domínio ativo" : "Domain active",
+          description: language === "pt-BR" ? "DNS verificado com sucesso — domínio está ativo" : "DNS verified successfully — domain is active",
+        });
+      } else {
+        toast({
+          title: language === "pt-BR" ? "Domínio marcado como inativo" : "Domain marked as inactive",
+          description: data.error 
+            ? (language === "pt-BR" ? `DNS inválido: ${data.error}` : `Invalid DNS: ${data.error}`)
+            : (language === "pt-BR" ? "Nenhum CNAME apontando para cleryon.com foi encontrado" : "No CNAME pointing to cleryon.com was found"),
+          variant: "destructive",
+        });
+      }
     },
     onError: (error: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
-      let errorMsg = error.message;
-      try {
-        const jsonStart = error.message.indexOf('{');
-        if (jsonStart !== -1) {
-          const parsed = JSON.parse(error.message.slice(jsonStart));
-          if (parsed.message) errorMsg = parsed.message;
-        }
-      } catch {}
       toast({
         title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
-        description: language === "pt-BR"
-          ? (errorMsg.includes("Domain not found") ? "Domínio não encontrado - verifique se o DNS está apontando corretamente" : errorMsg)
-          : errorMsg,
+        description: error.message,
         variant: "destructive",
       });
     },

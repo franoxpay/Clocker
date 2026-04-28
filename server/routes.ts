@@ -4067,14 +4067,11 @@ export async function registerRoutes(
         sslStatus: dnsResult.verified ? "active" : "pending",
       });
       
-      if (!dnsResult.verified) {
-        return res.status(400).json({ 
-          message: dnsResult.error || "DNS verification failed",
-          domain: updated
-        });
-      }
-      
-      res.json(updated);
+      res.json({ 
+        verified: dnsResult.verified,
+        error: dnsResult.error || null,
+        domain: updated
+      });
     } catch (error) {
       console.error("Error verifying shared domain:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -4239,14 +4236,11 @@ export async function registerRoutes(
         sslStatus: dnsResult.verified ? "active" : "pending",
       });
       
-      if (!dnsResult.verified) {
-        return res.status(400).json({ 
-          message: dnsResult.error || "DNS verification failed",
-          domain: updated
-        });
-      }
-      
-      res.json(updated);
+      res.json({ 
+        verified: dnsResult.verified,
+        error: dnsResult.error || null,
+        domain: updated
+      });
     } catch (error) {
       console.error("Error verifying user domain:", error);
       res.status(500).json({ message: "Internal server error" });
