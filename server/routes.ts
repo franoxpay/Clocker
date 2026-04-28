@@ -4372,7 +4372,7 @@ export async function registerRoutes(
   });
 
   // Admin Domain Management - Bulk delete domains
-  app.delete("/api/admin/domains/bulk", isAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/admin/domains-bulk", isAdmin, async (req: Request, res: Response) => {
     try {
       const { domains: domainsToDelete, reason } = req.body as {
         domains: Array<{ id: number; type: 'user' | 'shared' }>;

@@ -215,7 +215,7 @@ export default function AdminDomains() {
 
   const bulkDeleteMutation = useMutation({
     mutationFn: async ({ domains, reason }: { domains: Array<{ id: number; type: 'user' | 'shared' }>; reason: string }) => {
-      const res = await apiRequest("DELETE", "/api/admin/domains/bulk", { domains, reason });
+      const res = await apiRequest("DELETE", "/api/admin/domains-bulk", { domains, reason });
       return res.json() as Promise<{ deletedCount: number; affectedUsersCount: number; affectedOffersCount: number }>;
     },
     onSuccess: (data) => {
