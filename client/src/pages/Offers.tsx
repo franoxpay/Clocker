@@ -244,17 +244,6 @@ export default function Offers() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/offers"] });
-      toast({
-        title: language === "pt-BR" ? "Salvo!" : "Saved!",
-        description: language === "pt-BR" ? "Parâmetros salvos na oferta" : "Parameters saved to offer",
-      });
-    },
-    onError: () => {
-      toast({
-        title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao salvar parâmetros" : "Error saving parameters",
-        variant: "destructive",
-      });
     },
   });
 
