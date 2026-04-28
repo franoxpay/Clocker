@@ -877,16 +877,16 @@ export default function AdminDomains() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setBulkDeleteStep(0)} data-testid="button-bulk-step1-cancel">
+            <Button variant="outline" onClick={() => setBulkDeleteStep(0)} data-testid="button-bulk-step1-cancel">
               {language === "pt-BR" ? "Cancelar" : "Cancel"}
-            </AlertDialogCancel>
-            <AlertDialogAction
+            </Button>
+            <Button
               onClick={() => setBulkDeleteStep(2)}
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90 text-white"
               data-testid="button-bulk-step1-next"
             >
               {language === "pt-BR" ? "Continuar" : "Continue"}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -917,16 +917,16 @@ export default function AdminDomains() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setBulkDeleteStep(1)} data-testid="button-bulk-step2-back">
+            <Button variant="outline" onClick={() => setBulkDeleteStep(1)} data-testid="button-bulk-step2-back">
               {language === "pt-BR" ? "Voltar" : "Back"}
-            </AlertDialogCancel>
-            <AlertDialogAction
+            </Button>
+            <Button
               onClick={handleBulkDeleteConfirm}
               disabled={
                 (language === "pt-BR" ? bulkConfirmInput !== "DELETAR" : bulkConfirmInput !== "DELETE")
                 || bulkDeleteMutation.isPending
               }
-              className="bg-destructive hover:bg-destructive/90"
+              className="bg-destructive hover:bg-destructive/90 text-white"
               data-testid="button-bulk-step2-confirm"
             >
               {bulkDeleteMutation.isPending ? (
@@ -934,7 +934,7 @@ export default function AdminDomains() {
               ) : (
                 language === "pt-BR" ? "Deletar permanentemente" : "Delete permanently"
               )}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
