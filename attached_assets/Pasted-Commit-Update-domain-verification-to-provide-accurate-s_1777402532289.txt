@@ -1,0 +1,79 @@
+Commit: Update domain verification to provide accurate status and error feedback
+
+Modify server endpoints to return HTTP 200 with verification status and details, and update the client to handle these responses, including adding cache-busting headers to domain fetching.
+
+Replit-Commit-Author: Agent
+Replit-Commit-Session-Id: e897d796-d589-496c-9a44-e0aace8512a9
+Replit-Commit-Checkpoint-Type: full_checkpoint
+Replit-Commit-Event-Id: b876042e-b9e3-4255-991d-fac04c54705f
+Replit-Commit-Screenshot-Url: https://storage.googleapis.com/screenshot-production-us-central1/dbbd9e2e-d5dc-407d-a9d9-095fe4b581e4/e897d796-d589-496c-9a44-e0aace8512a9/fAp5YXW 
+##########################################
+### Download Github Archive Started...
+### Tue, 28 Apr 2026 18:55:19 GMT
+##########################################
+
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 379B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 0.4s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 126B 0.0s done
+#3 DONE 0.0s
+
+#4 [builder 1/6] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 3.01MB 0.2s done
+#5 DONE 0.2s
+
+#6 [builder 2/6] WORKDIR /app
+#6 CACHED
+
+#7 [builder 3/6] COPY package*.json ./
+#7 CACHED
+
+#8 [runner 4/5] RUN npm ci --omit=dev
+#8 CACHED
+
+#9 [builder 4/6] RUN npm ci
+#9 CACHED
+
+#10 [builder 5/6] COPY . .
+#10 DONE 0.1s
+
+#11 [builder 6/6] RUN npm run build
+#11 0.661 
+#11 0.661 > rest-express@1.0.0 build
+#11 0.661 > tsx script/build.ts
+#11 0.661 
+#11 0.668 sh: tsx: not found
+#11 ERROR: process "/bin/sh -c npm run build" did not complete successfully: exit code: 127
+------
+ > [builder 6/6] RUN npm run build:
+0.661 
+0.661 > rest-express@1.0.0 build
+0.661 > tsx script/build.ts
+0.661 
+0.668 sh: tsx: not found
+------
+Dockerfile:11
+--------------------
+   9 |     
+  10 |     COPY . .
+  11 | >>> RUN npm run build
+  12 |     
+  13 |     FROM node:20-alpine AS runner
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c npm run build" did not complete successfully: exit code: 127
+##########################################
+### Error
+### Tue, 28 Apr 2026 18:55:24 GMT
+##########################################
+
+Command failed with exit code 1: docker buildx build --network host -f /etc/easypanel/projects/cleryon-clocker/clerion-app/code/Dockerfile -t easypanel/cleryon-clocker/clerion-app --label 'keep=true' --build-arg 'SESSION_SECRET=byXhS2YHeI8OrvrNwdWbF6uYMNxh51dgF6A2NQi9ZZ5MprbqvBqHZh/u5+pgNhLlIwnkmUPvdT+XsQWPEMXk0w==' --build-arg 'DEFAULT_OBJECT_STORAGE_BUCKET_ID=replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78' --build-arg 'PUBLIC_OBJECT_SEARCH_PATHS=/replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78/public' --build-arg 'PRIVATE_OBJECT_DIR=/replit-objstore-be7a9845-b0c4-4d79-95b8-3bb297428c78/.private' --build-arg 'STRIPE_SECRET_KEY=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' --build-arg 'STRIPE_PUBLISHABLE_KEY=pk_live_51Q4ZfaHfNJep3ys3cOTsCorTFTbEVhClQL57AJwkXBFXRp3xyaoK2utVLGEnAy43GZU3UJDWUVdMLSCKHchD7pPu001is90JCo' --build-arg 'DATABASE_URL=postgres://postgres:aeb14aed87adcfaa8283@easypanel.ed-servidor.top:5000/clerion-db?sslmode=disable' --build-arg 'MAIN_DOMAIN=cleryon.com,easypanel.host,dev.cleryon.com,clerion.app' --build-arg 'EASYPANEL_URL=https://easypanel.ed-servidor.top' --build-arg 'EASYPANEL_PROJECT_NAME=cleryon-clocker' --build-arg 'EASYPANEL_SERVICE_NAME=clerion-app' --build-arg 'EASYPANEL_TOKEN=ff584ef1eb3a5b53f978bc7b0c5598aaab6467a484ea58820ad3855e49f845c8' --build-arg 'ADMIN_EMAIL=ggthiago30@gmail.com' --build-arg 'REDIS_URL=redis://default:d00bcc4b7dbce4fa93ca@easypanel.ed-servidor.top:7963' --build-arg 'RESEND_API_KEY=re_VsxpTC6H_PqPbvFCEsxFPvKS6rnnyYoHY' --build-arg 'GIT_SHA=6829074b2bc9d3bc88492d7e8ffa7a9d3833a06e' /etc/easypanel/projects/cleryon-clocker/clerion-app/code/
