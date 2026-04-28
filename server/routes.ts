@@ -837,7 +837,7 @@ function generateChallengeHTML(token: string, honeypotId: string, baseUrl?: stri
 async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
   console.log(`[DNS] Verifying domain: ${subdomain}`);
   
-  const EXPECTED_CNAME_TARGET = (process.env.MAIN_DOMAIN || "clerion.app").split(",")[0].trim();
+  const EXPECTED_CNAME_TARGET = (process.env.CNAME_TARGET || "clerion.app").trim();
   
   // First try CNAME - this is the expected configuration
   try {

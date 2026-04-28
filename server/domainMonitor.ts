@@ -4,7 +4,7 @@ import { sendDomainInactiveEmail, sendSharedDomainInactiveEmail } from "./email"
 
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-const EXPECTED_CNAME_TARGET = (process.env.MAIN_DOMAIN || "clerion.app").split(",")[0].trim();
+const EXPECTED_CNAME_TARGET = (process.env.CNAME_TARGET || "clerion.app").trim();
 
 let isRunning = false;
 
