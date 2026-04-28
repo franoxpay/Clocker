@@ -127,26 +127,28 @@ app.use(express.urlencoded({ extended: false }));
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Too many requests, please try again later" },
-  skip: (req) => req.path.startsWith("/r/"),
+  skip: (req) => {
+    // Never rate-limit cloak redirects or the auth user check (called on every page load)
+    return req.path.startsWith("/r/") || req.path === "/auth/user";
+  },
 });
 
 const authLimiter = rateLimit({
-  windowMs: 30 * 60 * 1000,
-  max: 30,
+  windowMs: 15 * 60 * 1000,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: "Too many login attempts, please try again in 30 minutes" },
+  message: { message: "Too many login attempts, please try again in 15 minutes" },
 });
 
 app.use("/api", apiLimiter);
 app.use("/api/login", authLimiter);
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
-app.use("/api/auth/callback", authLimiter);
 app.use("/api/password-reset", authLimiter);
 
 // Helper function to check if host is the main application domain
