@@ -1,4 +1,4 @@
-import { useState, useMemo, Fragment, useCallback } from "react";
+import { useState, useMemo, Fragment, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -404,7 +404,10 @@ export default function Offers() {
     return `${baseParams}&${cleanAdditional}`;
   };
 
+  const isInitialLoad = useRef(false);
+
   const openMergeModal = (offer: OfferWithDomain) => {
+    isInitialLoad.current = true;
     setMergeParamsOffer(offer);
     setAdditionalParams(offer.extraParams || "");
   };
@@ -413,6 +416,19 @@ export default function Offers() {
     setMergeParamsOffer(null);
     setAdditionalParams("");
   };
+
+  useEffect(() => {
+    if (!mergeParamsOffer) return;
+    if (isInitialLoad.current) {
+      isInitialLoad.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      const cleanAdditional = additionalParams.trim().replace(/^[?&]/, "");
+      saveExtraParamsMutation.mutate({ offerId: mergeParamsOffer.id, extraParams: cleanAdditional });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [additionalParams]);
 
   const copyToClipboard = async (text: string, field: string) => {
     await navigator.clipboard.writeText(text);
@@ -1182,22 +1198,16 @@ export default function Offers() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
-              {language === "pt-BR" ? "Fechar" : "Close"}
-            </Button>
-            <Button
-              onClick={() => {
-                if (!mergeParamsOffer) return;
-                const cleanAdditional = additionalParams.trim().replace(/^[?&]/, "");
-                saveExtraParamsMutation.mutate({ offerId: mergeParamsOffer.id, extraParams: cleanAdditional });
-              }}
-              disabled={saveExtraParamsMutation.isPending}
-              data-testid="button-save-extra-params"
-            >
+          <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+            <span className="text-xs text-muted-foreground">
               {saveExtraParamsMutation.isPending
                 ? (language === "pt-BR" ? "Salvando..." : "Saving...")
-                : (language === "pt-BR" ? "Salvar" : "Save")}
+                : saveExtraParamsMutation.isSuccess
+                ? (language === "pt-BR" ? "✓ Salvo automaticamente" : "✓ Auto-saved")
+                : ""}
+            </span>
+            <Button variant="outline" onClick={closeMergeModal} data-testid="button-close-merge">
+              {language === "pt-BR" ? "Fechar" : "Close"}
             </Button>
           </DialogFooter>
         </DialogContent>
