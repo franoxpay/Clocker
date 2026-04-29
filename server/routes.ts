@@ -1010,17 +1010,19 @@ async function getCountryFromIP(ip: string): Promise<string> {
 }
 
 // Known datacenter/hosting ASN patterns (major cloud providers and VPS)
+// NOTE: Removed generic keywords (CLOUD, SERVER, HOSTING, VPS, DEDICATED, DATACENTER, COLOCATION)
+// to avoid false positives with legitimate ISPs that have these words in their name
 const DATACENTER_ASN_PATTERNS = [
-  // Major Cloud Providers
+  // Major Cloud Providers (specific names only)
   'AMAZON', 'AWS', 'GOOGLE', 'MICROSOFT', 'AZURE', 'DIGITALOCEAN', 'LINODE',
   'VULTR', 'OVH', 'HETZNER', 'CLOUDFLARE', 'AKAMAI', 'FASTLY',
-  // VPS/Hosting Providers
+  // VPS/Hosting Providers (specific names only)
   'HOSTINGER', 'GODADDY', 'NAMECHEAP', 'BLUEHOST', 'HOSTGATOR', 'SITEGROUND',
   'CONTABO', 'SCALEWAY', 'UPCLOUD', 'RACKSPACE', 'LEASEWEB', 'CHOOPA',
-  // Data Centers
-  'DATACENTER', 'HOSTING', 'COLOCATION', 'CLOUD', 'SERVER', 'VPS', 'DEDICATED',
+  'HIVELOCITY', 'QUADRANET', 'TZULO', 'NOCSER', 'DATACAMP', 'HOSTWINDS',
   // Proxy/VPN Providers
   'NORDVPN', 'EXPRESSVPN', 'SURFSHARK', 'MULLVAD', 'CYBERGHOST', 'PROTONVPN',
+  'M247', 'IPVOLUME', 'DATACAMP',
   // Bot Networks / Known Crawlers
   'TIKTOK', 'BYTEDANCE', 'FACEBOOK', 'META PLATFORMS'
 ];
@@ -1075,7 +1077,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
       const analysis: IpAnalysis = {
         country: redisCached.country,
         isDatacenter: redisCached.hosting,
-        isProxy: redisCached.proxy,
+        isProxy: redisCached.proxy && !redisCached.mobile,
         isMobile: redisCached.mobile,
         isp: redisCached.isp,
         org: redisCached.org,
@@ -1145,11 +1147,16 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
     
     // Use ip-api's hosting flag OR our pattern matching
     const isDatacenter = data.hosting === true || isDatacenterByPattern;
+
+    // Mobile users going through carrier proxies are real users (very common in LatAm, Asia, Africa)
+    // ip-api marks mobile carrier transparent proxies as proxy:true, but these are not VPNs/bots
+    // Only block proxy if user is NOT on mobile
+    const isProxy = data.proxy === true && data.mobile !== true;
     
     const analysis: IpAnalysis = {
       country: data.countryCode || "XX",
       isDatacenter,
-      isProxy: data.proxy === true,
+      isProxy,
       isMobile: data.mobile === true,
       isp: data.isp || "",
       org: data.org || "",
