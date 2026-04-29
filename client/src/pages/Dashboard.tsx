@@ -28,7 +28,6 @@ import {
   Legend,
 } from "recharts";
 import {
-  MousePointerClick,
   Link as LinkIcon,
   TrendingUp,
   AlertTriangle,
@@ -156,18 +155,11 @@ export default function Dashboard() {
 
   const statCards = [
     {
-      title: isPt ? "Cliques no Período" : "Period Clicks",
+      title: isPt ? "Cliques Totais" : "Total Clicks",
       value: stats?.totalClicks ?? 0,
       icon: TrendingUp,
       color: "text-primary",
       testId: "stat-total-clicks",
-    },
-    {
-      title: isPt ? "Cliques Hoje" : "Clicks Today",
-      value: stats?.todayClicks ?? 0,
-      icon: MousePointerClick,
-      color: "text-chart-2",
-      testId: "stat-today-clicks",
     },
     {
       title: isPt ? "Cliques Black" : "Black Clicks",
