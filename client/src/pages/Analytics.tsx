@@ -197,18 +197,20 @@ export default function Analytics() {
 
   const statCards = [
     {
-      title: isPt ? "Total de Cliques" : "Total Clicks",
+      title: isPt ? "Total de Requests" : "Total Requests",
       value: stats?.totalClicks ?? 0,
       icon: Users,
       color: "text-primary",
       testId: "analytics-stat-total",
+      note: isPt ? "Todos os hits no cloaker (inclui bots)" : "All cloaker hits (includes bots)",
     },
     {
-      title: isPt ? "Taxa de Conversão" : "Conversion Rate",
+      title: isPt ? "Taxa Black" : "Black Rate",
       value: `${stats?.conversionRate ?? "0"}%`,
       icon: TrendingUp,
       color: "text-green-500",
       testId: "analytics-stat-rate",
+      note: isPt ? "% de requests redirecionados para black" : "% of requests redirected to black",
     },
     {
       title: isPt ? "Cliques Black" : "Black Clicks",
@@ -216,6 +218,7 @@ export default function Analytics() {
       icon: ShieldCheck,
       color: "text-chart-3",
       testId: "analytics-stat-black",
+      note: isPt ? "Redirecionados para a oferta" : "Redirected to the offer",
     },
     {
       title: isPt ? "Cliques White" : "White Clicks",
@@ -223,6 +226,7 @@ export default function Analytics() {
       icon: ShieldX,
       color: "text-chart-4",
       testId: "analytics-stat-white",
+      note: isPt ? "Redirecionados para a white page" : "Redirected to white page",
     },
   ];
 
@@ -367,9 +371,12 @@ export default function Analytics() {
               {isLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : (
-                <div className="text-2xl font-bold" data-testid={card.testId}>
-                  {typeof card.value === "number" ? card.value.toLocaleString() : card.value}
-                </div>
+                <>
+                  <div className="text-2xl font-bold" data-testid={card.testId}>
+                    {typeof card.value === "number" ? card.value.toLocaleString() : card.value}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">{card.note}</p>
+                </>
               )}
             </CardContent>
           </Card>
@@ -542,13 +549,17 @@ export default function Analytics() {
                           <Badge variant="destructive" className="text-xs">
                             {isPt ? "Suspeito" : "Suspicious"}
                           </Badge>
+                        ) : row.black > 0 && row.white > 0 ? (
+                          <Badge variant="outline" className="text-xs border-yellow-500 text-yellow-500">
+                            {isPt ? "Misto" : "Mixed"}
+                          </Badge>
                         ) : row.black > 0 ? (
                           <Badge variant="outline" className="text-xs border-chart-3 text-chart-3">
-                            {isPt ? "Real" : "Real"}
+                            Black
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="text-xs text-muted-foreground">
-                            {isPt ? "White" : "White"}
+                          <Badge variant="outline" className="text-xs border-chart-4 text-chart-4">
+                            White
                           </Badge>
                         )}
                       </td>
