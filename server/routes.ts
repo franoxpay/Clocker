@@ -1837,6 +1837,17 @@ export async function registerRoutes(
         if (isBlack) weekdayStats[weekday].black++; else weekdayStats[weekday].white++;
       }
       
+      // ISP / IP grouping
+      const ipStats = new Map<string, { total: number; black: number; white: number }>();
+
+      for (const log of logs.logs) {
+        const ip = log.ipAddress || "Unknown";
+        if (!ipStats.has(ip)) ipStats.set(ip, { total: 0, black: 0, white: 0 });
+        const is = ipStats.get(ip)!;
+        is.total++;
+        if (log.redirectedTo === "black") is.black++; else is.white++;
+      }
+
       const conversionRate = logs.total > 0 ? (totalBlack / logs.total * 100).toFixed(1) : "0";
       
       const byCountry = Array.from(countryStats.entries())
@@ -1846,35 +1857,32 @@ export async function registerRoutes(
           conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
         }))
         .sort((a, b) => b.total - a.total)
-        .slice(0, 10);
-        
-      const byDevice = Array.from(deviceStats.entries())
-        .map(([name, stats]) => ({
-          name,
-          ...stats,
-          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
-        }))
-        .sort((a, b) => b.total - a.total);
-        
-      const byPlatform = Array.from(platformStats.entries())
-        .map(([name, stats]) => ({
-          name,
-          ...stats,
-          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
-        }))
-        .sort((a, b) => b.total - a.total);
-        
+        .slice(0, 15);
+
       const byHour = hourlyStats.map((stats, hour) => ({
-        hour: `${hour.toString().padStart(2, "0")}:00`,
+        hour: `${hour.toString().padStart(2, "0")}h`,
         ...stats,
         conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
       }));
-      
-      const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const byWeekday = weekdayStats.map((stats, day) => ({
-        day: weekdayNames[day],
-        ...stats,
-        conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0"
+
+      const byIp = Array.from(ipStats.entries())
+        .map(([ip, stats]) => ({
+          ip,
+          ...stats,
+          conversionRate: stats.total > 0 ? (stats.black / stats.total * 100).toFixed(1) : "0",
+          suspicious: stats.total >= 3 && stats.white === stats.total,
+        }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 15);
+
+      const recentLogs = logs.logs.slice(0, 30).map((log) => ({
+        id: log.id,
+        ipAddress: log.ipAddress || "—",
+        country: log.country || "—",
+        device: log.device || "—",
+        redirectedTo: log.redirectedTo,
+        createdAt: log.createdAt,
+        offerName: (log as any).offerName || "—",
       }));
 
       res.json({
@@ -1883,10 +1891,9 @@ export async function registerRoutes(
         totalWhite,
         conversionRate,
         byCountry,
-        byDevice,
-        byPlatform,
         byHour,
-        byWeekday,
+        byIp,
+        recentLogs,
       });
     } catch (error) {
       console.error("Error fetching advanced analytics:", error);
