@@ -124,6 +124,20 @@ export interface IStorage {
     filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string }
   ): Promise<{ logs: ClickLog[]; total: number }>;
   getClickLogsByPeriod(userId: string, days: number): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>>;
+  getDashboardStats(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+    useHourly?: boolean;
+  }): Promise<{
+    totalClicks: number;
+    totalBlackClicks: number;
+    todayClicks: number;
+    activeOffers: number;
+    clicksByPeriod: Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>;
+    useHourly: boolean;
+  }>;
   cleanupOldClickLogs(): Promise<void>;
 
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
@@ -963,6 +977,134 @@ export class DatabaseStorage implements IStorage {
       });
     }
     return filled;
+  }
+
+  async getDashboardStats(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+    useHourly?: boolean;
+  }): Promise<{
+    totalClicks: number;
+    totalBlackClicks: number;
+    todayClicks: number;
+    activeOffers: number;
+    clicksByPeriod: Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>;
+    useHourly: boolean;
+  }> {
+    const { offerId, platform, startDate, endDate, useHourly = false } = filters;
+
+    const buildWhere = (extraStart?: Date, extraEnd?: Date) => {
+      const conds: any[] = [eq(clickLogs.userId, userId)];
+      const s = extraStart ?? startDate;
+      const e = extraEnd ?? endDate;
+      if (s) conds.push(gte(clickLogs.createdAt, s));
+      if (e) conds.push(lte(clickLogs.createdAt, e));
+      if (offerId) conds.push(eq(clickLogs.offerId, offerId));
+      if (platform) conds.push(eq(offers.platform, platform));
+      return conds.length === 1 ? conds[0] : and(...conds);
+    };
+
+    // Main aggregate (period filtered)
+    const [agg] = await db
+      .select({
+        totalClicks: sql<number>`COUNT(*)`,
+        totalBlackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere());
+
+    // Today aggregate (always "today" regardless of filter)
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    const [todayAgg] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere(todayStart, todayEnd));
+
+    // Active offers count
+    const userOffers = await this.getOffersByUserId(userId);
+    let filteredOffers = userOffers.filter((o) => o.isActive);
+    if (offerId) filteredOffers = filteredOffers.filter((o) => o.id === offerId);
+    if (platform) filteredOffers = filteredOffers.filter((o) => o.platform === platform);
+
+    // Chart data
+    let clicksByPeriod: Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }> = [];
+
+    if (useHourly) {
+      const hourlyResult = await db
+        .select({
+          hour: sql<number>`EXTRACT(HOUR FROM ${clickLogs.createdAt})::int`,
+          clicks: sql<number>`COUNT(*)`,
+          blackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+          whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        })
+        .from(clickLogs)
+        .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+        .where(buildWhere())
+        .groupBy(sql`EXTRACT(HOUR FROM ${clickLogs.createdAt})`)
+        .orderBy(sql`EXTRACT(HOUR FROM ${clickLogs.createdAt})`);
+
+      const hourMap = new Map(hourlyResult.map((r) => [Number(r.hour), r]));
+      for (let h = 0; h < 24; h++) {
+        const row = hourMap.get(h);
+        clicksByPeriod.push({
+          date: `${h.toString().padStart(2, "0")}h`,
+          clicks: row ? Number(row.clicks) : 0,
+          blackClicks: row ? Number(row.blackClicks) : 0,
+          whiteClicks: row ? Number(row.whiteClicks) : 0,
+        });
+      }
+    } else {
+      const dailyResult = await db
+        .select({
+          date: sql<string>`DATE(${clickLogs.createdAt})`,
+          clicks: sql<number>`COUNT(*)`,
+          blackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+          whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        })
+        .from(clickLogs)
+        .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+        .where(buildWhere())
+        .groupBy(sql`DATE(${clickLogs.createdAt})`)
+        .orderBy(sql`DATE(${clickLogs.createdAt})`);
+
+      if (startDate && endDate) {
+        const dataByDate = new Map(dailyResult.map((r) => [r.date, r]));
+        const msPerDay = 86400000;
+        const dayCount = Math.round((endDate.getTime() - startDate.getTime()) / msPerDay);
+        for (let i = 0; i <= dayCount; i++) {
+          const d = new Date(startDate.getTime() + i * msPerDay);
+          const dateStr = d.toISOString().split("T")[0];
+          const row = dataByDate.get(dateStr);
+          clicksByPeriod.push({
+            date: dateStr,
+            clicks: row ? Number(row.clicks) : 0,
+            blackClicks: row ? Number(row.blackClicks) : 0,
+            whiteClicks: row ? Number(row.whiteClicks) : 0,
+          });
+        }
+      } else {
+        clicksByPeriod = dailyResult.map((r) => ({
+          date: r.date,
+          clicks: Number(r.clicks),
+          blackClicks: Number(r.blackClicks),
+          whiteClicks: Number(r.whiteClicks),
+        }));
+      }
+    }
+
+    return {
+      totalClicks: Number(agg?.totalClicks ?? 0),
+      totalBlackClicks: Number(agg?.totalBlackClicks ?? 0),
+      todayClicks: Number(todayAgg?.count ?? 0),
+      activeOffers: filteredOffers.length,
+      clicksByPeriod,
+      useHourly,
+    };
   }
 
   async cleanupOldClickLogs(): Promise<void> {

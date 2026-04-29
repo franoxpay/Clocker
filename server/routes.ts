@@ -1752,26 +1752,53 @@ export async function registerRoutes(
   app.get("/api/dashboard/stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
-      const rawDays = parseInt(req.query.days as string) || 7;
-      const days = [7, 14, 30].includes(rawDays) ? rawDays : 7;
+      const offerId = req.query.offerId as string;
+      const platform = req.query.platform as string;
+      const dateRange = (req.query.dateRange as string) || "today";
+      const customStart = req.query.startDate as string;
+      const customEnd = req.query.endDate as string;
 
-      const offers = await storage.getOffersByUserId(userId);
-      const clicksByPeriod = await storage.getClickLogsByPeriod(userId, days);
+      const now = new Date();
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      let useHourly = false;
 
-      const today = new Date().toISOString().split("T")[0];
-      const todayData = clicksByPeriod.find(d => d.date === today);
+      switch (dateRange) {
+        case "today":
+          startDate = new Date(now); startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          useHourly = true;
+          break;
+        case "yesterday":
+          startDate = new Date(now); startDate.setDate(now.getDate() - 1); startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(startDate); endDate.setHours(23, 59, 59, 999);
+          useHourly = true;
+          break;
+        case "week":
+          startDate = new Date(now); startDate.setDate(now.getDate() - 7); startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          break;
+        case "month":
+          startDate = new Date(now); startDate.setMonth(now.getMonth() - 1); startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          break;
+        case "custom":
+          if (customStart) { startDate = new Date(customStart); startDate.setHours(0, 0, 0, 0); }
+          if (customEnd) { endDate = new Date(customEnd); endDate.setHours(23, 59, 59, 999); }
+          break;
+        default: // "all"
+          break;
+      }
 
-      const activeOffers = offers.filter(o => o.isActive);
-      const totalClicks = offers.reduce((sum, o) => sum + o.totalClicks, 0);
-      const totalBlackClicks = offers.reduce((sum, o) => sum + o.blackClicks, 0);
-
-      res.json({
-        todayClicks: todayData?.clicks || 0,
-        totalClicks,
-        totalBlackClicks,
-        activeOffers: activeOffers.length,
-        clicksByPeriod,
+      const statsResult = await storage.getDashboardStats(userId, {
+        offerId: offerId && offerId !== "all" ? parseInt(offerId) : undefined,
+        platform: platform && platform !== "all" ? platform : undefined,
+        startDate,
+        endDate,
+        useHourly,
       });
+
+      res.json(statsResult);
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);
       res.status(500).json({ message: "Internal server error" });

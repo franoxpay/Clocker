@@ -5,6 +5,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
@@ -27,14 +36,16 @@ import {
   Clock,
   ShieldCheck,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
+import type { Offer } from "@shared/schema";
 
 interface DashboardStats {
   todayClicks: number;
   totalClicks: number;
   totalBlackClicks: number;
   activeOffers: number;
+  useHourly: boolean;
   clicksByPeriod: Array<{
     date: string;
     clicks: number;
@@ -57,22 +68,41 @@ interface UserUsage {
   subscriptionStatus: string | null;
 }
 
-const PERIODS = [
-  { label: "7D", value: 7 },
-  { label: "14D", value: 14 },
-  { label: "30D", value: 30 },
-];
-
 export default function Dashboard() {
   const { t, language } = useLanguage();
+  const isPt = language === "pt-BR";
+  const locale = isPt ? ptBR : enUS;
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [period, setPeriod] = useState(7);
+
+  const [filters, setFilters] = useState({
+    offerId: "",
+    platform: "",
+    dateRange: "today",
+    startDate: "",
+    endDate: "",
+  });
+
+  const { data: offers = [] } = useQuery<Offer[]>({
+    queryKey: ["/api/offers"],
+  });
+
+  const buildQuery = () => {
+    const params = new URLSearchParams();
+    params.set("dateRange", filters.dateRange);
+    if (filters.offerId && filters.offerId !== "all") params.set("offerId", filters.offerId);
+    if (filters.platform && filters.platform !== "all") params.set("platform", filters.platform);
+    if (filters.dateRange === "custom") {
+      if (filters.startDate) params.set("startDate", filters.startDate);
+      if (filters.endDate) params.set("endDate", filters.endDate);
+    }
+    return params.toString();
+  };
 
   const { data: stats, isLoading } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats", period],
+    queryKey: ["/api/dashboard/stats", filters.offerId, filters.platform, filters.dateRange, filters.startDate, filters.endDate],
     queryFn: () =>
-      fetch(`/api/dashboard/stats?days=${period}`, { credentials: "include" }).then((r) => r.json()),
+      fetch(`/api/dashboard/stats?${buildQuery()}`, { credentials: "include" }).then((r) => r.json()),
   });
 
   const { data: usage } = useQuery<UserUsage>({
@@ -80,56 +110,74 @@ export default function Dashboard() {
     refetchInterval: 30000,
   });
 
+  const resetFilters = () =>
+    setFilters({ offerId: "", platform: "", dateRange: "today", startDate: "", endDate: "" });
+
   const getClicksPercent = () => {
     if (!usage || usage.isUnlimited || !usage.clicksLimit) return 0;
     return Math.min((usage.clicksThisMonth / usage.clicksLimit) * 100, 100);
   };
 
   const getProgressColor = () => {
-    const percent = getClicksPercent();
-    if (percent >= 100) return "bg-destructive";
-    if (percent >= 95) return "bg-orange-500";
-    if (percent >= 80) return "bg-yellow-500";
+    const p = getClicksPercent();
+    if (p >= 100) return "bg-destructive";
+    if (p >= 95) return "bg-orange-500";
+    if (p >= 80) return "bg-yellow-500";
     return "bg-primary";
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr + "T00:00:00");
-    return format(date, period === 7 ? "dd/MM" : "dd/MM", {
-      locale: language === "pt-BR" ? ptBR : enUS,
-    });
+  const formatNumber = (n: number) => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+    return n.toLocaleString();
   };
 
-  const formatNumber = (num: number) => {
-    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
-    return num.toLocaleString();
+  const chartTitle = () => {
+    if (isPt) {
+      switch (filters.dateRange) {
+        case "today": return "Cliques — Hoje (por hora)";
+        case "yesterday": return "Cliques — Ontem (por hora)";
+        case "week": return "Cliques — Essa Semana";
+        case "month": return "Cliques — Esse Mês";
+        case "custom": return "Cliques — Período Personalizado";
+        default: return "Cliques — Todo Período";
+      }
+    } else {
+      switch (filters.dateRange) {
+        case "today": return "Clicks — Today (by hour)";
+        case "yesterday": return "Clicks — Yesterday (by hour)";
+        case "week": return "Clicks — This Week";
+        case "month": return "Clicks — This Month";
+        case "custom": return "Clicks — Custom Range";
+        default: return "Clicks — All Time";
+      }
+    }
   };
 
   const statCards = [
     {
-      title: language === "pt-BR" ? "Cliques Totais" : "Total Clicks",
+      title: isPt ? "Cliques no Período" : "Period Clicks",
       value: stats?.totalClicks ?? 0,
       icon: TrendingUp,
       color: "text-primary",
       testId: "stat-total-clicks",
     },
     {
-      title: language === "pt-BR" ? "Cliques Hoje" : "Clicks Today",
+      title: isPt ? "Cliques Hoje" : "Clicks Today",
       value: stats?.todayClicks ?? 0,
       icon: MousePointerClick,
       color: "text-chart-2",
       testId: "stat-today-clicks",
     },
     {
-      title: language === "pt-BR" ? "Cliques Black" : "Black Clicks",
+      title: isPt ? "Cliques Black" : "Black Clicks",
       value: stats?.totalBlackClicks ?? 0,
       icon: ShieldCheck,
       color: "text-chart-3",
       testId: "stat-black-clicks",
     },
     {
-      title: language === "pt-BR" ? "Ofertas Ativas" : "Active Offers",
+      title: isPt ? "Ofertas Ativas" : "Active Offers",
       value: stats?.activeOffers ?? 0,
       icon: LinkIcon,
       color: "text-chart-4",
@@ -144,9 +192,13 @@ export default function Dashboard() {
     fontSize: "0.75rem",
   };
 
-  const labelBlack = language === "pt-BR" ? "Black" : "Black";
-  const labelWhite = language === "pt-BR" ? "White" : "White";
-  const labelTotal = language === "pt-BR" ? "Total" : "Total";
+  const xAxisInterval = () => {
+    if (stats?.useHourly) return 3;
+    const len = stats?.clicksByPeriod?.length ?? 7;
+    if (len <= 7) return 0;
+    if (len <= 14) return 1;
+    return 3;
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -156,115 +208,157 @@ export default function Dashboard() {
         </h1>
       </div>
 
+      {/* Alerts */}
       {usage?.isSuspended && (
         <Alert variant="destructive" data-testid="alert-suspended">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>{language === "pt-BR" ? "Conta Suspensa" : "Account Suspended"}</AlertTitle>
+          <AlertTitle>{isPt ? "Conta Suspensa" : "Account Suspended"}</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
-              {language === "pt-BR"
+              {isPt
                 ? "Sua conta foi suspensa por exceder o limite de cliques. Suas ofertas não estão funcionando."
                 : "Your account has been suspended for exceeding the click limit. Your offers are not working."}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/subscription")}
-              data-testid="button-upgrade-suspended"
-            >
-              {language === "pt-BR" ? "Fazer Upgrade" : "Upgrade Now"}
+            <Button variant="outline" size="sm" onClick={() => navigate("/subscription")} data-testid="button-upgrade-suspended">
+              {isPt ? "Fazer Upgrade" : "Upgrade Now"}
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
       {usage?.gracePeriodEndsAt && !usage?.isSuspended && (
-        <Alert
-          variant="destructive"
-          className="border-orange-500 bg-orange-500/10"
-          data-testid="alert-grace-period"
-        >
+        <Alert variant="destructive" className="border-orange-500 bg-orange-500/10" data-testid="alert-grace-period">
           <Clock className="h-4 w-4 text-orange-500" />
           <AlertTitle className="text-orange-600 dark:text-orange-400">
-            {language === "pt-BR" ? "Atenção: Conta Será Suspensa" : "Warning: Account Will Be Suspended"}
+            {isPt ? "Atenção: Conta Será Suspensa" : "Warning: Account Will Be Suspended"}
           </AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
               {usage?.subscriptionStatus === "past_due" || usage?.subscriptionStatus === "canceled"
-                ? language === "pt-BR"
-                  ? `Sua assinatura está pendente. Renove para continuar usando o serviço. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.`
-                  : `Your subscription is pending. Renew to continue using the service. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`
-                : language === "pt-BR"
-                ? `Você excedeu seu limite de cliques. Sua conta será suspensa em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: ptBR, addSuffix: false })}.`
-                : `You have exceeded your click limit. Your account will be suspended in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale: enUS, addSuffix: false })}.`}
+                ? isPt
+                  ? `Sua assinatura está pendente. Renove para continuar. Suspensão em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale, addSuffix: false })}.`
+                  : `Your subscription is pending. Renew to continue. Suspension in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale, addSuffix: false })}.`
+                : isPt
+                ? `Você excedeu seu limite. Suspensão em ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale, addSuffix: false })}.`
+                : `You exceeded your limit. Suspension in ${formatDistanceToNow(new Date(usage.gracePeriodEndsAt), { locale, addSuffix: false })}.`}
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate("/subscription")}
-              data-testid="button-upgrade-grace"
-            >
+            <Button variant="outline" size="sm" onClick={() => navigate("/subscription")} data-testid="button-upgrade-grace">
               {usage?.subscriptionStatus === "past_due" || usage?.subscriptionStatus === "canceled"
-                ? language === "pt-BR"
-                  ? "Renovar Assinatura"
-                  : "Renew Subscription"
-                : language === "pt-BR"
-                ? "Fazer Upgrade Agora"
-                : "Upgrade Now"}
+                ? isPt ? "Renovar Assinatura" : "Renew Subscription"
+                : isPt ? "Fazer Upgrade Agora" : "Upgrade Now"}
             </Button>
           </AlertDescription>
         </Alert>
       )}
 
-      {usage &&
-        !usage.isUnlimited &&
-        usage.clicksLimit &&
-        getClicksPercent() >= 80 &&
-        getClicksPercent() < 100 &&
-        !usage.gracePeriodEndsAt && (
-          <Alert
-            variant="default"
-            className={
-              getClicksPercent() >= 95
-                ? "border-orange-500 bg-orange-500/10"
-                : "border-yellow-500 bg-yellow-500/10"
-            }
-            data-testid="alert-clicks-warning"
-          >
-            <AlertTriangle
-              className={`h-4 w-4 ${getClicksPercent() >= 95 ? "text-orange-500" : "text-yellow-500"}`}
-            />
-            <AlertTitle
-              className={
-                getClicksPercent() >= 95
-                  ? "text-orange-600 dark:text-orange-400"
-                  : "text-yellow-600 dark:text-yellow-400"
-              }
-            >
-              {getClicksPercent() >= 95
-                ? language === "pt-BR"
-                  ? "Limite Quase Atingido!"
-                  : "Almost at Limit!"
-                : language === "pt-BR"
-                ? "Atenção ao Limite de Cliques"
-                : "Click Limit Warning"}
-            </AlertTitle>
-            <AlertDescription>
-              {language === "pt-BR"
-                ? `Você usou ${getClicksPercent().toFixed(0)}% do seu limite mensal de cliques. Considere fazer upgrade do seu plano.`
-                : `You have used ${getClicksPercent().toFixed(0)}% of your monthly click limit. Consider upgrading your plan.`}
-            </AlertDescription>
-          </Alert>
+      {usage && !usage.isUnlimited && usage.clicksLimit && getClicksPercent() >= 80 && getClicksPercent() < 100 && !usage.gracePeriodEndsAt && (
+        <Alert
+          variant="default"
+          className={getClicksPercent() >= 95 ? "border-orange-500 bg-orange-500/10" : "border-yellow-500 bg-yellow-500/10"}
+          data-testid="alert-clicks-warning"
+        >
+          <AlertTriangle className={`h-4 w-4 ${getClicksPercent() >= 95 ? "text-orange-500" : "text-yellow-500"}`} />
+          <AlertTitle className={getClicksPercent() >= 95 ? "text-orange-600 dark:text-orange-400" : "text-yellow-600 dark:text-yellow-400"}>
+            {getClicksPercent() >= 95
+              ? isPt ? "Limite Quase Atingido!" : "Almost at Limit!"
+              : isPt ? "Atenção ao Limite de Cliques" : "Click Limit Warning"}
+          </AlertTitle>
+          <AlertDescription>
+            {isPt
+              ? `Você usou ${getClicksPercent().toFixed(0)}% do seu limite mensal de cliques.`
+              : `You have used ${getClicksPercent().toFixed(0)}% of your monthly click limit.`}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">{isPt ? "Oferta" : "Offer"}</Label>
+          <Select value={filters.offerId} onValueChange={(v) => setFilters({ ...filters, offerId: v })}>
+            <SelectTrigger className="w-44" data-testid="filter-dashboard-offer">
+              <SelectValue placeholder={isPt ? "Todas as ofertas" : "All offers"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{isPt ? "Todas as ofertas" : "All offers"}</SelectItem>
+              {offers.map((offer) => (
+                <SelectItem key={offer.id} value={String(offer.id)}>
+                  {offer.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">{isPt ? "Plataforma" : "Platform"}</Label>
+          <Select value={filters.platform} onValueChange={(v) => setFilters({ ...filters, platform: v })}>
+            <SelectTrigger className="w-36" data-testid="filter-dashboard-platform">
+              <SelectValue placeholder={isPt ? "Todas" : "All"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{isPt ? "Todas" : "All"}</SelectItem>
+              <SelectItem value="tiktok">TikTok</SelectItem>
+              <SelectItem value="facebook">Facebook</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Label className="text-xs text-muted-foreground">{isPt ? "Período" : "Period"}</Label>
+          <Select value={filters.dateRange} onValueChange={(v) => setFilters({ ...filters, dateRange: v })}>
+            <SelectTrigger className="w-44" data-testid="filter-dashboard-date">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="today">{isPt ? "Hoje" : "Today"}</SelectItem>
+              <SelectItem value="yesterday">{isPt ? "Ontem" : "Yesterday"}</SelectItem>
+              <SelectItem value="week">{isPt ? "Essa semana" : "This week"}</SelectItem>
+              <SelectItem value="month">{isPt ? "Esse mês" : "This month"}</SelectItem>
+              <SelectItem value="all">{isPt ? "Todo período" : "All time"}</SelectItem>
+              <SelectItem value="custom">{isPt ? "Personalizado" : "Custom"}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {filters.dateRange === "custom" && (
+          <>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">{isPt ? "Data início" : "Start date"}</Label>
+              <Input
+                type="date"
+                className="w-40 h-10"
+                value={filters.startDate}
+                max={filters.endDate || undefined}
+                onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
+                data-testid="filter-dashboard-start-date"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label className="text-xs text-muted-foreground">{isPt ? "Data fim" : "End date"}</Label>
+              <Input
+                type="date"
+                className="w-40 h-10"
+                value={filters.endDate}
+                min={filters.startDate || undefined}
+                onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
+                data-testid="filter-dashboard-end-date"
+              />
+            </div>
+          </>
         )}
+
+        <Button variant="outline" onClick={resetFilters} data-testid="button-reset-dashboard-filters">
+          {isPt ? "Limpar" : "Clear"}
+        </Button>
+      </div>
 
       {/* Stat Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <Card key={card.testId}>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {card.title}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
               <card.icon className={`w-4 h-4 ${card.color}`} />
             </CardHeader>
             <CardContent>
@@ -285,39 +379,23 @@ export default function Dashboard() {
         <Card data-testid="card-usage">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              {language === "pt-BR" ? "Uso Mensal de Cliques" : "Monthly Click Usage"}
+              {isPt ? "Uso Mensal de Cliques" : "Monthly Click Usage"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <Progress value={getClicksPercent()} className="h-2" indicatorClassName={getProgressColor()} />
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>{usage.clicksThisMonth.toLocaleString()} {language === "pt-BR" ? "usados" : "used"}</span>
-              <span>{usage.clicksLimit.toLocaleString()} {language === "pt-BR" ? "limite" : "limit"}</span>
+              <span>{usage.clicksThisMonth.toLocaleString()} {isPt ? "usados" : "used"}</span>
+              <span>{usage.clicksLimit.toLocaleString()} {isPt ? "limite" : "limit"}</span>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Area Chart with period selector */}
+      {/* Area Chart */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <CardTitle>
-            {language === "pt-BR" ? `Cliques — Últimos ${period} Dias` : `Clicks — Last ${period} Days`}
-          </CardTitle>
-          <div className="flex gap-1" data-testid="period-selector">
-            {PERIODS.map((p) => (
-              <Button
-                key={p.value}
-                variant={period === p.value ? "default" : "outline"}
-                size="sm"
-                className="h-7 px-3 text-xs"
-                onClick={() => setPeriod(p.value)}
-                data-testid={`button-period-${p.value}`}
-              >
-                {p.label}
-              </Button>
-            ))}
-          </div>
+        <CardHeader>
+          <CardTitle>{chartTitle()}</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -343,24 +421,20 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="date"
-                    tickFormatter={formatDate}
                     className="text-xs"
                     tick={{ fontSize: 11 }}
-                    interval={period === 7 ? 0 : period === 14 ? 1 : 3}
+                    interval={xAxisInterval()}
                   />
                   <YAxis className="text-xs" tick={{ fontSize: 11 }} allowDecimals={false} />
                   <Tooltip
                     contentStyle={tooltipStyle}
-                    labelFormatter={formatDate}
                     formatter={(value: number, name: string) => [value.toLocaleString(), name]}
                   />
-                  <Legend
-                    wrapperStyle={{ fontSize: "0.75rem", paddingTop: "12px" }}
-                  />
+                  <Legend wrapperStyle={{ fontSize: "0.75rem", paddingTop: "12px" }} />
                   <Area
                     type="monotone"
                     dataKey="clicks"
-                    name={labelTotal}
+                    name="Total"
                     stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     fill="url(#gradTotal)"
@@ -370,7 +444,7 @@ export default function Dashboard() {
                   <Area
                     type="monotone"
                     dataKey="blackClicks"
-                    name={labelBlack}
+                    name="Black"
                     stroke="hsl(var(--chart-3))"
                     strokeWidth={2}
                     fill="url(#gradBlack)"
@@ -380,7 +454,7 @@ export default function Dashboard() {
                   <Area
                     type="monotone"
                     dataKey="whiteClicks"
-                    name={labelWhite}
+                    name="White"
                     stroke="hsl(var(--chart-4))"
                     strokeWidth={2}
                     fill="url(#gradWhite)"
