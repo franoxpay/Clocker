@@ -1752,43 +1752,25 @@ export async function registerRoutes(
   app.get("/api/dashboard/stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
+      const rawDays = parseInt(req.query.days as string) || 7;
+      const days = [7, 14, 30].includes(rawDays) ? rawDays : 7;
+
       const offers = await storage.getOffersByUserId(userId);
-      const domains = await storage.getDomainsByUserId(userId);
-      const clicksLast7Days = await storage.getClickLogsLast7Days(userId);
+      const clicksByPeriod = await storage.getClickLogsByPeriod(userId, days);
 
       const today = new Date().toISOString().split("T")[0];
-      const todayData = clicksLast7Days.find(d => d.date === today);
+      const todayData = clicksByPeriod.find(d => d.date === today);
 
       const activeOffers = offers.filter(o => o.isActive);
-      const activeDomains = domains.filter(d => d.isActive && d.isVerified);
-
       const totalClicks = offers.reduce((sum, o) => sum + o.totalClicks, 0);
-
-      const clicksByOffer = offers
-        .filter(o => o.totalClicks > 0)
-        .map(o => ({ name: o.name, clicks: o.totalClicks }))
-        .sort((a, b) => b.clicks - a.clicks);
-
-      const domainClicksMap = new Map<string, number>();
-      for (const offer of offers) {
-        const domain = (offer as any).domain;
-        if (domain) {
-          const current = domainClicksMap.get(domain.subdomain) || 0;
-          domainClicksMap.set(domain.subdomain, current + offer.totalClicks);
-        }
-      }
-      const clicksByDomain = Array.from(domainClicksMap.entries())
-        .map(([name, clicks]) => ({ name, clicks }))
-        .sort((a, b) => b.clicks - a.clicks);
+      const totalBlackClicks = offers.reduce((sum, o) => sum + o.blackClicks, 0);
 
       res.json({
         todayClicks: todayData?.clicks || 0,
         totalClicks,
+        totalBlackClicks,
         activeOffers: activeOffers.length,
-        activeDomains: activeDomains.length,
-        clicksLast7Days,
-        clicksByOffer,
-        clicksByDomain,
+        clicksByPeriod,
       });
     } catch (error) {
       console.error("Error fetching dashboard stats:", error);

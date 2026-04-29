@@ -123,7 +123,7 @@ export interface IStorage {
     limit: number,
     filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string }
   ): Promise<{ logs: ClickLog[]; total: number }>;
-  getClickLogsLast7Days(userId: string): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>>;
+  getClickLogsByPeriod(userId: string, days: number): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>>;
   cleanupOldClickLogs(): Promise<void>;
 
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
@@ -929,9 +929,10 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getClickLogsLast7Days(userId: string): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>> {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  async getClickLogsByPeriod(userId: string, days: number): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
 
     const result = await db
       .select({
@@ -941,16 +942,27 @@ export class DatabaseStorage implements IStorage {
         whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
       })
       .from(clickLogs)
-      .where(and(eq(clickLogs.userId, userId), gte(clickLogs.createdAt, sevenDaysAgo)))
+      .where(and(eq(clickLogs.userId, userId), gte(clickLogs.createdAt, startDate)))
       .groupBy(sql`DATE(${clickLogs.createdAt})`)
       .orderBy(sql`DATE(${clickLogs.createdAt})`);
 
-    return result.map((row) => ({
-      date: row.date,
-      clicks: Number(row.clicks),
-      blackClicks: Number(row.blackClicks),
-      whiteClicks: Number(row.whiteClicks),
-    }));
+    const dataByDate = new Map(result.map((row) => [row.date, row]));
+
+    // Fill every day in the range with zeros if no data
+    const filled: Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }> = [];
+    for (let i = days; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      const row = dataByDate.get(dateStr);
+      filled.push({
+        date: dateStr,
+        clicks: row ? Number(row.clicks) : 0,
+        blackClicks: row ? Number(row.blackClicks) : 0,
+        whiteClicks: row ? Number(row.whiteClicks) : 0,
+      });
+    }
+    return filled;
   }
 
   async cleanupOldClickLogs(): Promise<void> {
