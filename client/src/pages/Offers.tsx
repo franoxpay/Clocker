@@ -871,16 +871,13 @@ export default function Offers() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <Button onClick={openCreateMode} data-testid="button-create-offer">
-          <Plus className="w-4 h-4 mr-2" />
-          {t("offers.create")}
-        </Button>
-      </div>
-
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>{language === "pt-BR" ? "Suas Ofertas" : "Your Offers"}</CardTitle>
+          <Button onClick={openCreateMode} data-testid="button-create-offer">
+            <Plus className="w-4 h-4 mr-2" />
+            {t("offers.create")}
+          </Button>
         </CardHeader>
         <CardContent>
           {isLoading ? (
