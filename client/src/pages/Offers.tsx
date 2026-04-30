@@ -631,47 +631,112 @@ export default function Offers() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <Label>{t("offers.blackPage")}</Label>
-                    <TooltipProvider delayDuration={200}>
-                      <Tooltip>
-                        <TooltipTrigger type="button" className="text-muted-foreground hover:text-foreground">
-                          <HelpCircle className="w-3.5 h-3.5" />
-                        </TooltipTrigger>
-                        <TooltipContent side="right" className="max-w-[220px] text-xs">
-                          {language === "pt-BR"
-                            ? "Sua página de oferta real. Visitantes válidos (humanos reais) vão ver esta página."
-                            : "Your real offer page. Valid visitors (real humans) will see this page."}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Input
-                      type="url"
-                      value={formData.blackPages[0]?.url || ""}
-                      onChange={(e) => {
-                        const updated = [...formData.blackPages];
-                        updated[0] = { ...updated[0], url: e.target.value };
-                        setFormData(prev => ({ ...prev, blackPages: updated }));
-                      }}
-                      placeholder="https://exemplo.com/pagina-vendas"
-                      required
-                      data-testid="input-black-page-0"
-                    />
-                    {formData.blackPages[0]?.url && (
-                      <a
-                        href={formData.blackPages[0].url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center w-9 h-9 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                        data-testid="button-open-black-page"
-                        title={language === "pt-BR" ? "Abrir em nova aba" : "Open in new tab"}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Label>{t("offers.blackPage")}</Label>
+                      <TooltipProvider delayDuration={200}>
+                        <Tooltip>
+                          <TooltipTrigger type="button" className="text-muted-foreground hover:text-foreground">
+                            <HelpCircle className="w-3.5 h-3.5" />
+                          </TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-[220px] text-xs">
+                            {language === "pt-BR"
+                              ? "Sua página de oferta real. Visitantes válidos (humanos reais) vão ver esta página."
+                              : "Your real offer page. Valid visitors (real humans) will see this page."}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
+                    {formData.blackPages.length < 5 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground"
+                        onClick={() => setFormData(prev => ({ ...prev, blackPages: [...prev.blackPages, { url: "", percentage: 0 }] }))}
+                        data-testid="button-add-black-page"
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        {language === "pt-BR" ? "Adicionar Outro Link" : "Add Another Link"}
+                      </Button>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    {formData.blackPages.map((bp, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <div className="flex gap-1.5 flex-1">
+                          <Input
+                            type="url"
+                            value={bp.url}
+                            onChange={(e) => {
+                              const updated = [...formData.blackPages];
+                              updated[index] = { ...updated[index], url: e.target.value };
+                              setFormData(prev => ({ ...prev, blackPages: updated }));
+                            }}
+                            placeholder={`https://exemplo.com/pagina-vendas${formData.blackPages.length > 1 ? `-${index + 1}` : ""}`}
+                            required={index === 0}
+                            className="flex-1"
+                            data-testid={`input-black-page-${index}`}
+                          />
+                          {bp.url && (
+                            <a
+                              href={bp.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-center w-9 h-9 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                              title={language === "pt-BR" ? "Abrir em nova aba" : "Open in new tab"}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                        </div>
+                        {formData.blackPages.length > 1 && (
+                          <>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={bp.percentage}
+                              onChange={(e) => {
+                                const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                                const updated = [...formData.blackPages];
+                                updated[index] = { ...updated[index], percentage: val };
+                                setFormData(prev => ({ ...prev, blackPages: updated }));
+                              }}
+                              className="w-16 shrink-0"
+                              data-testid={`input-black-page-percentage-${index}`}
+                            />
+                            <span className="text-sm text-muted-foreground shrink-0">%</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 shrink-0 text-destructive hover:text-destructive"
+                              onClick={() => {
+                                const updated = formData.blackPages.filter((_, i) => i !== index);
+                                if (updated.length === 1) updated[0].percentage = 100;
+                                setFormData(prev => ({ ...prev, blackPages: updated }));
+                              }}
+                              data-testid={`button-remove-black-page-${index}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {formData.blackPages.length > 1 && (() => {
+                    const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
+                    const isValid = total === 100;
+                    return (
+                      <p className={`text-xs font-medium ${isValid ? "text-green-600 dark:text-green-400" : "text-destructive"}`} data-testid="text-percentage-total">
+                        Total: {total}% {isValid ? "✓" : (language === "pt-BR" ? "(deve ser 100%)" : "(must be 100%)")}
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 <div className="space-y-2">
@@ -700,116 +765,6 @@ export default function Offers() {
                     data-testid="input-white-page"
                   />
                 </div>
-
-                <Collapsible open={showAdvancedBlackPages} onOpenChange={setShowAdvancedBlackPages}>
-                  <CollapsibleTrigger asChild>
-                    <button
-                      type="button"
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      data-testid="button-toggle-advanced"
-                    >
-                      <Settings2 className="w-3.5 h-3.5" />
-                      {language === "pt-BR" ? "A/B de links (avançado)" : "A/B links (advanced)"}
-                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvancedBlackPages ? "rotate-180" : ""}`} />
-                    </button>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent className="space-y-3 pt-3">
-                    {formData.blackPages.length > 1 && (
-                      <div className="flex items-center gap-2 text-sm p-2 rounded bg-muted/40">
-                        <span className="flex-1 text-muted-foreground">
-                          {language === "pt-BR" ? "Link principal (acima):" : "Main link (above):"}
-                        </span>
-                        <Input
-                          type="number"
-                          min={10}
-                          max={100}
-                          value={formData.blackPages[0]?.percentage || 100}
-                          onChange={(e) => {
-                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
-                            const updated = [...formData.blackPages];
-                            updated[0] = { ...updated[0], percentage: val };
-                            setFormData(prev => ({ ...prev, blackPages: updated }));
-                          }}
-                          className="w-20"
-                          data-testid="input-black-page-percentage-0"
-                        />
-                        <span className="text-muted-foreground">%</span>
-                      </div>
-                    )}
-
-                    {formData.blackPages.slice(1).map((bp, idx) => {
-                      const index = idx + 1;
-                      return (
-                        <div key={index} className="flex items-center gap-2">
-                          <Input
-                            type="url"
-                            value={bp.url}
-                            onChange={(e) => {
-                              const updated = [...formData.blackPages];
-                              updated[index] = { ...updated[index], url: e.target.value };
-                              setFormData(prev => ({ ...prev, blackPages: updated }));
-                            }}
-                            placeholder={`https://exemplo.com/pagina-${index + 1}`}
-                            className="flex-1"
-                            data-testid={`input-black-page-${index}`}
-                          />
-                          <Input
-                            type="number"
-                            min={10}
-                            max={100}
-                            value={bp.percentage}
-                            onChange={(e) => {
-                              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
-                              const updated = [...formData.blackPages];
-                              updated[index] = { ...updated[index], percentage: val };
-                              setFormData(prev => ({ ...prev, blackPages: updated }));
-                            }}
-                            className="w-20"
-                            data-testid={`input-black-page-percentage-${index}`}
-                          />
-                          <span className="text-sm text-muted-foreground">%</span>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 text-destructive hover:text-destructive"
-                            onClick={() => {
-                              const updated = formData.blackPages.filter((_, i) => i !== index);
-                              if (updated.length === 1) updated[0].percentage = 100;
-                              setFormData(prev => ({ ...prev, blackPages: updated }));
-                            }}
-                            data-testid={`button-remove-black-page-${index}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-
-                    {formData.blackPages.length > 1 && (() => {
-                      const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
-                      const isValid = total === 100;
-                      return (
-                        <div className={`text-sm font-medium ${isValid ? "text-green-600 dark:text-green-400" : "text-destructive"}`} data-testid="text-percentage-total">
-                          Total: {total}% {isValid ? "✓" : (language === "pt-BR" ? "(deve ser 100%)" : "(must be 100%)")}
-                        </div>
-                      );
-                    })()}
-
-                    {formData.blackPages.length < 5 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setFormData(prev => ({ ...prev, blackPages: [...prev.blackPages, { url: "", percentage: 0 }] }))}
-                        data-testid="button-add-black-page"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {language === "pt-BR" ? "Adicionar Link" : "Add Link"}
-                      </Button>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
               </CardContent>
             </Card>
 
