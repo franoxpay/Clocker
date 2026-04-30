@@ -1758,6 +1758,19 @@ export async function registerRoutes(
       const customStart = req.query.startDate as string;
       const customEnd = req.query.endDate as string;
 
+      // BRT = UTC-3. Converts a UTC Date to start/end of that day in Brasília time.
+      const BRT_MS = 3 * 60 * 60 * 1000;
+      const brtStartOfDay = (d: Date): Date => {
+        const brt = new Date(d.getTime() - BRT_MS);
+        brt.setUTCHours(0, 0, 0, 0);
+        return new Date(brt.getTime() + BRT_MS);
+      };
+      const brtEndOfDay = (d: Date): Date => {
+        const brt = new Date(d.getTime() - BRT_MS);
+        brt.setUTCHours(23, 59, 59, 999);
+        return new Date(brt.getTime() + BRT_MS);
+      };
+
       const now = new Date();
       let startDate: Date | undefined;
       let endDate: Date | undefined;
@@ -1765,28 +1778,30 @@ export async function registerRoutes(
 
       switch (dateRange) {
         case "today":
-          startDate = new Date(now); startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          startDate = brtStartOfDay(now);
+          endDate = brtEndOfDay(now);
           useHourly = true;
           break;
-        case "yesterday":
-          startDate = new Date(now); startDate.setDate(now.getDate() - 1); startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(startDate); endDate.setHours(23, 59, 59, 999);
+        case "yesterday": {
+          const yest = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          startDate = brtStartOfDay(yest);
+          endDate = brtEndOfDay(yest);
           useHourly = true;
           break;
+        }
         case "week":
-          startDate = new Date(now); startDate.setDate(now.getDate() - 7); startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          startDate = brtStartOfDay(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+          endDate = brtEndOfDay(now);
           break;
         case "month":
-          startDate = new Date(now); startDate.setMonth(now.getMonth() - 1); startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(now); endDate.setHours(23, 59, 59, 999);
+          startDate = brtStartOfDay(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+          endDate = brtEndOfDay(now);
           break;
         case "custom":
-          if (customStart) { startDate = new Date(customStart); startDate.setHours(0, 0, 0, 0); }
-          if (customEnd) { endDate = new Date(customEnd); endDate.setHours(23, 59, 59, 999); }
+          if (customStart) { startDate = brtStartOfDay(new Date(customStart)); }
+          if (customEnd) { endDate = brtEndOfDay(new Date(customEnd)); }
           break;
-        default: // "all"
+        default:
           break;
       }
 
