@@ -162,7 +162,6 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold" data-testid="admin-dashboard-title">{t.title}</h1>
         <div className="flex flex-wrap items-center gap-3">
           <Select value={platformFilter} onValueChange={setPlatformFilter}>
             <SelectTrigger className="w-32" data-testid="filter-platform">

@@ -272,12 +272,6 @@ export default function AdminUsers() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-admin-users">
-          {t("admin.users.title")}
-        </h1>
-      </div>
-
       <Card>
         <CardHeader>
           <div className="relative max-w-sm">

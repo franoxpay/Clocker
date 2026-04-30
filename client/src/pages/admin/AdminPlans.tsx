@@ -396,9 +396,6 @@ export default function AdminPlans() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-admin-plans">
-          {t("admin.plans.title")}
-        </h1>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-create-plan" onClick={() => resetForm()}>

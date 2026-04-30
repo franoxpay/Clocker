@@ -194,12 +194,6 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-dashboard">
-          {t("dashboard.title")}
-        </h1>
-      </div>
-
       {/* Alerts */}
       {usage?.isSuspended && (
         <Alert variant="destructive" data-testid="alert-suspended">

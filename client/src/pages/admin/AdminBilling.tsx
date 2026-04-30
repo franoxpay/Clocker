@@ -174,12 +174,6 @@ export default function AdminBilling() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <h1 className="text-2xl font-bold" data-testid="text-billing-title">
-          {language === "pt-BR" ? "Faturamento" : "Billing"}
-        </h1>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">

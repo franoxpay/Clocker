@@ -373,9 +373,6 @@ export default function Domains() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-domains">
-          {t("domains.title")}
-        </h1>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-domain">

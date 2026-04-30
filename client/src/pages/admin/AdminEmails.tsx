@@ -326,14 +326,6 @@ export default function AdminEmails() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-admin-emails-title">
-            {t("admin.emails")}
-          </h1>
-          <p className="text-muted-foreground">
-            {t("admin.emailHistory")}
-          </p>
-        </div>
         <Button onClick={() => setShowTestDialog(true)} data-testid="button-send-test-email">
           <Send className="w-4 h-4 mr-2" />
           {t("admin.sendTest")}

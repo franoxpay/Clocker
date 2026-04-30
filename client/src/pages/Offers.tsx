@@ -872,9 +872,6 @@ export default function Offers() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-offers">
-          {t("offers.title")}
-        </h1>
         <Button onClick={openCreateMode} data-testid="button-create-offer">
           <Plus className="w-4 h-4 mr-2" />
           {t("offers.create")}

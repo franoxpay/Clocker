@@ -102,7 +102,7 @@ interface UserUsage {
 
 function AuthenticatedLayout() {
   const [location, navigate] = useLocation();
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const { user } = useAuth();
   const isAdminRoute = location.startsWith("/confg-admin") && !!user?.isAdmin;
   const [dismissedAlert, setDismissedAlert] = useState(false);
@@ -134,7 +134,29 @@ function AuthenticatedLayout() {
           <AppSidebar isAdmin={isAdminRoute} />
           <div className="flex flex-col flex-1 overflow-hidden">
             <header className="flex items-center justify-between gap-4 p-3 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <div className="flex items-center gap-3">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <span className="text-sm font-medium text-muted-foreground" data-testid="text-page-title">
+                  {(() => {
+                    if (location === "/" || location === "") return t("dashboard.title");
+                    if (location.startsWith("/offers")) return t("offers.title");
+                    if (location.startsWith("/domains")) return t("domains.title");
+                    if (location.startsWith("/logs")) return t("logs.title");
+                    if (location.startsWith("/subscription")) return t("subscription.title");
+                    if (location.startsWith("/settings")) return t("settings.title");
+                    if (location === "/confg-admin" || location === "/confg-admin/dashboard") return t("nav.admin.dashboard");
+                    if (location.startsWith("/confg-admin/users")) return t("nav.admin.users");
+                    if (location.startsWith("/confg-admin/plans")) return t("nav.admin.plans");
+                    if (location.startsWith("/confg-admin/billing")) return t("nav.admin.billing");
+                    if (location.startsWith("/confg-admin/domains")) return t("nav.admin.domains");
+                    if (location.startsWith("/confg-admin/monitoring")) return t("nav.admin.monitoring");
+                    if (location.startsWith("/confg-admin/referrals")) return t("nav.admin.referrals");
+                    if (location.startsWith("/confg-admin/emails")) return t("nav.admin.emails");
+                    if (location.startsWith("/confg-admin/settings")) return t("admin.settings.title");
+                    return "";
+                  })()}
+                </span>
+              </div>
               <div className="flex items-center gap-1">
                 {supportConfig?.whatsapp && (
                   <Button

@@ -671,9 +671,6 @@ export default function Subscription() {
         </Alert>
       )}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-3xl font-semibold" data-testid="title-subscription">
-          {t("subscription.title")}
-        </h1>
         {user?.stripeCustomerId && (
           <Button 
             variant="outline" 

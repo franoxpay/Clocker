@@ -556,10 +556,6 @@ export default function AdminReferrals() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t("admin.referrals")}</h1>
-      </div>
-
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="coupons" data-testid="tab-coupons">

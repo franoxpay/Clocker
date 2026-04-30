@@ -160,10 +160,6 @@ export default function Settings() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-3xl font-semibold" data-testid="title-settings">
-        {t("settings.title")}
-      </h1>
-
       <Tabs defaultValue="account" className="space-y-6">
         <TabsList>
           <TabsTrigger value="account" data-testid="tab-account">

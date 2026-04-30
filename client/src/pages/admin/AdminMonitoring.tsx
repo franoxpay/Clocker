@@ -160,9 +160,6 @@ export default function AdminMonitoring() {
     <div className="p-6 space-y-6">
       <div className="flex items-center gap-3">
         <Activity className="w-6 h-6" />
-        <h1 className="text-2xl font-bold" data-testid="text-monitoring-title">
-          {t("admin.monitoring.title")}
-        </h1>
         <Badge variant="outline" className="ml-auto">
           {t("admin.monitoring.last72h")}
         </Badge>
