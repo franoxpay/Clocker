@@ -44,11 +44,6 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -103,7 +98,6 @@ export default function Offers() {
   const [mergeParamsOffer, setMergeParamsOffer] = useState<OfferWithDomain | null>(null);
   const [additionalParams, setAdditionalParams] = useState("");
   const [previewOffer, setPreviewOffer] = useState<OfferWithDomain | null>(null);
-  const [showAdvancedBlackPages, setShowAdvancedBlackPages] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -271,7 +265,6 @@ export default function Offers() {
     });
     setEditingOffer(null);
     setCountrySearch("");
-    setShowAdvancedBlackPages(false);
   };
 
   const handleBack = () => {
@@ -309,8 +302,6 @@ export default function Offers() {
       isActive: offer.isActive,
     });
     setViewMode("edit");
-    const hasMultipleBlackPages = existingBlackPages.length > 1;
-    setShowAdvancedBlackPages(hasMultipleBlackPages);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
