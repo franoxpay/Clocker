@@ -11,6 +11,7 @@ import { promises as dns } from "dns";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { z } from "zod";
+import { startOfLocalDay, endOfLocalDay } from "./timezone";
 
 // ==========================================
 // ANTI-BOT CHALLENGE SYSTEM
@@ -1758,19 +1759,6 @@ export async function registerRoutes(
       const customStart = req.query.startDate as string;
       const customEnd = req.query.endDate as string;
 
-      // BRT = UTC-3. Converts a UTC Date to start/end of that day in Brasília time.
-      const BRT_MS = 3 * 60 * 60 * 1000;
-      const brtStartOfDay = (d: Date): Date => {
-        const brt = new Date(d.getTime() - BRT_MS);
-        brt.setUTCHours(0, 0, 0, 0);
-        return new Date(brt.getTime() + BRT_MS);
-      };
-      const brtEndOfDay = (d: Date): Date => {
-        const brt = new Date(d.getTime() - BRT_MS);
-        brt.setUTCHours(23, 59, 59, 999);
-        return new Date(brt.getTime() + BRT_MS);
-      };
-
       const now = new Date();
       let startDate: Date | undefined;
       let endDate: Date | undefined;
@@ -1778,28 +1766,28 @@ export async function registerRoutes(
 
       switch (dateRange) {
         case "today":
-          startDate = brtStartOfDay(now);
-          endDate = brtEndOfDay(now);
+          startDate = startOfLocalDay(now);
+          endDate = endOfLocalDay(now);
           useHourly = true;
           break;
         case "yesterday": {
           const yest = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-          startDate = brtStartOfDay(yest);
-          endDate = brtEndOfDay(yest);
+          startDate = startOfLocalDay(yest);
+          endDate = endOfLocalDay(yest);
           useHourly = true;
           break;
         }
         case "week":
-          startDate = brtStartOfDay(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
-          endDate = brtEndOfDay(now);
+          startDate = startOfLocalDay(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+          endDate = endOfLocalDay(now);
           break;
         case "month":
-          startDate = brtStartOfDay(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
-          endDate = brtEndOfDay(now);
+          startDate = startOfLocalDay(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+          endDate = endOfLocalDay(now);
           break;
         case "custom":
-          if (customStart) { startDate = brtStartOfDay(new Date(customStart)); }
-          if (customEnd) { endDate = brtEndOfDay(new Date(customEnd)); }
+          if (customStart) { startDate = startOfLocalDay(new Date(customStart)); }
+          if (customEnd) { endDate = endOfLocalDay(new Date(customEnd)); }
           break;
         default:
           break;

@@ -51,6 +51,7 @@ import {
   type EmailLog,
   type EmailTemplate,
 } from "@shared/schema";
+import { localTodayStart, localTodayEnd, APP_TZ_NAME } from "./timezone";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -1016,13 +1017,9 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(offers, eq(clickLogs.offerId, offers.id))
       .where(buildWhere());
 
-    // Today aggregate — BRT (UTC-3) boundaries
-    const BRT_MS = 3 * 60 * 60 * 1000;
-    const _nowUtc = new Date();
-    const _brtS = new Date(_nowUtc.getTime() - BRT_MS); _brtS.setUTCHours(0, 0, 0, 0);
-    const _brtE = new Date(_nowUtc.getTime() - BRT_MS); _brtE.setUTCHours(23, 59, 59, 999);
-    const todayStart = new Date(_brtS.getTime() + BRT_MS);
-    const todayEnd = new Date(_brtE.getTime() + BRT_MS);
+    // Today aggregate — boundaries in local timezone (see server/timezone.ts)
+    const todayStart = localTodayStart();
+    const todayEnd = localTodayEnd();
     const [todayAgg] = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(clickLogs)
@@ -1041,7 +1038,7 @@ export class DatabaseStorage implements IStorage {
     if (useHourly) {
       const hourlyResult = await db
         .select({
-          hour: sql<number>`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'America/Sao_Paulo'))::int`,
+          hour: sql<number>`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${APP_TZ_NAME}))::int`,
           clicks: sql<number>`COUNT(*)`,
           blackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
           whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
@@ -1049,8 +1046,8 @@ export class DatabaseStorage implements IStorage {
         .from(clickLogs)
         .leftJoin(offers, eq(clickLogs.offerId, offers.id))
         .where(buildWhere())
-        .groupBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'America/Sao_Paulo'))`)
-        .orderBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'America/Sao_Paulo'))`);
+        .groupBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${APP_TZ_NAME}))`)
+        .orderBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${APP_TZ_NAME}))`);
 
       const hourMap = new Map(hourlyResult.map((r) => [Number(r.hour), r]));
       for (let h = 0; h < 24; h++) {
