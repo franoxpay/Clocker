@@ -6,41 +6,87 @@ const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 const EXPECTED_CNAME_TARGET = (process.env.CNAME_TARGET || "clerion.app").trim();
 
+// Retry configuration
+const DNS_MAX_RETRIES = 3;
+const DNS_RETRY_DELAY_MS = 2000; // 2 seconds between retries
+
+// Transient DNS errors that should be retried (not permanent failures)
+const TRANSIENT_DNS_ERRORS = new Set(["SERVFAIL", "ETIMEOUT", "ECONNREFUSED", "EAI_AGAIN", "ESERVFAIL"]);
+
 let isRunning = false;
 
-async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
-  console.log(`[DOMAIN MONITOR] Checking DNS for: ${subdomain}`);
-  
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function verifyDomainDNSOnce(subdomain: string): Promise<{ verified: boolean; error?: string; transient?: boolean }> {
   try {
     const cnameRecords = await dns.resolveCname(subdomain);
     if (cnameRecords && cnameRecords.length > 0) {
-      const pointsToUs = cnameRecords.some(record => 
-        record.toLowerCase() === EXPECTED_CNAME_TARGET || 
+      const pointsToUs = cnameRecords.some(record =>
+        record.toLowerCase() === EXPECTED_CNAME_TARGET ||
         record.toLowerCase().endsWith(`.${EXPECTED_CNAME_TARGET}`)
       );
-      
+
       if (pointsToUs) {
         return { verified: true };
       } else {
-        return { 
-          verified: false, 
-          error: `CNAME points to '${cnameRecords[0]}' instead of '${EXPECTED_CNAME_TARGET}'` 
+        return {
+          verified: false,
+          error: `CNAME points to '${cnameRecords[0]}' instead of '${EXPECTED_CNAME_TARGET}'`,
+          transient: false,
         };
       }
     }
+    return { verified: false, error: "No CNAME record configured", transient: false };
   } catch (error: any) {
-    if (error.code === "ENODATA") {
-      return { verified: false, error: `No CNAME record found` };
+    const code: string = error.code || "";
+    const isTransient = TRANSIENT_DNS_ERRORS.has(code);
+
+    if (code === "ENODATA") {
+      return { verified: false, error: "No CNAME record found", transient: false };
     }
-    if (error.code === "ENOTFOUND") {
-      return { verified: false, error: "Domain not found" };
+    if (code === "ENOTFOUND") {
+      return { verified: false, error: "Domain not found", transient: false };
     }
-    if (error.code === "SERVFAIL") {
-      return { verified: false, error: "DNS server error" };
+    if (code === "SERVFAIL") {
+      return { verified: false, error: "DNS server error (SERVFAIL)", transient: true };
+    }
+    return { verified: false, error: `DNS error: ${code || error.message}`, transient: isTransient };
+  }
+}
+
+async function verifyDomainDNS(subdomain: string): Promise<{ verified: boolean; error?: string }> {
+  console.log(`[DOMAIN MONITOR] Checking DNS for: ${subdomain}`);
+
+  let lastError = "DNS check failed";
+
+  for (let attempt = 1; attempt <= DNS_MAX_RETRIES; attempt++) {
+    const result = await verifyDomainDNSOnce(subdomain);
+
+    if (result.verified) {
+      if (attempt > 1) {
+        console.log(`[DOMAIN MONITOR] DNS OK for ${subdomain} on attempt ${attempt}/${DNS_MAX_RETRIES}`);
+      }
+      return { verified: true };
+    }
+
+    lastError = result.error || lastError;
+
+    // For permanent failures (wrong CNAME, no record), only retry once more then stop
+    if (!result.transient && attempt >= 2) {
+      console.log(`[DOMAIN MONITOR] Permanent DNS failure for ${subdomain}: ${lastError}`);
+      return { verified: false, error: lastError };
+    }
+
+    if (attempt < DNS_MAX_RETRIES) {
+      console.log(`[DOMAIN MONITOR] DNS attempt ${attempt}/${DNS_MAX_RETRIES} failed for ${subdomain} (${lastError}), retrying in ${DNS_RETRY_DELAY_MS}ms...`);
+      await sleep(DNS_RETRY_DELAY_MS);
     }
   }
-  
-  return { verified: false, error: `No CNAME record configured` };
+
+  console.log(`[DOMAIN MONITOR] All ${DNS_MAX_RETRIES} DNS attempts failed for ${subdomain}: ${lastError}`);
+  return { verified: false, error: lastError };
 }
 
 async function checkAllDomains() {
