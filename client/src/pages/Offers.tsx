@@ -816,12 +816,7 @@ export default function Offers() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                {language === "pt-BR" ? "Filtros de Tráfego" : "Traffic Filters"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-3">
+            <CardContent className="space-y-3 pt-4">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">
                   {language === "pt-BR" ? "Dispositivos" : "Devices"}
