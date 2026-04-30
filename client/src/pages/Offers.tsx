@@ -48,6 +48,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -69,13 +75,9 @@ import {
   Eye,
   AlertTriangle,
   Globe,
+  HelpCircle,
+  ExternalLink,
 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 interface OfferWithDomain extends Offer {
   domain?: Domain;
   sharedDomain?: SharedDomain;
@@ -83,8 +85,8 @@ interface OfferWithDomain extends Offer {
 
 const devices = [
   { id: "smartphone", labelKey: "device.smartphone" },
-  { id: "desktop", labelKey: "device.desktop" },
   { id: "tablet", labelKey: "device.tablet" },
+  { id: "desktop", labelKey: "device.desktop" },
 ];
 
 type ViewMode = "list" | "create" | "edit";
@@ -551,7 +553,7 @@ export default function Offers() {
 
                 <div className="space-y-2">
                   <Label>{t("offers.platform")}</Label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="flex gap-2">
                     {[
                       { value: "facebook", label: "Facebook" },
                       { value: "tiktok", label: "TikTok" },
@@ -561,10 +563,10 @@ export default function Offers() {
                         type="button"
                         onClick={() => setFormData(prev => ({ ...prev, platform: value }))}
                         data-testid={`button-platform-${value}`}
-                        className={`flex items-center justify-center px-4 py-2.5 rounded-md border text-sm font-medium transition-colors ${
+                        className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
                           formData.platform === value
                             ? "bg-primary text-primary-foreground border-primary"
-                            : "border-input bg-background hover:bg-accent text-foreground"
+                            : "border-input bg-background hover:bg-accent text-muted-foreground"
                         }`}
                       >
                         {label}
@@ -618,17 +620,6 @@ export default function Offers() {
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <Label htmlFor="isActive" className="cursor-pointer">
-                    {t("offers.active")}
-                  </Label>
-                  <Switch
-                    id="isActive"
-                    checked={formData.isActive}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
-                    data-testid="checkbox-is-active"
-                  />
-                </div>
               </CardContent>
             </Card>
 
@@ -640,23 +631,65 @@ export default function Offers() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label>{t("offers.blackPage")}</Label>
-                  <Input
-                    type="url"
-                    value={formData.blackPages[0]?.url || ""}
-                    onChange={(e) => {
-                      const updated = [...formData.blackPages];
-                      updated[0] = { ...updated[0], url: e.target.value };
-                      setFormData(prev => ({ ...prev, blackPages: updated }));
-                    }}
-                    placeholder="https://exemplo.com/pagina-vendas"
-                    required
-                    data-testid="input-black-page-0"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <Label>{t("offers.blackPage")}</Label>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger type="button" className="text-muted-foreground hover:text-foreground">
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[220px] text-xs">
+                          {language === "pt-BR"
+                            ? "Sua página de oferta real. Visitantes válidos (humanos reais) vão ver esta página."
+                            : "Your real offer page. Valid visitors (real humans) will see this page."}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="url"
+                      value={formData.blackPages[0]?.url || ""}
+                      onChange={(e) => {
+                        const updated = [...formData.blackPages];
+                        updated[0] = { ...updated[0], url: e.target.value };
+                        setFormData(prev => ({ ...prev, blackPages: updated }));
+                      }}
+                      placeholder="https://exemplo.com/pagina-vendas"
+                      required
+                      data-testid="input-black-page-0"
+                    />
+                    {formData.blackPages[0]?.url && (
+                      <a
+                        href={formData.blackPages[0].url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center w-9 h-9 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid="button-open-black-page"
+                        title={language === "pt-BR" ? "Abrir em nova aba" : "Open in new tab"}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="whitePage">{t("offers.whitePage")}</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="whitePage">{t("offers.whitePage")}</Label>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger type="button" className="text-muted-foreground hover:text-foreground">
+                          <HelpCircle className="w-3.5 h-3.5" />
+                        </TooltipTrigger>
+                        <TooltipContent side="right" className="max-w-[220px] text-xs">
+                          {language === "pt-BR"
+                            ? "Página segura exibida para bots, fiscais e tráfego suspeito. Geralmente uma notícia ou blog."
+                            : "Safe page shown to bots, reviewers and suspicious traffic. Usually a news article or blog."}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Input
                     id="whitePage"
                     type="url"
@@ -788,10 +821,12 @@ export default function Offers() {
                 {language === "pt-BR" ? "Filtros de Tráfego" : "Traffic Filters"}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
-              <div className="space-y-2">
-                <Label>{language === "pt-BR" ? "Dispositivos" : "Devices"}</Label>
-                <div className="flex flex-wrap gap-2">
+            <CardContent className="space-y-3 pt-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  {language === "pt-BR" ? "Dispositivos" : "Devices"}
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
                   {devices.map((device) => {
                     const selected = formData.allowedDevices.includes(device.id);
                     return (
@@ -800,10 +835,10 @@ export default function Offers() {
                         type="button"
                         onClick={() => toggleDevice(device.id)}
                         data-testid={`chip-device-${device.id}`}
-                        className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+                        className={`px-2.5 py-0.5 rounded text-xs font-medium border transition-colors ${
                           selected
                             ? "bg-primary text-primary-foreground border-primary"
-                            : "border-input bg-background hover:bg-accent text-foreground"
+                            : "border-border bg-background hover:bg-accent text-muted-foreground"
                         }`}
                       >
                         {t(device.labelKey)}
@@ -815,10 +850,12 @@ export default function Offers() {
 
               <Separator />
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label>{language === "pt-BR" ? "Países" : "Countries"}</Label>
-                  <div className="flex items-center gap-2">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {language === "pt-BR" ? "Países" : "Countries"}
+                  </Label>
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xs text-muted-foreground">
                       {language === "pt-BR" ? "Todos" : "All"}
                     </span>
@@ -836,34 +873,32 @@ export default function Offers() {
                 </div>
 
                 {formData.allowedCountries.includes("ALL") ? (
-                  <div className="flex items-center gap-2 p-3 rounded-lg border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
-                    <Globe className="w-4 h-4 shrink-0" />
-                    <span className="text-sm font-medium">
-                      {language === "pt-BR"
-                        ? "Todos os países permitidos"
-                        : "All countries allowed"}
+                  <div className="flex items-center gap-2 px-3 py-2 rounded border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400">
+                    <Globe className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-xs font-medium">
+                      {language === "pt-BR" ? "Todos os países permitidos" : "All countries allowed"}
                     </span>
                   </div>
                 ) : (
                   <>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input
                         placeholder={language === "pt-BR" ? "Buscar país..." : "Search country..."}
                         value={countrySearch}
                         onChange={(e) => setCountrySearch(e.target.value)}
-                        className="pl-10"
+                        className="pl-8 h-8 text-sm"
                         data-testid="input-country-search"
                       />
                     </div>
 
                     {formData.allowedCountries.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pb-2 border-b">
+                      <div className="flex flex-wrap gap-1 pb-1.5 border-b">
                         {formData.allowedCountries.map(code => (
                           <Badge
                             key={code}
                             variant="secondary"
-                            className="cursor-pointer"
+                            className="cursor-pointer text-xs py-0 h-5"
                             onClick={() => toggleCountry(code)}
                           >
                             {code}
@@ -872,16 +907,17 @@ export default function Offers() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-1 max-h-36 overflow-y-auto">
                       {displayedCountries.map((country) => (
-                        <div key={country.code} className="flex items-center space-x-2">
+                        <div key={country.code} className="flex items-center space-x-1.5">
                           <Checkbox
                             id={country.code}
                             checked={formData.allowedCountries.includes(country.code)}
                             onCheckedChange={() => toggleCountry(country.code)}
+                            className="h-3.5 w-3.5"
                             data-testid={`checkbox-country-${country.code}`}
                           />
-                          <Label htmlFor={country.code} className="cursor-pointer text-sm truncate">
+                          <Label htmlFor={country.code} className="cursor-pointer text-xs truncate font-normal">
                             {language === "pt-BR" ? country.namePt : country.name}
                           </Label>
                         </div>
@@ -890,8 +926,8 @@ export default function Offers() {
                     {hasMoreCountries && (
                       <p className="text-xs text-muted-foreground text-center">
                         {language === "pt-BR"
-                          ? `+ ${countries.length - displayedCountries.length} países — use a busca para mais`
-                          : `+ ${countries.length - displayedCountries.length} countries — use search for more`}
+                          ? `+ ${countries.length - displayedCountries.length} países — busque para ver mais`
+                          : `+ ${countries.length - displayedCountries.length} countries — search for more`}
                       </p>
                     )}
                   </>
