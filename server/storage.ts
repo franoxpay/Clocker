@@ -1038,7 +1038,7 @@ export class DatabaseStorage implements IStorage {
     if (useHourly) {
       const hourlyResult = await db
         .select({
-          hour: sql<number>`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))::int`,
+          hour: sql<number>`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))::int`,
           clicks: sql<number>`COUNT(*)`,
           blackClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
           whiteClicks: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
@@ -1046,8 +1046,8 @@ export class DatabaseStorage implements IStorage {
         .from(clickLogs)
         .leftJoin(offers, eq(clickLogs.offerId, offers.id))
         .where(buildWhere())
-        .groupBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))`)
-        .orderBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))`);
+        .groupBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))`)
+        .orderBy(sql`EXTRACT(HOUR FROM (${clickLogs.createdAt} AT TIME ZONE 'UTC' AT TIME ZONE ${sql.raw(`'${APP_TZ_NAME}'`)}))`);
 
       const hourMap = new Map(hourlyResult.map((r) => [Number(r.hour), r]));
       for (let h = 0; h < 24; h++) {

@@ -3,6 +3,15 @@
  *
  * Para alterar o fuso padrão da plataforma, basta mudar:
  *   APP_TZ_OFFSET_HOURS e APP_TZ_NAME
+ *
+ * ATENÇÃO — padrão SQL para colunas `timestamp without time zone`:
+ *   O PostgreSQL tem dois comportamentos opostos para AT TIME ZONE:
+ *   - timestamp (sem tz) AT TIME ZONE 'X' → trata o valor como se fosse X, converte PARA UTC  ← ERRADO para nosso caso
+ *   - timestamptz AT TIME ZONE 'X'        → converte DE UTC PARA X                           ← correto
+ *
+ *   Como createdAt é `timestamp without time zone` armazenando UTC, a forma correta é:
+ *   col AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'
+ *   (primeiro declara que é UTC, depois converte para BRT)
  */
 export const APP_TZ_OFFSET_HOURS = -3; // BRT (Brasília)
 export const APP_TZ_NAME = "America/Sao_Paulo";
