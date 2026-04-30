@@ -42,6 +42,12 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -95,6 +101,7 @@ export default function Offers() {
   const [mergeParamsOffer, setMergeParamsOffer] = useState<OfferWithDomain | null>(null);
   const [additionalParams, setAdditionalParams] = useState("");
   const [previewOffer, setPreviewOffer] = useState<OfferWithDomain | null>(null);
+  const [showAdvancedBlackPages, setShowAdvancedBlackPages] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -262,6 +269,7 @@ export default function Offers() {
     });
     setEditingOffer(null);
     setCountrySearch("");
+    setShowAdvancedBlackPages(false);
   };
 
   const handleBack = () => {
@@ -299,6 +307,8 @@ export default function Offers() {
       isActive: offer.isActive,
     });
     setViewMode("edit");
+    const hasMultipleBlackPages = existingBlackPages.length > 1;
+    setShowAdvancedBlackPages(hasMultipleBlackPages);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -471,20 +481,35 @@ export default function Offers() {
   const hasMoreCountries = countries.length > displayedCountries.length && !countrySearch.trim();
 
   if (viewMode === "create" || viewMode === "edit") {
+    const isPending = createMutation.isPending || updateMutation.isPending;
     return (
       <div className="p-6 space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={handleBack} data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <h1 className="text-3xl font-semibold">
-            {viewMode === "create" 
-              ? (language === "pt-BR" ? "Nova Oferta" : "New Offer")
-              : (language === "pt-BR" ? "Editar Oferta" : "Edit Offer")}
-          </h1>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={handleBack} data-testid="button-back">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <span className="text-sm font-medium text-muted-foreground">
+              {viewMode === "create"
+                ? (language === "pt-BR" ? "Nova Oferta" : "New Offer")
+                : (language === "pt-BR" ? "Editar Oferta" : "Edit Offer")}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={handleBack} data-testid="button-cancel">
+              {t("common.cancel")}
+            </Button>
+            <Button form="offer-form" type="submit" disabled={isPending} data-testid="button-save-offer">
+              {isPending
+                ? t("common.loading")
+                : (viewMode === "create"
+                    ? (language === "pt-BR" ? "Criar Oferta" : "Create Offer")
+                    : t("common.save"))}
+            </Button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form id="offer-form" onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -525,19 +550,27 @@ export default function Offers() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="platform">{t("offers.platform")}</Label>
-                  <Select
-                    value={formData.platform}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, platform: value }))}
-                  >
-                    <SelectTrigger id="platform" data-testid="select-platform">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tiktok">TikTok</SelectItem>
-                      <SelectItem value="facebook">Facebook</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>{t("offers.platform")}</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { value: "facebook", label: "Facebook" },
+                      { value: "tiktok", label: "TikTok" },
+                    ].map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, platform: value }))}
+                        data-testid={`button-platform-${value}`}
+                        className={`flex items-center justify-center px-4 py-2.5 rounded-md border text-sm font-medium transition-colors ${
+                          formData.platform === value
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-input bg-background hover:bg-accent text-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="space-y-2">
@@ -585,122 +618,41 @@ export default function Offers() {
                   </Select>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <Checkbox
+                <div className="flex items-center justify-between rounded-lg border p-3">
+                  <Label htmlFor="isActive" className="cursor-pointer">
+                    {t("offers.active")}
+                  </Label>
+                  <Switch
                     id="isActive"
                     checked={formData.isActive}
-                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: !!checked }))}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isActive: checked }))}
                     data-testid="checkbox-is-active"
                   />
-                  <Label htmlFor="isActive">{t("offers.active")}</Label>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">
+                <CardTitle className="text-base">
                   {language === "pt-BR" ? "Páginas de Destino" : "Landing Pages"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>{t("offers.blackPage")}</Label>
-                    {formData.blackPages.length < 5 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setFormData(prev => ({ ...prev, blackPages: [...prev.blackPages, { url: "", percentage: 0 }] }));
-                        }}
-                        data-testid="button-add-black-page"
-                      >
-                        <Plus className="h-4 w-4 mr-1" />
-                        {language === "pt-BR" ? "Adicionar Outro Link" : "Add Another Link"}
-                      </Button>
-                    )}
-                  </div>
-
-                  {formData.blackPages.map((bp, index) => (
-                    <div key={index} className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <div className={formData.blackPages.length > 1 ? "flex-1" : "w-full"}>
-                          <Input
-                            type="url"
-                            value={bp.url}
-                            onChange={(e) => {
-                              const updated = [...formData.blackPages];
-                              updated[index] = { ...updated[index], url: e.target.value };
-                              setFormData(prev => ({ ...prev, blackPages: updated }));
-                            }}
-                            placeholder={`https://exemplo.com/pagina-vendas${formData.blackPages.length > 1 ? `-${index + 1}` : ""}`}
-                            required
-                            data-testid={`input-black-page-${index}`}
-                          />
-                        </div>
-                        {formData.blackPages.length > 1 && (
-                          <>
-                            <div className="w-20">
-                              <Input
-                                type="number"
-                                min={10}
-                                max={100}
-                                value={bp.percentage}
-                                onChange={(e) => {
-                                  const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
-                                  const updated = [...formData.blackPages];
-                                  updated[index] = { ...updated[index], percentage: val };
-                                  setFormData(prev => ({ ...prev, blackPages: updated }));
-                                }}
-                                data-testid={`input-black-page-percentage-${index}`}
-                              />
-                            </div>
-                            <span className="text-sm text-muted-foreground w-4">%</span>
-                            {formData.blackPages.length > 1 && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-9 w-9 text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  const updated = formData.blackPages.filter((_, i) => i !== index);
-                                  if (updated.length === 1) {
-                                    updated[0].percentage = 100;
-                                  }
-                                  setFormData(prev => ({ ...prev, blackPages: updated }));
-                                }}
-                                data-testid={`button-remove-black-page-${index}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {formData.blackPages.length > 1 && (() => {
-                    const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
-                    const isValid = total === 100;
-                    return (
-                      <div className={`text-sm font-medium ${isValid ? "text-green-600 dark:text-green-400" : "text-destructive"}`} data-testid="text-percentage-total">
-                        {language === "pt-BR" ? "Total" : "Total"}: {total}% {isValid ? "✓" : (language === "pt-BR" ? "(deve ser 100%)" : "(must be 100%)")}
-                      </div>
-                    );
-                  })()}
-
-                  <p className="text-xs text-muted-foreground">
-                    {formData.blackPages.length > 1
-                      ? (language === "pt-BR"
-                        ? "O tráfego será dividido entre os links conforme as porcentagens definidas. A soma deve ser 100%."
-                        : "Traffic will be split between links according to the defined percentages. Total must be 100%.")
-                      : (language === "pt-BR" 
-                        ? "Página real que será exibida para tráfego válido" 
-                        : "Real page shown to valid traffic")}
-                  </p>
+                <div className="space-y-2">
+                  <Label>{t("offers.blackPage")}</Label>
+                  <Input
+                    type="url"
+                    value={formData.blackPages[0]?.url || ""}
+                    onChange={(e) => {
+                      const updated = [...formData.blackPages];
+                      updated[0] = { ...updated[0], url: e.target.value };
+                      setFormData(prev => ({ ...prev, blackPages: updated }));
+                    }}
+                    placeholder="https://exemplo.com/pagina-vendas"
+                    required
+                    data-testid="input-black-page-0"
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -714,68 +666,173 @@ export default function Offers() {
                     required
                     data-testid="input-white-page"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    {language === "pt-BR" 
-                      ? "Página segura para bots e tráfego inválido" 
-                      : "Safe page for bots and invalid traffic"}
-                  </p>
                 </div>
+
+                <Collapsible open={showAdvancedBlackPages} onOpenChange={setShowAdvancedBlackPages}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="button-toggle-advanced"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      {language === "pt-BR" ? "A/B de links (avançado)" : "A/B links (advanced)"}
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvancedBlackPages ? "rotate-180" : ""}`} />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pt-3">
+                    {formData.blackPages.length > 1 && (
+                      <div className="flex items-center gap-2 text-sm p-2 rounded bg-muted/40">
+                        <span className="flex-1 text-muted-foreground">
+                          {language === "pt-BR" ? "Link principal (acima):" : "Main link (above):"}
+                        </span>
+                        <Input
+                          type="number"
+                          min={10}
+                          max={100}
+                          value={formData.blackPages[0]?.percentage || 100}
+                          onChange={(e) => {
+                            const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                            const updated = [...formData.blackPages];
+                            updated[0] = { ...updated[0], percentage: val };
+                            setFormData(prev => ({ ...prev, blackPages: updated }));
+                          }}
+                          className="w-20"
+                          data-testid="input-black-page-percentage-0"
+                        />
+                        <span className="text-muted-foreground">%</span>
+                      </div>
+                    )}
+
+                    {formData.blackPages.slice(1).map((bp, idx) => {
+                      const index = idx + 1;
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <Input
+                            type="url"
+                            value={bp.url}
+                            onChange={(e) => {
+                              const updated = [...formData.blackPages];
+                              updated[index] = { ...updated[index], url: e.target.value };
+                              setFormData(prev => ({ ...prev, blackPages: updated }));
+                            }}
+                            placeholder={`https://exemplo.com/pagina-${index + 1}`}
+                            className="flex-1"
+                            data-testid={`input-black-page-${index}`}
+                          />
+                          <Input
+                            type="number"
+                            min={10}
+                            max={100}
+                            value={bp.percentage}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                              const updated = [...formData.blackPages];
+                              updated[index] = { ...updated[index], percentage: val };
+                              setFormData(prev => ({ ...prev, blackPages: updated }));
+                            }}
+                            className="w-20"
+                            data-testid={`input-black-page-percentage-${index}`}
+                          />
+                          <span className="text-sm text-muted-foreground">%</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-9 w-9 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              const updated = formData.blackPages.filter((_, i) => i !== index);
+                              if (updated.length === 1) updated[0].percentage = 100;
+                              setFormData(prev => ({ ...prev, blackPages: updated }));
+                            }}
+                            data-testid={`button-remove-black-page-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+
+                    {formData.blackPages.length > 1 && (() => {
+                      const total = formData.blackPages.reduce((sum, bp) => sum + bp.percentage, 0);
+                      const isValid = total === 100;
+                      return (
+                        <div className={`text-sm font-medium ${isValid ? "text-green-600 dark:text-green-400" : "text-destructive"}`} data-testid="text-percentage-total">
+                          Total: {total}% {isValid ? "✓" : (language === "pt-BR" ? "(deve ser 100%)" : "(must be 100%)")}
+                        </div>
+                      );
+                    })()}
+
+                    {formData.blackPages.length < 5 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFormData(prev => ({ ...prev, blackPages: [...prev.blackPages, { url: "", percentage: 0 }] }))}
+                        data-testid="button-add-black-page"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        {language === "pt-BR" ? "Adicionar Link" : "Add Link"}
+                      </Button>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {language === "pt-BR" ? "Dispositivos Permitidos" : "Allowed Devices"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-3">
-                  {devices.map((device) => (
-                    <div key={device.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={device.id}
-                        checked={formData.allowedDevices.includes(device.id)}
-                        onCheckedChange={() => toggleDevice(device.id)}
-                        data-testid={`checkbox-device-${device.id}`}
-                      />
-                      <Label htmlFor={device.id} className="cursor-pointer">
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {language === "pt-BR" ? "Filtros de Tráfego" : "Traffic Filters"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label>{language === "pt-BR" ? "Dispositivos" : "Devices"}</Label>
+                <div className="flex flex-wrap gap-2">
+                  {devices.map((device) => {
+                    const selected = formData.allowedDevices.includes(device.id);
+                    return (
+                      <button
+                        key={device.id}
+                        type="button"
+                        onClick={() => toggleDevice(device.id)}
+                        data-testid={`chip-device-${device.id}`}
+                        className={`px-3 py-1.5 rounded-full border text-sm font-medium transition-colors ${
+                          selected
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "border-input bg-background hover:bg-accent text-foreground"
+                        }`}
+                      >
                         {t(device.labelKey)}
-                      </Label>
-                    </div>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {language === "pt-BR" ? "Países Permitidos" : "Allowed Countries"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">
-                      {language === "pt-BR" ? "Todos os países" : "All countries"}
-                    </span>
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>{language === "pt-BR" ? "Países" : "Countries"}</Label>
+                  <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">
-                      {language === "pt-BR"
-                        ? "Desativa o filtro — qualquer visitante passa"
-                        : "Disables the filter — any visitor gets through"}
+                      {language === "pt-BR" ? "Todos" : "All"}
                     </span>
+                    <Switch
+                      checked={formData.allowedCountries.includes("ALL")}
+                      onCheckedChange={(checked) => {
+                        setFormData(prev => ({
+                          ...prev,
+                          allowedCountries: checked ? ["ALL"] : ["BR"],
+                        }));
+                      }}
+                      data-testid="switch-all-countries"
+                    />
                   </div>
-                  <Switch
-                    checked={formData.allowedCountries.includes("ALL")}
-                    onCheckedChange={(checked) => {
-                      setFormData(prev => ({
-                        ...prev,
-                        allowedCountries: checked ? ["ALL"] : ["BR"],
-                      }));
-                    }}
-                    data-testid="switch-all-countries"
-                  />
                 </div>
 
                 {formData.allowedCountries.includes("ALL") ? (
@@ -783,14 +840,14 @@ export default function Offers() {
                     <Globe className="w-4 h-4 shrink-0" />
                     <span className="text-sm font-medium">
                       {language === "pt-BR"
-                        ? "Filtro de país desativado — todos os países permitidos"
-                        : "Country filter disabled — all countries allowed"}
+                        ? "Todos os países permitidos"
+                        : "All countries allowed"}
                     </span>
                   </div>
                 ) : (
                   <>
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                       <Input
                         placeholder={language === "pt-BR" ? "Buscar país..." : "Search country..."}
                         value={countrySearch}
@@ -815,7 +872,7 @@ export default function Offers() {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                       {displayedCountries.map((country) => (
                         <div key={country.code} className="flex items-center space-x-2">
                           <Checkbox
@@ -833,37 +890,15 @@ export default function Offers() {
                     {hasMoreCountries && (
                       <p className="text-xs text-muted-foreground text-center">
                         {language === "pt-BR"
-                          ? `+ ${countries.length - displayedCountries.length} países. Use a busca para encontrar mais.`
-                          : `+ ${countries.length - displayedCountries.length} countries. Use search to find more.`}
+                          ? `+ ${countries.length - displayedCountries.length} países — use a busca para mais`
+                          : `+ ${countries.length - displayedCountries.length} countries — use search for more`}
                       </p>
                     )}
                   </>
                 )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleBack}
-              data-testid="button-cancel"
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="submit"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              data-testid="button-save-offer"
-            >
-              {(createMutation.isPending || updateMutation.isPending) 
-                ? t("common.loading") 
-                : (viewMode === "create" 
-                    ? (language === "pt-BR" ? "Criar Oferta" : "Create Offer")
-                    : t("common.save"))}
-            </Button>
-          </div>
+              </div>
+            </CardContent>
+          </Card>
         </form>
       </div>
     );
