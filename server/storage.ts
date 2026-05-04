@@ -139,6 +139,17 @@ export interface IStorage {
     clicksByPeriod: Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>;
     useHourly: boolean;
   }>;
+  getDashboardBreakdown(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{
+    byDevice: Array<{ name: string; black: number; white: number; total: number }>;
+    byOS: Array<{ name: string; black: number; white: number; total: number }>;
+    byBrowser: Array<{ name: string; black: number; white: number; total: number }>;
+    byOffer: Array<{ offerId: number; offerName: string; total: number; black: number; white: number; blackRate: number }>;
+  }>;
   cleanupOldClickLogs(): Promise<void>;
 
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
@@ -1106,6 +1117,158 @@ export class DatabaseStorage implements IStorage {
       clicksByPeriod,
       useHourly,
     };
+  }
+
+  async getDashboardBreakdown(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{
+    byDevice: Array<{ name: string; black: number; white: number; total: number }>;
+    byOS: Array<{ name: string; black: number; white: number; total: number }>;
+    byBrowser: Array<{ name: string; black: number; white: number; total: number }>;
+    byOffer: Array<{ offerId: number; offerName: string; total: number; black: number; white: number; blackRate: number }>;
+  }> {
+    const { offerId, platform, startDate, endDate } = filters;
+
+    const buildWhere = () => {
+      const conds: any[] = [eq(clickLogs.userId, userId)];
+      if (startDate) conds.push(gte(clickLogs.createdAt, startDate));
+      if (endDate) conds.push(lte(clickLogs.createdAt, endDate));
+      if (offerId) conds.push(eq(clickLogs.offerId, offerId));
+      if (platform) conds.push(eq(offers.platform, platform));
+      return conds.length === 1 ? conds[0] : and(...conds);
+    };
+
+    // Helper to detect OS from user agent string
+    const detectOSExpr = sql<string>`
+      CASE
+        WHEN ${clickLogs.userAgent} ILIKE '%android%' THEN 'Android'
+        WHEN ${clickLogs.userAgent} ILIKE '%iphone%' OR ${clickLogs.userAgent} ILIKE '%ipad%' OR ${clickLogs.userAgent} ILIKE '%ipod%' THEN 'iOS'
+        WHEN ${clickLogs.userAgent} ILIKE '%windows%' THEN 'Windows'
+        WHEN ${clickLogs.userAgent} ILIKE '%macintosh%' OR ${clickLogs.userAgent} ILIKE '%mac os%' THEN 'macOS'
+        WHEN ${clickLogs.userAgent} ILIKE '%linux%' THEN 'Linux'
+        ELSE 'Outro'
+      END
+    `;
+
+    // Helper to detect browser from user agent string
+    const detectBrowserExpr = sql<string>`
+      CASE
+        WHEN ${clickLogs.userAgent} ILIKE '%instagram%' THEN 'Instagram'
+        WHEN ${clickLogs.userAgent} ILIKE '%fban%' OR ${clickLogs.userAgent} ILIKE '%fbav%' OR ${clickLogs.userAgent} ILIKE '%facebook%' THEN 'Facebook'
+        WHEN ${clickLogs.userAgent} ILIKE '%tiktok%' OR ${clickLogs.userAgent} ILIKE '%bytedance%' THEN 'TikTok'
+        WHEN ${clickLogs.userAgent} ILIKE '%edg/%' OR ${clickLogs.userAgent} ILIKE '%edge/%' THEN 'Edge'
+        WHEN ${clickLogs.userAgent} ILIKE '%opr/%' OR ${clickLogs.userAgent} ILIKE '%opera%' THEN 'Opera'
+        WHEN ${clickLogs.userAgent} ILIKE '%samsung%' THEN 'Samsung Browser'
+        WHEN ${clickLogs.userAgent} ILIKE '%ucbrowser%' THEN 'UC Browser'
+        WHEN ${clickLogs.userAgent} ILIKE '%firefox%' THEN 'Firefox'
+        WHEN ${clickLogs.userAgent} ILIKE '%chrome%' AND ${clickLogs.userAgent} NOT ILIKE '%chromium%' THEN 'Chrome'
+        WHEN ${clickLogs.userAgent} ILIKE '%safari%' AND ${clickLogs.userAgent} NOT ILIKE '%chrome%' THEN 'Safari'
+        WHEN ${clickLogs.userAgent} ILIKE '%chromium%' THEN 'Chromium'
+        ELSE 'Outro'
+      END
+    `;
+
+    // Device breakdown
+    const deviceRows = await db
+      .select({
+        name: clickLogs.device,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        total: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere())
+      .groupBy(clickLogs.device)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    const deviceLabels: Record<string, string> = {
+      smartphone: 'Smartphone',
+      tablet: 'Tablet',
+      desktop: 'Desktop',
+    };
+
+    const byDevice = deviceRows.map(r => ({
+      name: deviceLabels[r.name || ''] || r.name || 'Desconhecido',
+      black: Number(r.black),
+      white: Number(r.white),
+      total: Number(r.total),
+    }));
+
+    // OS breakdown
+    const osRows = await db
+      .select({
+        name: detectOSExpr,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        total: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere())
+      .groupBy(sql`1`)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    const byOS = osRows.map(r => ({
+      name: r.name || 'Outro',
+      black: Number(r.black),
+      white: Number(r.white),
+      total: Number(r.total),
+    }));
+
+    // Browser breakdown
+    const browserRows = await db
+      .select({
+        name: detectBrowserExpr,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        total: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere())
+      .groupBy(sql`1`)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    const byBrowser = browserRows.map(r => ({
+      name: r.name || 'Outro',
+      black: Number(r.black),
+      white: Number(r.white),
+      total: Number(r.total),
+    }));
+
+    // Per-offer breakdown
+    const offerRows = await db
+      .select({
+        offerId: clickLogs.offerId,
+        offerName: offers.name,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        total: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(buildWhere())
+      .groupBy(clickLogs.offerId, offers.name)
+      .orderBy(sql`COUNT(*) DESC`);
+
+    const byOffer = offerRows.map(r => {
+      const total = Number(r.total);
+      const black = Number(r.black);
+      return {
+        offerId: r.offerId || 0,
+        offerName: r.offerName || 'Desconhecida',
+        total,
+        black,
+        white: Number(r.white),
+        blackRate: total > 0 ? Math.round((black / total) * 100) : 0,
+      };
+    });
+
+    return { byDevice, byOS, byBrowser, byOffer };
   }
 
   async cleanupOldClickLogs(): Promise<void> {

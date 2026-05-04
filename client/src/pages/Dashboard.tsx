@@ -26,6 +26,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  BarChart,
+  Bar,
+  Cell,
 } from "recharts";
 import {
   Link as LinkIcon,
@@ -34,6 +37,9 @@ import {
   AlertCircle,
   Clock,
   ShieldCheck,
+  Monitor,
+  Smartphone,
+  Globe,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -53,6 +59,29 @@ interface DashboardStats {
   }>;
 }
 
+interface BreakdownItem {
+  name: string;
+  black: number;
+  white: number;
+  total: number;
+}
+
+interface OfferBreakdownItem {
+  offerId: number;
+  offerName: string;
+  total: number;
+  black: number;
+  white: number;
+  blackRate: number;
+}
+
+interface DashboardBreakdown {
+  byDevice: BreakdownItem[];
+  byOS: BreakdownItem[];
+  byBrowser: BreakdownItem[];
+  byOffer: OfferBreakdownItem[];
+}
+
 interface UserUsage {
   offersCount: number;
   offersLimit: number | null;
@@ -65,6 +94,137 @@ interface UserUsage {
   isSuspended: boolean;
   clicksResetDate: string | null;
   subscriptionStatus: string | null;
+}
+
+type BreakdownFilter = "total" | "black" | "white";
+
+function BreakdownPanel({
+  title,
+  icon: Icon,
+  data,
+  isLoading,
+  isPt,
+}: {
+  title: string;
+  icon: React.ElementType;
+  data: BreakdownItem[];
+  isLoading: boolean;
+  isPt: boolean;
+}) {
+  const [filter, setFilter] = useState<BreakdownFilter>("total");
+
+  const getValue = (item: BreakdownItem) => {
+    if (filter === "black") return item.black;
+    if (filter === "white") return item.white;
+    return item.total;
+  };
+
+  const maxVal = Math.max(...data.map(getValue), 1);
+
+  const filterButtons: { key: BreakdownFilter; label: string }[] = [
+    { key: "total", label: isPt ? "Total" : "Total" },
+    { key: "black", label: "Black" },
+    { key: "white", label: "White" },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Icon className="w-4 h-4 text-muted-foreground" />
+            {title}
+          </CardTitle>
+          <div className="flex gap-1">
+            {filterButtons.map((btn) => (
+              <button
+                key={btn.key}
+                onClick={() => setFilter(btn.key)}
+                data-testid={`breakdown-filter-${btn.key}`}
+                className={`px-2 py-0.5 rounded text-xs font-medium transition-colors border ${
+                  filter === btn.key
+                    ? btn.key === "black"
+                      ? "bg-chart-3/20 border-chart-3 text-chart-3"
+                      : btn.key === "white"
+                      ? "bg-chart-4/20 border-chart-4 text-chart-4"
+                      : "bg-primary/20 border-primary text-primary"
+                    : "border-input bg-background text-muted-foreground hover:bg-accent"
+                }`}
+              >
+                {btn.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : data.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">
+            {isPt ? "Sem dados para o período" : "No data for this period"}
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {data.map((item) => {
+              const val = getValue(item);
+              const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+              const blackPct = val > 0 ? Math.round((item.black / (filter === "total" ? item.total : val)) * 100) : 0;
+
+              return (
+                <div key={item.name} className="space-y-1">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-medium truncate max-w-[60%]">{item.name}</span>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      {filter === "total" && (
+                        <span className="text-chart-3 font-medium">{blackPct}% black</span>
+                      )}
+                      <span className="font-semibold text-foreground">{val.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    {filter === "total" ? (
+                      <div className="h-full flex">
+                        <div
+                          className="h-full bg-chart-3 transition-all duration-300"
+                          style={{ width: `${(item.black / maxVal) * 100}%` }}
+                        />
+                        <div
+                          className="h-full bg-chart-4 transition-all duration-300"
+                          style={{ width: `${(item.white / maxVal) * 100}%` }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          filter === "black" ? "bg-chart-3" : "bg-chart-4"
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {filter === "total" && data.length > 0 && (
+              <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-chart-3" /> Black
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-2.5 h-2.5 rounded-sm bg-chart-4" /> White
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function Dashboard() {
@@ -102,6 +262,12 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/stats", filters.offerId, filters.platform, filters.dateRange, filters.startDate, filters.endDate],
     queryFn: () =>
       fetch(`/api/dashboard/stats?${buildQuery()}`, { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const { data: breakdown, isLoading: breakdownLoading } = useQuery<DashboardBreakdown>({
+    queryKey: ["/api/dashboard/breakdown", filters.offerId, filters.platform, filters.dateRange, filters.startDate, filters.endDate],
+    queryFn: () =>
+      fetch(`/api/dashboard/breakdown?${buildQuery()}`, { credentials: "include" }).then((r) => r.json()),
   });
 
   const { data: usage } = useQuery<UserUsage>({
@@ -152,6 +318,9 @@ export default function Dashboard() {
       }
     }
   };
+
+  const totalWhiteClicks = (stats?.totalClicks ?? 0) - (stats?.totalBlackClicks ?? 0);
+  const blackRate = stats?.totalClicks ? Math.round(((stats.totalBlackClicks ?? 0) / stats.totalClicks) * 100) : 0;
 
   const statCards = [
     {
@@ -453,6 +622,118 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Per-offer detailed table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold">
+            {isPt ? "Detalhamento por Oferta" : "Breakdown by Offer"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {breakdownLoading ? (
+            <div className="p-6 space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : !breakdown?.byOffer?.length ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {isPt ? "Sem dados para o período selecionado" : "No data for the selected period"}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">{isPt ? "Oferta" : "Offer"}</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">{isPt ? "Total" : "Total"}</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Black</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">White</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">% Black</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakdown.byOffer.map((row, idx) => (
+                    <tr
+                      key={row.offerId}
+                      className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${idx % 2 === 0 ? "" : "bg-muted/10"}`}
+                      data-testid={`row-offer-${row.offerId}`}
+                    >
+                      <td className="px-4 py-3 font-medium">{row.offerName}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{row.total.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-chart-3">{row.black.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-chart-4">{row.white.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${
+                          row.blackRate >= 50
+                            ? "bg-chart-3/15 text-chart-3"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {row.blackRate}%
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {breakdown.byOffer.length > 1 && (
+                  <tfoot>
+                    <tr className="border-t border-border bg-muted/20">
+                      <td className="px-4 py-3 font-semibold text-muted-foreground">{isPt ? "Total" : "Total"}</td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                        {breakdown.byOffer.reduce((s, r) => s + r.total, 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-chart-3">
+                        {breakdown.byOffer.reduce((s, r) => s + r.black, 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold tabular-nums text-chart-4">
+                        {breakdown.byOffer.reduce((s, r) => s + r.white, 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {(() => {
+                          const tot = breakdown.byOffer.reduce((s, r) => s + r.total, 0);
+                          const blk = breakdown.byOffer.reduce((s, r) => s + r.black, 0);
+                          const rate = tot > 0 ? Math.round((blk / tot) * 100) : 0;
+                          return (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold ${
+                              rate >= 50 ? "bg-chart-3/15 text-chart-3" : "bg-muted text-muted-foreground"
+                            }`}>
+                              {rate}%
+                            </span>
+                          );
+                        })()}
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Breakdown panels: Device, OS, Browser */}
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
+        <BreakdownPanel
+          title={isPt ? "Dispositivos" : "Devices"}
+          icon={Smartphone}
+          data={breakdown?.byDevice ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+        <BreakdownPanel
+          title={isPt ? "Sistema Operacional" : "Operating System"}
+          icon={Monitor}
+          data={breakdown?.byOS ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+        <BreakdownPanel
+          title={isPt ? "Navegadores" : "Browsers"}
+          icon={Globe}
+          data={breakdown?.byBrowser ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+      </div>
     </div>
   );
 }
