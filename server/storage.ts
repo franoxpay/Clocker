@@ -1449,8 +1449,8 @@ export class DatabaseStorage implements IStorage {
       })
       .from(users)
       .where(gte(users.createdAt, startDate))
-      .groupBy(sql`TO_CHAR(users.created_at, ${groupFormat})`)
-      .orderBy(sql`TO_CHAR(users.created_at, ${groupFormat})`);
+      .groupBy(sql`1`)
+      .orderBy(sql`1`);
 
     return result.map(row => ({
       date: row.date,
