@@ -243,8 +243,8 @@ export default function AdminSettings() {
           </CardTitle>
           <CardDescription>
             {isPt
-              ? "Controla se o sistema vai exigir os parâmetros do TikTok (ttclid, utm_medium, utm_content, utm_campaign) para validar o tráfego. Desativar permite que todo tráfego passe direto para a black page, ignorando a validação de parâmetros."
-              : "Controls whether the system requires TikTok parameters (ttclid, utm_medium, utm_content, utm_campaign) to validate traffic. Disabling allows all traffic to pass directly to the black page, bypassing parameter validation."}
+              ? "Controla se a opção TikTok aparece disponível na criação de ofertas. Quando desativado, o botão TikTok fica bloqueado com a mensagem 'suspenso temporariamente para melhorias'."
+              : "Controls whether the TikTok option is available when creating offers. When disabled, the TikTok button is locked with the message 'temporarily suspended for improvements'."}
           </CardDescription>
         </CardHeader>
         <CardContent>

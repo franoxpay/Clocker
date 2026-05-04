@@ -3640,6 +3640,17 @@ export async function registerRoutes(
     }
   });
 
+  // Public platform config — tells frontend which platforms are available
+  app.get("/api/platform-config", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const settings = await storage.getAdminSettings();
+      res.json({ tiktokEnabled: settings?.tiktokFilterEnabled ?? true });
+    } catch (error) {
+      console.error("Error fetching platform config:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // System monitoring metrics - last 72 hours
   app.get("/api/admin/system-metrics", isAdmin, async (req: Request, res: Response) => {
     try {

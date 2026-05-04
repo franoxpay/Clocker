@@ -127,6 +127,11 @@ export default function Offers() {
     queryKey: ["/api/shared-domains"],
   });
 
+  const { data: platformConfig } = useQuery<{ tiktokEnabled: boolean }>({
+    queryKey: ["/api/platform-config"],
+  });
+  const tiktokEnabled = platformConfig?.tiktokEnabled ?? true;
+
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const res = await apiRequest("POST", "/api/offers", data);
@@ -540,24 +545,55 @@ export default function Offers() {
                 <div className="space-y-2">
                   <Label>{t("offers.platform")}</Label>
                   <div className="flex gap-2">
-                    {[
-                      { value: "facebook", label: "Facebook" },
-                      { value: "tiktok", label: "TikTok" },
-                    ].map(({ value, label }) => (
-                      <button
-                        key={value}
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, platform: value }))}
-                        data-testid={`button-platform-${value}`}
-                        className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
-                          formData.platform === value
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "border-input bg-background hover:bg-accent text-muted-foreground"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, platform: "facebook" }))}
+                      data-testid="button-platform-facebook"
+                      className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                        formData.platform === "facebook"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "border-input bg-background hover:bg-accent text-muted-foreground"
+                      }`}
+                    >
+                      Facebook
+                    </button>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span>
+                            <button
+                              type="button"
+                              disabled={!tiktokEnabled}
+                              onClick={() => {
+                                if (tiktokEnabled) {
+                                  setFormData(prev => ({ ...prev, platform: "tiktok" }));
+                                }
+                              }}
+                              data-testid="button-platform-tiktok"
+                              className={`px-3 py-1 rounded text-xs font-medium border transition-colors ${
+                                !tiktokEnabled
+                                  ? "border-input bg-muted text-muted-foreground opacity-50 cursor-not-allowed"
+                                  : formData.platform === "tiktok"
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "border-input bg-background hover:bg-accent text-muted-foreground"
+                              }`}
+                            >
+                              TikTok
+                            </button>
+                          </span>
+                        </TooltipTrigger>
+                        {!tiktokEnabled && (
+                          <TooltipContent>
+                            <p>
+                              {language === "pt-BR"
+                                ? "TikTok suspenso temporariamente para melhorias"
+                                : "TikTok temporarily suspended for improvements"}
+                            </p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </div>
 
