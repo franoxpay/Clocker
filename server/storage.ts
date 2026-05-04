@@ -1444,13 +1444,13 @@ export class DatabaseStorage implements IStorage {
 
     const result = await db
       .select({
-        date: sql<string>`TO_CHAR(${users.createdAt}, ${groupFormat})`,
+        date: sql<string>`TO_CHAR(users.created_at, ${groupFormat})`,
         count: sql<number>`COUNT(*)`,
       })
       .from(users)
       .where(gte(users.createdAt, startDate))
-      .groupBy(sql`TO_CHAR(${users.createdAt}, ${groupFormat})`)
-      .orderBy(sql`TO_CHAR(${users.createdAt}, ${groupFormat})`);
+      .groupBy(sql`TO_CHAR(users.created_at, ${groupFormat})`)
+      .orderBy(sql`TO_CHAR(users.created_at, ${groupFormat})`);
 
     return result.map(row => ({
       date: row.date,

@@ -5,19 +5,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, ImageIcon, MessageCircle, Save } from "lucide-react";
+import { Upload, ImageIcon, MessageCircle, Save, Filter } from "lucide-react";
 
 interface AdminConfig {
   logoUrl?: string;
   supportWhatsapp?: string | null;
+  tiktokFilterEnabled?: boolean;
 }
 
 export default function AdminSettings() {
   const { t, language } = useLanguage();
   const { toast } = useToast();
+  const isPt = language === "pt-BR";
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState("");
@@ -41,13 +45,33 @@ export default function AdminSettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/support-whatsapp"] });
       toast({
         title: t("common.success"),
-        description: language === "pt-BR" ? "Número de WhatsApp atualizado" : "WhatsApp number updated",
+        description: isPt ? "Número de WhatsApp atualizado" : "WhatsApp number updated",
       });
     },
     onError: () => {
       toast({
         title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao atualizar WhatsApp" : "Error updating WhatsApp",
+        description: isPt ? "Erro ao atualizar WhatsApp" : "Error updating WhatsApp",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateTiktokFilterMutation = useMutation({
+    mutationFn: async (tiktokFilterEnabled: boolean) => {
+      return apiRequest("PATCH", "/api/admin/config", { tiktokFilterEnabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/config"] });
+      toast({
+        title: t("common.success"),
+        description: isPt ? "Filtro TikTok atualizado" : "TikTok filter updated",
+      });
+    },
+    onError: () => {
+      toast({
+        title: t("common.error"),
+        description: isPt ? "Erro ao atualizar filtro TikTok" : "Error updating TikTok filter",
         variant: "destructive",
       });
     },
@@ -75,13 +99,13 @@ export default function AdminSettings() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/config"] });
       toast({
         title: t("common.success"),
-        description: language === "pt-BR" ? "Logo atualizado" : "Logo updated",
+        description: isPt ? "Logo atualizado" : "Logo updated",
       });
     },
     onError: () => {
       toast({
         title: t("common.error"),
-        description: language === "pt-BR" ? "Erro ao enviar logo" : "Error uploading logo",
+        description: isPt ? "Erro ao enviar logo" : "Error uploading logo",
         variant: "destructive",
       });
     },
@@ -96,7 +120,7 @@ export default function AdminSettings() {
       if (!file.type.startsWith("image/")) {
         toast({
           title: t("common.error"),
-          description: language === "pt-BR" ? "Selecione uma imagem" : "Select an image",
+          description: isPt ? "Selecione uma imagem" : "Select an image",
           variant: "destructive",
         });
         return;
@@ -104,7 +128,7 @@ export default function AdminSettings() {
       if (file.size > 2 * 1024 * 1024) {
         toast({
           title: t("common.error"),
-          description: language === "pt-BR" ? "Imagem muito grande (max 2MB)" : "Image too large (max 2MB)",
+          description: isPt ? "Imagem muito grande (max 2MB)" : "Image too large (max 2MB)",
           variant: "destructive",
         });
         return;
@@ -113,8 +137,11 @@ export default function AdminSettings() {
     }
   };
 
+  const tiktokEnabled = config?.tiktokFilterEnabled ?? true;
+
   return (
     <div className="p-6 space-y-6">
+      {/* Logo */}
       <Card>
         <CardHeader>
           <CardTitle>{t("admin.settings.logo")}</CardTitle>
@@ -161,22 +188,23 @@ export default function AdminSettings() {
         </CardContent>
       </Card>
 
+      {/* WhatsApp Support */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5" />
-            {language === "pt-BR" ? "Suporte WhatsApp" : "WhatsApp Support"}
+            {isPt ? "Suporte WhatsApp" : "WhatsApp Support"}
           </CardTitle>
           <CardDescription>
-            {language === "pt-BR" 
-              ? "Configure o número de WhatsApp que aparecerá no botão de suporte para os usuários." 
+            {isPt
+              ? "Configure o número de WhatsApp que aparecerá no botão de suporte para os usuários."
               : "Configure the WhatsApp number that will appear in the support button for users."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="whatsapp">
-              {language === "pt-BR" ? "Número do WhatsApp" : "WhatsApp Number"}
+              {isPt ? "Número do WhatsApp" : "WhatsApp Number"}
             </Label>
             <div className="flex gap-2">
               <Input
@@ -192,17 +220,71 @@ export default function AdminSettings() {
                 data-testid="button-save-whatsapp"
               >
                 <Save className="w-4 h-4 mr-2" />
-                {updateWhatsappMutation.isPending 
-                  ? t("common.loading") 
-                  : (language === "pt-BR" ? "Salvar" : "Save")}
+                {updateWhatsappMutation.isPending
+                  ? t("common.loading")
+                  : isPt ? "Salvar" : "Save"}
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {language === "pt-BR" 
-                ? "Inclua o código do país (ex: +55 para Brasil). Se vazio, o botão de suporte não aparecerá." 
+              {isPt
+                ? "Inclua o código do país (ex: +55 para Brasil). Se vazio, o botão de suporte não aparecerá."
                 : "Include country code (e.g., +1 for US). If empty, the support button won't appear."}
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* TikTok Traffic Filter */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="w-5 h-5" />
+            {isPt ? "Filtro de Tráfego TikTok" : "TikTok Traffic Filter"}
+          </CardTitle>
+          <CardDescription>
+            {isPt
+              ? "Controla se o sistema vai exigir os parâmetros do TikTok (ttclid, utm_medium, utm_content, utm_campaign) para validar o tráfego. Desativar permite que todo tráfego passe direto para a black page, ignorando a validação de parâmetros."
+              : "Controls whether the system requires TikTok parameters (ttclid, utm_medium, utm_content, utm_campaign) to validate traffic. Disabling allows all traffic to pass directly to the black page, bypassing parameter validation."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <Skeleton className="h-10 w-48" />
+          ) : (
+            <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">
+                    {isPt ? "Filtro TikTok" : "TikTok Filter"}
+                  </span>
+                  <Badge
+                    variant={tiktokEnabled ? "default" : "secondary"}
+                    className={tiktokEnabled ? "bg-green-500 hover:bg-green-600" : ""}
+                    data-testid="badge-tiktok-filter-status"
+                  >
+                    {tiktokEnabled
+                      ? isPt ? "Ativo" : "Active"
+                      : isPt ? "Inativo" : "Inactive"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {tiktokEnabled
+                    ? isPt
+                      ? "Parâmetros do TikTok são obrigatórios para validar o tráfego."
+                      : "TikTok parameters are required to validate traffic."
+                    : isPt
+                      ? "Filtro desativado — todo tráfego TikTok passa direto para a black page."
+                      : "Filter disabled — all TikTok traffic goes directly to the black page."}
+                </p>
+              </div>
+              <Switch
+                checked={tiktokEnabled}
+                onCheckedChange={(checked) => updateTiktokFilterMutation.mutate(checked)}
+                disabled={updateTiktokFilterMutation.isPending}
+                data-testid="switch-tiktok-filter"
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

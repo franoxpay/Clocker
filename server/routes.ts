@@ -948,6 +948,25 @@ function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   return "desktop";
 }
 
+// Cache for admin settings — refreshed every 60s or invalidated on PATCH /api/admin/config
+let adminSettingsCache: { tiktokFilterEnabled: boolean; timestamp: number } | null = null;
+const ADMIN_SETTINGS_CACHE_TTL = 60000; // 60 seconds
+
+async function getTiktokFilterEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (adminSettingsCache && now - adminSettingsCache.timestamp < ADMIN_SETTINGS_CACHE_TTL) {
+    return adminSettingsCache.tiktokFilterEnabled;
+  }
+  try {
+    const settings = await storage.getAdminSettings();
+    const enabled = settings?.tiktokFilterEnabled ?? true;
+    adminSettingsCache = { tiktokFilterEnabled: enabled, timestamp: now };
+    return enabled;
+  } catch {
+    return adminSettingsCache?.tiktokFilterEnabled ?? true;
+  }
+}
+
 // Cache for IP geolocation - Redis as primary, memory as fallback
 const ipCountryCache = new Map<string, { country: string; timestamp: number }>();
 const IP_CACHE_TTL = 3600000; // 1 hour cache
@@ -3583,6 +3602,7 @@ export async function registerRoutes(
       res.json({ 
         logoUrl: settings?.logoPath || null,
         supportWhatsapp: settings?.supportWhatsapp || null,
+        tiktokFilterEnabled: settings?.tiktokFilterEnabled ?? true,
       });
     } catch (error) {
       console.error("Error fetching admin config:", error);
@@ -3592,11 +3612,17 @@ export async function registerRoutes(
 
   app.patch("/api/admin/config", isAdmin, async (req: Request, res: Response) => {
     try {
-      const { supportWhatsapp } = req.body;
-      const settings = await storage.updateAdminSettings({ supportWhatsapp });
+      const { supportWhatsapp, tiktokFilterEnabled } = req.body;
+      const updateData: Record<string, any> = {};
+      if (supportWhatsapp !== undefined) updateData.supportWhatsapp = supportWhatsapp;
+      if (tiktokFilterEnabled !== undefined) updateData.tiktokFilterEnabled = tiktokFilterEnabled;
+      const settings = await storage.updateAdminSettings(updateData);
+      // Invalidate in-memory cache so cloaking routes pick up the new setting immediately
+      adminSettingsCache = null;
       res.json({ 
         logoUrl: settings?.logoPath || null,
         supportWhatsapp: settings?.supportWhatsapp || null,
+        tiktokFilterEnabled: settings?.tiktokFilterEnabled ?? true,
       });
     } catch (error) {
       console.error("Error updating admin config:", error);
@@ -5816,58 +5842,65 @@ export async function registerRoutes(
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
-        // Required params: ttclid, utm_medium, utm_content, utm_campaign, xcode
-        // Optional: src (csite) for analytics
-        
-        // Check for unresolved macros (bot detection)
-        const tiktok2Macros = [
-          '__CALLBACK_PARAM__',   // Click ID macro
-          '__AID_NAME__',         // Ad name macro
-          '__CID_NAME__',         // Campaign ID/Name macro
-          '__CAMPAIGN_NAME__',    // Campaign name macro
-          '__CSITE__'             // Site origin macro
-        ];
-        let hasUnresolvedMacro = false;
-        let failedParam = "";
-        
-        for (const macro of tiktok2Macros) {
-          if ((ttclid && ttclid.includes(macro)) ||
-              (utmMedium && utmMedium.includes(macro)) ||
-              (utmContent && utmContent.includes(macro)) ||
-              (utmCampaign && utmCampaign.includes(macro)) ||
-              (csite && csite.includes(macro))) {
-            hasUnresolvedMacro = true;
-            failedParam = `macro:${macro}`;
-            break;
-          }
-        }
-        
-        if (hasUnresolvedMacro) {
-          failReason = `unresolved_${failedParam}`;
-          paramsValid = false;
-        } else if (!ttclid) {
-          failReason = "missing_ttclid";
-          paramsValid = false;
-        } else if (!utmMedium) {
-          failReason = "missing_utm_medium";
-          paramsValid = false;
-        } else if (!utmContent) {
-          failReason = "missing_utm_content";
-          paramsValid = false;
-        } else if (!utmCampaign) {
-          failReason = "missing_utm_campaign";
-          paramsValid = false;
-        } else if (!xcode) {
-          failReason = "missing_xcode";
-          paramsValid = false;
-        } else if (xcode !== offer.xcode) {
-          failReason = "invalid_xcode";
-          paramsValid = false;
-        } else {
+        const tiktokFilterEnabled = await getTiktokFilterEnabled();
+        if (!tiktokFilterEnabled) {
+          // TikTok filter disabled globally by admin — bypass param validation
           paramsValid = true;
+          console.log(`[TikTok2] Filter DISABLED globally — bypassing param validation for offer ${offer.id}`);
+        } else {
+          // Required params: ttclid, utm_medium, utm_content, utm_campaign, xcode
+          // Optional: src (csite) for analytics
+
+          // Check for unresolved macros (bot detection)
+          const tiktok2Macros = [
+            '__CALLBACK_PARAM__',   // Click ID macro
+            '__AID_NAME__',         // Ad name macro
+            '__CID_NAME__',         // Campaign ID/Name macro
+            '__CAMPAIGN_NAME__',    // Campaign name macro
+            '__CSITE__'             // Site origin macro
+          ];
+          let hasUnresolvedMacro = false;
+          let failedParam = "";
+
+          for (const macro of tiktok2Macros) {
+            if ((ttclid && ttclid.includes(macro)) ||
+                (utmMedium && utmMedium.includes(macro)) ||
+                (utmContent && utmContent.includes(macro)) ||
+                (utmCampaign && utmCampaign.includes(macro)) ||
+                (csite && csite.includes(macro))) {
+              hasUnresolvedMacro = true;
+              failedParam = `macro:${macro}`;
+              break;
+            }
+          }
+
+          if (hasUnresolvedMacro) {
+            failReason = `unresolved_${failedParam}`;
+            paramsValid = false;
+          } else if (!ttclid) {
+            failReason = "missing_ttclid";
+            paramsValid = false;
+          } else if (!utmMedium) {
+            failReason = "missing_utm_medium";
+            paramsValid = false;
+          } else if (!utmContent) {
+            failReason = "missing_utm_content";
+            paramsValid = false;
+          } else if (!utmCampaign) {
+            failReason = "missing_utm_campaign";
+            paramsValid = false;
+          } else if (!xcode) {
+            failReason = "missing_xcode";
+            paramsValid = false;
+          } else if (xcode !== offer.xcode) {
+            failReason = "invalid_xcode";
+            paramsValid = false;
+          } else {
+            paramsValid = true;
+          }
+
+          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium}, utm_content=${!!utmContent}, utm_campaign=${!!utmCampaign}, src=${!!csite}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
         }
-        
-        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium}, utm_content=${!!utmContent}, utm_campaign=${!!utmCampaign}, src=${!!csite}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook") {
         // Facebook requires: fbcl (campaign.name|campaign.id), xcode
         if (!fbcl || !xcode) {
@@ -6317,51 +6350,58 @@ export async function registerRoutes(
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
         // ==========================================
-        // Required params: ttclid, utm_medium, utm_content, utm_campaign, xcode
-        // Optional: src (csite) for analytics
-        
-        // Check for unresolved macros (bot detection)
-        const tiktok2Macros = [
-          '__CALLBACK_PARAM__',
-          '__AID_NAME__',
-          '__CID_NAME__',
-          '__CAMPAIGN_NAME__',
-          '__CSITE__'
-        ];
-        let hasUnresolvedMacro = false;
-        let failedParam = "";
-        
-        for (const macro of tiktok2Macros) {
-          if ((ttclid && ttclid.includes(macro)) ||
-              (utmMedium2 && utmMedium2.includes(macro)) ||
-              (utmContent2 && utmContent2.includes(macro)) ||
-              (utmCampaign2 && utmCampaign2.includes(macro)) ||
-              (csite2 && csite2.includes(macro))) {
-            hasUnresolvedMacro = true;
-            failedParam = `macro:${macro}`;
-            break;
-          }
-        }
-        
-        if (hasUnresolvedMacro) {
-          failReason = `unresolved_${failedParam}`;
-        } else if (!ttclid) {
-          failReason = "missing_ttclid";
-        } else if (!utmMedium2) {
-          failReason = "missing_utm_medium";
-        } else if (!utmContent2) {
-          failReason = "missing_utm_content";
-        } else if (!utmCampaign2) {
-          failReason = "missing_utm_campaign";
-        } else if (!xcode) {
-          failReason = "missing_xcode";
-        } else if (xcode !== offer.xcode) {
-          failReason = "invalid_xcode";
-        } else {
+        const tiktokFilterEnabled2 = await getTiktokFilterEnabled();
+        if (!tiktokFilterEnabled2) {
+          // TikTok filter disabled globally by admin — bypass param validation
           paramsValid = true;
+          console.log(`[TikTok2] Filter DISABLED globally — bypassing param validation for offer ${offer.id}`);
+        } else {
+          // Required params: ttclid, utm_medium, utm_content, utm_campaign, xcode
+          // Optional: src (csite) for analytics
+
+          // Check for unresolved macros (bot detection)
+          const tiktok2Macros = [
+            '__CALLBACK_PARAM__',
+            '__AID_NAME__',
+            '__CID_NAME__',
+            '__CAMPAIGN_NAME__',
+            '__CSITE__'
+          ];
+          let hasUnresolvedMacro = false;
+          let failedParam = "";
+
+          for (const macro of tiktok2Macros) {
+            if ((ttclid && ttclid.includes(macro)) ||
+                (utmMedium2 && utmMedium2.includes(macro)) ||
+                (utmContent2 && utmContent2.includes(macro)) ||
+                (utmCampaign2 && utmCampaign2.includes(macro)) ||
+                (csite2 && csite2.includes(macro))) {
+              hasUnresolvedMacro = true;
+              failedParam = `macro:${macro}`;
+              break;
+            }
+          }
+
+          if (hasUnresolvedMacro) {
+            failReason = `unresolved_${failedParam}`;
+          } else if (!ttclid) {
+            failReason = "missing_ttclid";
+          } else if (!utmMedium2) {
+            failReason = "missing_utm_medium";
+          } else if (!utmContent2) {
+            failReason = "missing_utm_content";
+          } else if (!utmCampaign2) {
+            failReason = "missing_utm_campaign";
+          } else if (!xcode) {
+            failReason = "missing_xcode";
+          } else if (xcode !== offer.xcode) {
+            failReason = "invalid_xcode";
+          } else {
+            paramsValid = true;
+          }
+
+          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium2}, utm_content=${!!utmContent2}, utm_campaign=${!!utmCampaign2}, src=${!!csite2}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
         }
-        
-        console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium2}, utm_content=${!!utmContent2}, utm_campaign=${!!utmCampaign2}, src=${!!csite2}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
       } else if (offer.platform === "facebook" && !isBotDetected2) {
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";

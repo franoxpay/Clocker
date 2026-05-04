@@ -237,6 +237,7 @@ export const adminSettings = pgTable("admin_settings", {
   logoWidth: integer("logo_width"),
   logoHeight: integer("logo_height"),
   supportWhatsapp: text("support_whatsapp"),
+  tiktokFilterEnabled: boolean("tiktok_filter_enabled").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
