@@ -40,6 +40,8 @@ import {
   Monitor,
   Smartphone,
   Globe,
+  Search,
+  Info,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -82,6 +84,13 @@ interface DashboardBreakdown {
   byOffer: OfferBreakdownItem[];
 }
 
+interface FailReasonData {
+  total: number;
+  white: number;
+  black: number;
+  byReason: Array<{ reason: string; count: number; pct: number }>;
+}
+
 interface UserUsage {
   offersCount: number;
   offersLimit: number | null;
@@ -97,6 +106,52 @@ interface UserUsage {
 }
 
 type BreakdownFilter = "total" | "black" | "white";
+
+const FAIL_REASON_LABELS: Record<string, { pt: string; en: string; severity: "critical" | "high" | "medium" | "low" }> = {
+  missing_facebook_params: { pt: "Parâmetros do Facebook ausentes (fbcl/xcode)", en: "Missing Facebook params (fbcl/xcode)", severity: "critical" },
+  missing_ttclid: { pt: "ttclid ausente (TikTok)", en: "Missing ttclid (TikTok)", severity: "critical" },
+  missing_utm_medium: { pt: "utm_medium ausente", en: "Missing utm_medium", severity: "high" },
+  missing_utm_content: { pt: "utm_content ausente", en: "Missing utm_content", severity: "high" },
+  missing_utm_campaign: { pt: "utm_campaign ausente", en: "Missing utm_campaign", severity: "high" },
+  missing_xcode: { pt: "xcode ausente na URL", en: "Missing xcode in URL", severity: "high" },
+  invalid_xcode: { pt: "xcode inválido/incorreto", en: "Invalid/incorrect xcode", severity: "high" },
+  invalid_fbcl_format: { pt: "Formato do fbclid inválido", en: "Invalid fbclid format", severity: "medium" },
+  datacenter_ip: { pt: "IP de datacenter (bot/servidor)", en: "Datacenter IP (bot/server)", severity: "low" },
+  proxy_ip: { pt: "IP de proxy/VPN", en: "Proxy/VPN IP", severity: "low" },
+  bot_detected: { pt: "User-Agent de bot detectado", en: "Bot user-agent detected", severity: "low" },
+  rate_limited: { pt: "IP com excesso de cliques/min", en: "IP rate limited", severity: "low" },
+  fake_chrome_version: { pt: "Versão fake do Chrome", en: "Fake Chrome version", severity: "low" },
+  "ua_typo:Bulid": { pt: "User-Agent com typo (Bulid)", en: "UA typo (Bulid)", severity: "low" },
+  unresolved_macro: { pt: "Macro não substituída pelo ad server", en: "Unresolved tracking macro", severity: "medium" },
+  unknown: { pt: "Motivo não registrado", en: "Reason not logged", severity: "low" },
+};
+
+const FAIL_REASON_TIPS: Record<string, { pt: string; en: string }> = {
+  missing_facebook_params: {
+    pt: "Usuários reais do Facebook estão chegando sem fbcl ou xcode. Verifique se a URL da campanha contém ?fbcl={{fbclid}}&xcode=SEU_XCODE e se não há redirecionamentos intermediários que removem os parâmetros.",
+    en: "Real Facebook users are arriving without fbcl or xcode. Check that your campaign URL contains ?fbcl={{fbclid}}&xcode=YOUR_XCODE and that no intermediate redirects strip the params.",
+  },
+  invalid_xcode: {
+    pt: "O xcode na URL não bate com o registrado na oferta. Copie o xcode exato da página de configuração da oferta e cole na URL do anúncio.",
+    en: "The xcode in the URL doesn't match the one saved for this offer. Copy the exact xcode from the offer settings and paste it in your ad URL.",
+  },
+  missing_xcode: {
+    pt: "O xcode não está presente na URL. Adicione &xcode=SEU_XCODE ao final da URL do anúncio.",
+    en: "xcode is not present in the URL. Add &xcode=YOUR_XCODE to the end of your ad URL.",
+  },
+  missing_ttclid: {
+    pt: "Cliques do TikTok chegando sem ttclid. Verifique se o pixel TikTok está ativo e se a URL usa o macro {{ttclid}}.",
+    en: "TikTok clicks arriving without ttclid. Make sure the TikTok pixel is active and your URL uses the {{ttclid}} macro.",
+  },
+  invalid_fbcl_format: {
+    pt: "O fbclid tem formato inválido. Isso pode ocorrer quando o link é compartilhado fora do Facebook — o fbclid original é modificado.",
+    en: "fbclid has an invalid format. This can happen when the link is shared outside Facebook — the original fbclid gets modified.",
+  },
+  missing_utm_medium: {
+    pt: "utm_medium ausente. Adicione utm_medium=paid (ou o valor correto) à URL da campanha no Ads Manager.",
+    en: "utm_medium missing. Add utm_medium=paid (or the correct value) to your campaign URL in Ads Manager.",
+  },
+};
 
 function BreakdownPanel({
   title,
@@ -268,6 +323,12 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/breakdown", filters.offerId, filters.platform, filters.dateRange, filters.startDate, filters.endDate],
     queryFn: () =>
       fetch(`/api/dashboard/breakdown?${buildQuery()}`, { credentials: "include" }).then((r) => r.json()),
+  });
+
+  const { data: failReasons, isLoading: failReasonsLoading } = useQuery<FailReasonData>({
+    queryKey: ["/api/dashboard/fail-reasons", filters.offerId, filters.platform, filters.dateRange, filters.startDate, filters.endDate],
+    queryFn: () =>
+      fetch(`/api/dashboard/fail-reasons?${buildQuery()}`, { credentials: "include" }).then((r) => r.json()),
   });
 
   const { data: usage } = useQuery<UserUsage>({
@@ -705,6 +766,116 @@ export default function Dashboard() {
                   </tfoot>
                 )}
               </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Traffic Diagnostics Panel */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-semibold">
+              {isPt ? "Diagnóstico de Tráfego — Por que White?" : "Traffic Diagnostics — Why White?"}
+            </CardTitle>
+            <div className="group relative ml-auto">
+              <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+              <div className="absolute right-0 top-6 z-10 hidden group-hover:block w-72 rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground shadow-lg">
+                {isPt
+                  ? "Mostra o motivo exato pelo qual cada clique foi enviado para a página white. Use isso para identificar onde o tráfego está sendo filtrado incorretamente."
+                  : "Shows the exact reason each click was sent to the white page. Use this to identify where traffic is being incorrectly filtered."}
+              </div>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {failReasonsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
+            </div>
+          ) : !failReasons || failReasons.white === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              {isPt ? "Sem cliques white no período selecionado" : "No white clicks in the selected period"}
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {/* Summary row */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+                  <div className="text-lg font-bold">{failReasons.total.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{isPt ? "Total registrado" : "Total logged"}</div>
+                </div>
+                <div className="rounded-lg border border-chart-3/30 bg-chart-3/10 p-3 text-center">
+                  <div className="text-lg font-bold text-chart-3">{failReasons.black.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Black (passou)</div>
+                </div>
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-center">
+                  <div className="text-lg font-bold text-destructive">{failReasons.white.toLocaleString()}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">White (filtrado)</div>
+                </div>
+              </div>
+
+              {/* Reason breakdown */}
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                  {isPt ? "Motivos (cliques white)" : "Reasons (white clicks)"}
+                </div>
+                {failReasons.byReason.map((item) => {
+                  const label = FAIL_REASON_LABELS[item.reason] ?? { pt: item.reason, en: item.reason, severity: "low" };
+                  const severityColor = {
+                    critical: "text-destructive",
+                    high: "text-orange-500",
+                    medium: "text-yellow-500",
+                    low: "text-muted-foreground",
+                  }[label.severity];
+                  const barColor = {
+                    critical: "bg-destructive",
+                    high: "bg-orange-500",
+                    medium: "bg-yellow-500",
+                    low: "bg-muted-foreground",
+                  }[label.severity];
+
+                  return (
+                    <div key={item.reason} className="space-y-1" data-testid={`reason-${item.reason}`}>
+                      <div className="flex items-center justify-between text-xs gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`font-medium truncate ${severityColor}`}>
+                            {isPt ? label.pt : label.en}
+                          </span>
+                          {label.severity === "critical" && (
+                            <span className="shrink-0 px-1 py-0.5 rounded text-[10px] font-bold bg-destructive/15 text-destructive">
+                              {isPt ? "CRÍTICO" : "CRITICAL"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2 text-muted-foreground">
+                          <span className={`font-semibold ${severityColor}`}>{item.count.toLocaleString()}</span>
+                          <span className="text-[10px] bg-muted rounded px-1 py-0.5">{item.pct}%</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${barColor}`}
+                          style={{ width: `${item.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Tip box */}
+              {failReasons.byReason.length > 0 && (() => {
+                const topReason = failReasons.byReason[0];
+                const tip = FAIL_REASON_TIPS[topReason?.reason];
+                return tip ? (
+                  <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-300">
+                    <span className="font-semibold">{isPt ? "Dica: " : "Tip: "}</span>
+                    {isPt ? tip.pt : tip.en}
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
         </CardContent>

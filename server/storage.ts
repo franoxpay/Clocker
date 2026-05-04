@@ -150,6 +150,17 @@ export interface IStorage {
     byBrowser: Array<{ name: string; black: number; white: number; total: number }>;
     byOffer: Array<{ offerId: number; offerName: string; total: number; black: number; white: number; blackRate: number }>;
   }>;
+  getDashboardFailReasons(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{
+    total: number;
+    white: number;
+    black: number;
+    byReason: Array<{ reason: string; count: number; pct: number }>;
+  }>;
   cleanupOldClickLogs(): Promise<void>;
 
   getNotificationsByUserId(userId: string): Promise<Notification[]>;
@@ -1269,6 +1280,64 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { byDevice, byOS, byBrowser, byOffer };
+  }
+
+  async getDashboardFailReasons(userId: string, filters: {
+    offerId?: number;
+    platform?: string;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<{
+    total: number;
+    white: number;
+    black: number;
+    byReason: Array<{ reason: string; count: number; pct: number }>;
+  }> {
+    const { offerId, platform, startDate, endDate } = filters;
+
+    const conds: any[] = [eq(clickLogs.userId, userId)];
+    if (startDate) conds.push(gte(clickLogs.createdAt, startDate));
+    if (endDate) conds.push(lte(clickLogs.createdAt, endDate));
+    if (offerId) conds.push(eq(clickLogs.offerId, offerId));
+    if (platform) conds.push(eq(offers.platform, platform));
+    const whereExpr = conds.length === 1 ? conds[0] : and(...conds);
+
+    const totalsRows = await db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        white: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'white' THEN 1 ELSE 0 END)`,
+        black: sql<number>`SUM(CASE WHEN ${clickLogs.redirectedTo} = 'black' THEN 1 ELSE 0 END)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(whereExpr);
+
+    const totalVal = Number(totalsRows[0]?.total ?? 0);
+    const whiteVal = Number(totalsRows[0]?.white ?? 0);
+    const blackVal = Number(totalsRows[0]?.black ?? 0);
+
+    const whiteConds = [...conds, eq(clickLogs.redirectedTo, 'white')];
+    const whereWhite = whiteConds.length === 1 ? whiteConds[0] : and(...whiteConds);
+
+    const reasonRows = await db
+      .select({
+        reason: sql<string>`COALESCE(${clickLogs.allParams}->>'failReason', 'unknown')`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(clickLogs)
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id))
+      .where(whereWhite)
+      .groupBy(sql`COALESCE(${clickLogs.allParams}->>'failReason', 'unknown')`)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(20);
+
+    const byReason = reasonRows.map(r => ({
+      reason: r.reason || 'unknown',
+      count: Number(r.count),
+      pct: whiteVal > 0 ? Math.round((Number(r.count) / whiteVal) * 100) : 0,
+    }));
+
+    return { total: totalVal, white: whiteVal, black: blackVal, byReason };
   }
 
   async cleanupOldClickLogs(): Promise<void> {

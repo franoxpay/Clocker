@@ -1827,6 +1827,60 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/fail-reasons", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = (req.user as any).id;
+      const offerId = req.query.offerId as string;
+      const platform = req.query.platform as string;
+      const dateRange = (req.query.dateRange as string) || "today";
+      const customStart = req.query.startDate as string;
+      const customEnd = req.query.endDate as string;
+
+      const now = new Date();
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+
+      switch (dateRange) {
+        case "today":
+          startDate = startOfLocalDay(now);
+          endDate = endOfLocalDay(now);
+          break;
+        case "yesterday": {
+          const yest = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          startDate = startOfLocalDay(yest);
+          endDate = endOfLocalDay(yest);
+          break;
+        }
+        case "week":
+          startDate = startOfLocalDay(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000));
+          endDate = endOfLocalDay(now);
+          break;
+        case "month":
+          startDate = startOfLocalDay(new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
+          endDate = endOfLocalDay(now);
+          break;
+        case "custom":
+          if (customStart) startDate = startOfLocalDay(new Date(customStart));
+          if (customEnd) endDate = endOfLocalDay(new Date(customEnd));
+          break;
+        default:
+          break;
+      }
+
+      const result = await storage.getDashboardFailReasons(userId, {
+        offerId: offerId && offerId !== "all" ? parseInt(offerId) : undefined,
+        platform: platform && platform !== "all" ? platform : undefined,
+        startDate,
+        endDate,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching fail reasons:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/dashboard/breakdown", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = (req.user as any).id;
