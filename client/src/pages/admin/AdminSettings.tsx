@@ -63,6 +63,7 @@ export default function AdminSettings() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/config"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/platform-config"] });
       toast({
         title: t("common.success"),
         description: isPt ? "Filtro TikTok atualizado" : "TikTok filter updated",

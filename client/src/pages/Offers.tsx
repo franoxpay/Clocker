@@ -129,8 +129,16 @@ export default function Offers() {
 
   const { data: platformConfig } = useQuery<{ tiktokEnabled: boolean }>({
     queryKey: ["/api/platform-config"],
+    staleTime: 0,
   });
   const tiktokEnabled = platformConfig?.tiktokEnabled ?? true;
+
+  // If TikTok gets disabled while TikTok is selected in the form, reset to Facebook
+  useEffect(() => {
+    if (!tiktokEnabled && formData.platform === "tiktok") {
+      setFormData(prev => ({ ...prev, platform: "facebook" }));
+    }
+  }, [tiktokEnabled]);
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
