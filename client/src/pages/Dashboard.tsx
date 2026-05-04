@@ -119,10 +119,15 @@ const FAIL_REASON_LABELS: Record<string, { pt: string; en: string; severity: "cr
   datacenter_ip: { pt: "IP de datacenter (bot/servidor)", en: "Datacenter IP (bot/server)", severity: "low" },
   proxy_ip: { pt: "IP de proxy/VPN", en: "Proxy/VPN IP", severity: "low" },
   bot_detected: { pt: "User-Agent de bot detectado", en: "Bot user-agent detected", severity: "low" },
+  "bot_detected:facebook_internal_app": { pt: "App Facebook interno (requisição de fundo)", en: "Facebook internal app request (background)", severity: "low" },
   rate_limited: { pt: "IP com excesso de cliques/min", en: "IP rate limited", severity: "low" },
   fake_chrome_version: { pt: "Versão fake do Chrome", en: "Fake Chrome version", severity: "low" },
   "ua_typo:Bulid": { pt: "User-Agent com typo (Bulid)", en: "UA typo (Bulid)", severity: "low" },
   unresolved_macro: { pt: "Macro não substituída pelo ad server", en: "Unresolved tracking macro", severity: "medium" },
+  "device_blocked:desktop": { pt: "Dispositivo bloqueado: desktop", en: "Device blocked: desktop", severity: "medium" },
+  "device_blocked:smartphone": { pt: "Dispositivo bloqueado: smartphone", en: "Device blocked: smartphone", severity: "medium" },
+  "device_blocked:tablet": { pt: "Dispositivo bloqueado: tablet", en: "Device blocked: tablet", severity: "medium" },
+  "country_blocked": { pt: "País bloqueado pelo filtro da oferta", en: "Country blocked by offer filter", severity: "high" },
   unknown: { pt: "Motivo não registrado", en: "Reason not logged", severity: "low" },
 };
 

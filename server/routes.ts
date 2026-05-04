@@ -5887,7 +5887,7 @@ export async function registerRoutes(
         'PetalBot',                     // Huawei crawler
         'Googlebot',                    // Google crawler
         'bingbot',                      // Bing crawler
-        'facebookexternalhit',          // Facebook crawler
+        'facebookexternalhit',          // Facebook external crawler
         'Twitterbot',                   // Twitter crawler
         'LinkedInBot',                  // LinkedIn crawler
         'Slackbot',                     // Slack crawler
@@ -5899,6 +5899,11 @@ export async function registerRoutes(
         'Playwright',                   // Playwright automation
       ];
       
+      // Detect Facebook internal app HTTP client (not a real user browser)
+      // Pattern: "Facebook/[version] CFNetwork/[version] Darwin/[version]"
+      // These are background requests made by the Facebook iOS/macOS app itself
+      const isFacebookInternalApp = /^Facebook\/\d+/.test(userAgent) && userAgent.includes('CFNetwork');
+
       const userAgentLower = userAgent.toLowerCase();
       for (const pattern of tiktokBotPatterns) {
         if (userAgent.includes(pattern) || userAgentLower.includes(pattern.toLowerCase())) {
@@ -5907,6 +5912,12 @@ export async function registerRoutes(
           console.log(`[Cloak] BOT DETECTED - Pattern: ${pattern} - UA: ${userAgent.substring(0, 100)}`);
           break;
         }
+      }
+
+      if (!isBotDetected && isFacebookInternalApp) {
+        isBotDetected = true;
+        failReason = `bot_detected:facebook_internal_app`;
+        console.log(`[Cloak] BOT DETECTED - Facebook internal app HTTP client - UA: ${userAgent.substring(0, 100)}`);
       }
       
       // 2. Detect unresolved TikTok macros (bots use template URLs)
@@ -6090,7 +6101,12 @@ export async function registerRoutes(
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok" ? (fixedQuery.adname || rawQuery.adname || null) : null,
             adset: offer.platform === "tiktok" ? (fixedQuery.adset || rawQuery.adset || null) : null,
-            failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+            failReason: failReason || (() => {
+              const parts: string[] = [];
+              if (!deviceAllowed) parts.push(`device_blocked:${deviceType}`);
+              if (!countryAllowed) parts.push(`country_blocked:${country}`);
+              return parts.join(';') || 'unknown';
+            })(),
             isBotDetected,
           },
         });
@@ -6465,6 +6481,14 @@ export async function registerRoutes(
         console.log(`[Cloak /:slug] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis2.isp}`);
       }
 
+      // Detect Facebook internal app HTTP client (background requests, not real users)
+      // Pattern: "Facebook/[version] CFNetwork/[version] Darwin/[version]"
+      if (!isBotDetected2 && /^Facebook\/\d+/.test(userAgent) && userAgent.includes('CFNetwork')) {
+        isBotDetected2 = true;
+        failReason = `bot_detected:facebook_internal_app`;
+        console.log(`[Cloak /:slug] BOT DETECTED - Facebook internal app HTTP client - UA: ${userAgent.substring(0, 100)}`);
+      }
+
       if (offer.platform === "tiktok" && !isBotDetected2) {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
@@ -6587,7 +6611,12 @@ export async function registerRoutes(
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
             adset: offer.platform === "tiktok" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
-            failReason: failReason || `device:${!deviceAllowed};country:${!countryAllowed}`,
+            failReason: failReason || (() => {
+              const parts: string[] = [];
+              if (!deviceAllowed) parts.push(`device_blocked:${deviceType}`);
+              if (!countryAllowed) parts.push(`country_blocked:${country}`);
+              return parts.join(';') || 'unknown';
+            })(),
           },
         });
 
