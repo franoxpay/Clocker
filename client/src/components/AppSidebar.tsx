@@ -246,8 +246,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
         <img
           src={theme === "dark" ? logoBranca : logoPreta}
           alt="Cleryon"
-          className="w-auto max-w-[180px] object-contain"
-          style={{ height: "42px", imageRendering: "auto" }}
+          className="h-9 w-auto"
         />
       </SidebarHeader>
 
