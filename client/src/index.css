@@ -286,3 +286,27 @@
     inset: -1px;
   }
 }
+
+/* Scrollbar minimalista para painéis do dashboard */
+.scrollbar-minimal {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s;
+}
+.scrollbar-minimal:hover {
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.scrollbar-minimal::-webkit-scrollbar {
+  width: 3px;
+}
+.scrollbar-minimal::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-minimal::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 99px;
+  transition: background-color 0.2s;
+}
+.scrollbar-minimal:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+}

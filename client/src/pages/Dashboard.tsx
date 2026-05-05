@@ -170,7 +170,7 @@ function BreakdownPanel({
           </p>
         ) : (
           <div className="space-y-2">
-            <div className="overflow-y-auto pr-1" style={{ maxHeight: "136px" }}>
+            <div className="overflow-y-auto scrollbar-minimal" style={{ maxHeight: "136px" }}>
               <div className="space-y-2.5">
                 {data.map((item) => {
                   const val = getValue(item);
