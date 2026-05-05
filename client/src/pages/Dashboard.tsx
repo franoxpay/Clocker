@@ -509,21 +509,21 @@ export default function Dashboard() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((card) => (
           <Card key={card.testId}>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">{card.title}</CardTitle>
-              <card.icon className={`w-4 h-4 ${card.color}`} />
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <div className="text-2xl font-bold" data-testid={card.testId}>
-                  {formatNumber(card.value)}
-                </div>
-              )}
+            <CardContent className="flex items-center justify-between gap-2 py-4 px-4">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium text-muted-foreground">{card.title}</span>
+                {isLoading ? (
+                  <Skeleton className="h-7 w-20 mt-0.5" />
+                ) : (
+                  <span className="text-xl font-bold leading-tight" data-testid={card.testId}>
+                    {formatNumber(card.value)}
+                  </span>
+                )}
+              </div>
+              <card.icon className={`w-5 h-5 shrink-0 ${card.color}`} />
             </CardContent>
           </Card>
         ))}
@@ -623,9 +623,34 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+      {/* Breakdown panels: Device, OS, Browser */}
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
+        <BreakdownPanel
+          title={isPt ? "Dispositivos" : "Devices"}
+          icon={Smartphone}
+          data={breakdown?.byDevice ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+        <BreakdownPanel
+          title={isPt ? "Sistema Operacional" : "Operating System"}
+          icon={Monitor}
+          data={breakdown?.byOS ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+        <BreakdownPanel
+          title={isPt ? "Navegadores" : "Browsers"}
+          icon={Globe}
+          data={breakdown?.byBrowser ?? []}
+          isLoading={breakdownLoading}
+          isPt={isPt}
+        />
+      </div>
+
       {/* Per-offer detailed table */}
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="text-sm font-semibold">
             {isPt ? "Detalhamento por Oferta" : "Breakdown by Offer"}
           </CardTitle>
@@ -709,31 +734,6 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
-
-      {/* Breakdown panels: Device, OS, Browser */}
-      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-3">
-        <BreakdownPanel
-          title={isPt ? "Dispositivos" : "Devices"}
-          icon={Smartphone}
-          data={breakdown?.byDevice ?? []}
-          isLoading={breakdownLoading}
-          isPt={isPt}
-        />
-        <BreakdownPanel
-          title={isPt ? "Sistema Operacional" : "Operating System"}
-          icon={Monitor}
-          data={breakdown?.byOS ?? []}
-          isLoading={breakdownLoading}
-          isPt={isPt}
-        />
-        <BreakdownPanel
-          title={isPt ? "Navegadores" : "Browsers"}
-          icon={Globe}
-          data={breakdown?.byBrowser ?? []}
-          isLoading={breakdownLoading}
-          isPt={isPt}
-        />
-      </div>
     </div>
   );
 }
