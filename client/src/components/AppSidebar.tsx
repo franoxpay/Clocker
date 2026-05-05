@@ -242,12 +242,14 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   return (
     <Sidebar>
       {/* ── Logo ──────────────────────────────────────────────────────── */}
-      <SidebarHeader className="px-4 py-4 border-b border-sidebar-border/50">
-        <img
-          src={theme === "dark" ? logoBranca : logoPreta}
-          alt="Cleryon"
-          className="h-9 w-auto"
-        />
+      <SidebarHeader className="p-4">
+        <div className="flex items-center">
+          <img
+            src={theme === "dark" ? logoBranca : logoPreta}
+            alt="Cleryon"
+            className="h-10 w-auto"
+          />
+        </div>
       </SidebarHeader>
 
       {/* ── Navigation ───────────────────────────────────────────────── */}
