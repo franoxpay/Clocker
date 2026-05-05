@@ -537,7 +537,7 @@ export default function AdminEmails() {
                                 </Badge>
                               ) : (
                                 <Tooltip>
-                                  <TooltipTrigger asChild>
+                                  <TooltipTrigger>
                                     <Badge variant="destructive" className="text-xs gap-1 cursor-help">
                                       <XCircle className="w-3 h-3" />
                                       {isPt ? "Falha" : "Failed"}
