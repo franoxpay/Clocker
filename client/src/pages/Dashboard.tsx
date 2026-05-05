@@ -169,51 +169,40 @@ function BreakdownPanel({
             {isPt ? "Sem dados para o período" : "No data for this period"}
           </p>
         ) : (
-          <div className="space-y-2.5">
-            {(() => {
-              const renderItem = (item: BreakdownItem) => {
-                const val = getValue(item);
-                const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
-                const blackPct = val > 0 ? Math.round((item.black / (filter === "total" ? item.total : val)) * 100) : 0;
-                return (
-                  <div key={item.name} className="space-y-1">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="font-medium truncate max-w-[60%]">{item.name}</span>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        {filter === "total" && (
-                          <span className="text-chart-3 font-medium">{blackPct}% black</span>
+          <div className="space-y-2">
+            <div className="overflow-y-auto pr-1" style={{ maxHeight: "136px" }}>
+              <div className="space-y-2.5">
+                {data.map((item) => {
+                  const val = getValue(item);
+                  const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+                  const blackPct = val > 0 ? Math.round((item.black / (filter === "total" ? item.total : val)) * 100) : 0;
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-medium truncate max-w-[60%]">{item.name}</span>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          {filter === "total" && (
+                            <span className="text-chart-3 font-medium">{blackPct}% black</span>
+                          )}
+                          <span className="font-semibold text-foreground">{val.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted overflow-hidden">
+                        {filter === "total" ? (
+                          <div className="h-full flex">
+                            <div className="h-full bg-chart-3 transition-all duration-300" style={{ width: `${(item.black / maxVal) * 100}%` }} />
+                            <div className="h-full bg-chart-4 transition-all duration-300" style={{ width: `${(item.white / maxVal) * 100}%` }} />
+                          </div>
+                        ) : (
+                          <div className={`h-full transition-all duration-300 ${filter === "black" ? "bg-chart-3" : "bg-chart-4"}`} style={{ width: `${pct}%` }} />
                         )}
-                        <span className="font-semibold text-foreground">{val.toLocaleString()}</span>
                       </div>
                     </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      {filter === "total" ? (
-                        <div className="h-full flex">
-                          <div className="h-full bg-chart-3 transition-all duration-300" style={{ width: `${(item.black / maxVal) * 100}%` }} />
-                          <div className="h-full bg-chart-4 transition-all duration-300" style={{ width: `${(item.white / maxVal) * 100}%` }} />
-                        </div>
-                      ) : (
-                        <div className={`h-full transition-all duration-300 ${filter === "black" ? "bg-chart-3" : "bg-chart-4"}`} style={{ width: `${pct}%` }} />
-                      )}
-                    </div>
-                  </div>
-                );
-              };
-
-              const top = data.slice(0, 4);
-              const rest = data.slice(4);
-              return (
-                <>
-                  {top.map(renderItem)}
-                  {rest.length > 0 && (
-                    <div className="overflow-y-auto max-h-40 space-y-2.5 pr-1 border-t border-border/40 pt-2.5 mt-0.5 scrollbar-thin">
-                      {rest.map(renderItem)}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-            {filter === "total" && data.length > 0 && (
+                  );
+                })}
+              </div>
+            </div>
+            {filter === "total" && (
               <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <span className="inline-block w-2.5 h-2.5 rounded-sm bg-chart-3" /> Black
