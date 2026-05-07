@@ -132,6 +132,83 @@ function getServerMajorVersion(
   return parseInt(match[1], 10);
 }
 
+// ── Database URL resolution (for backup — intentionally skips PGHOST) ────────
+
+/**
+ * Resolves the database URL to back up.
+ *
+ * Priority (intentional — does NOT fall through to PGHOST/PGDATABASE/PGUSER):
+ *   1. BACKUP_DATABASE_URL  — explicit override for backup only
+ *   2. EXTERNAL_DATABASE_URL — external/production DB explicitly configured
+ *   3. DATABASE_URL          — standard production URL
+ *
+ * Why PGHOST is skipped: on Replit, PGHOST points to the built-in development
+ * database (helium/heliumdb), which is typically empty. Backing it up instead
+ * of the real EasyPanel production database would be a silent, critical error.
+ */
+function resolveBackupUrl(): { url: string; source: string } {
+  if (process.env.BACKUP_DATABASE_URL) {
+    return { url: process.env.BACKUP_DATABASE_URL, source: "BACKUP_DATABASE_URL" };
+  }
+  if (process.env.EXTERNAL_DATABASE_URL) {
+    return { url: process.env.EXTERNAL_DATABASE_URL, source: "EXTERNAL_DATABASE_URL" };
+  }
+  if (process.env.DATABASE_URL) {
+    return { url: process.env.DATABASE_URL, source: "DATABASE_URL" };
+  }
+  throw new Error(
+    "No backup database URL found.\n" +
+    "Set BACKUP_DATABASE_URL, EXTERNAL_DATABASE_URL, or DATABASE_URL."
+  );
+}
+
+/** Returns true if the host looks like a Replit-internal database (not production). */
+function isReplitInternalHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return (
+    h === "helium" ||
+    h.endsWith(".helium") ||
+    h === "localhost" ||
+    h.startsWith("127.") ||
+    h.startsWith("::1") ||
+    h.endsWith(".replit.dev") ||
+    h.endsWith(".replit.com") ||
+    h.endsWith(".repl.co")
+  );
+}
+
+/** Masks a username: first 3 chars visible, rest replaced with ***. */
+function maskUser(user: string): string {
+  if (user.length <= 3) return "***";
+  return user.substring(0, 3) + "***";
+}
+
+/** Logs the backup target database info safely (no passwords). */
+function logTargetDatabase(
+  conn: ReturnType<typeof parseDbUrl>,
+  source: string
+): void {
+  const isReplit = isReplitInternalHost(conn.host);
+
+  console.log("[Backup] ┌─ Target database ─────────────────────");
+  console.log(`[Backup] │  Host:     ${conn.host}:${conn.port}`);
+  console.log(`[Backup] │  Database: ${conn.database}`);
+  console.log(`[Backup] │  User:     ${maskUser(conn.user)}`);
+  console.log(`[Backup] │  Source:   ${source}`);
+
+  if (isReplit) {
+    console.log("[Backup] │  Type:     ⚠ REPLIT INTERNAL DATABASE");
+    console.warn("[Backup] └─────────────────────────────────────────");
+    console.warn("[Backup] ⚠ WARNING: The resolved host looks like the Replit");
+    console.warn("[Backup]   built-in development database, NOT EasyPanel production.");
+    console.warn("[Backup]   Set BACKUP_DATABASE_URL or DATABASE_URL to the");
+    console.warn("[Backup]   EasyPanel production database URL to fix this.");
+  } else {
+    console.log("[Backup] │  Type:     External (EasyPanel / production)");
+    console.log("[Backup] └─────────────────────────────────────────");
+  }
+}
+
 // ── Core backup function (exported — throws on failure) ────────────────────
 
 /**
@@ -145,21 +222,15 @@ export async function runBackup(): Promise<string> {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log(`[Backup] Started at ${new Date().toISOString()}`);
 
-  // ── 1. Validate env vars ──────────────────
-  const DATABASE_URL = process.env.DATABASE_URL;
-  if (!DATABASE_URL) {
-    throw new Error("DATABASE_URL is not defined. Set it before running backup.");
-  }
-
-  const conn = parseDbUrl(DATABASE_URL);
+  // ── 1. Resolve and validate the target database URL ──
+  const { url: resolvedUrl, source } = resolveBackupUrl();
+  const conn = parseDbUrl(resolvedUrl);
 
   if (!conn.host || !conn.database || !conn.user) {
-    throw new Error("DATABASE_URL is incomplete (missing host / database / user).");
+    throw new Error(`${source} is incomplete (missing host / database / user).`);
   }
 
-  console.log(`[Backup] Host:     ${conn.host}:${conn.port}`);
-  console.log(`[Backup] Database: ${conn.database}`);
-  console.log(`[Backup] User:     ${conn.user}`);
+  logTargetDatabase(conn, source);
 
   // Password via env var only — NEVER in command-line args
   const pgEnv: NodeJS.ProcessEnv = { ...process.env, PGPASSWORD: conn.password };
