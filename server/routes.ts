@@ -1209,10 +1209,8 @@ export async function registerRoutes(
     const baitData = await consumeTikTok2Token(token);
     if (baitData) {
       const elapsed = Date.now() - baitData.createdAt;
-      
       console.log(`[TikTok2] BOT DETECTED (${reason}) - Token: ${token.substring(0, 16)}... (${elapsed}ms)`);
-      
-      await storage.createClickLog({
+      storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
         ipAddress: baitData.ip,
@@ -1234,12 +1232,12 @@ export async function registerRoutes(
           xcode: baitData.xcode,
           botReason: reason,
         },
-      });
-      
-      await storage.incrementOfferClicks(baitData.offerId, false);
+      }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+      storage.incrementOfferClicks(baitData.offerId, false)
+        .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
     }
     
-    // Return 1x1 transparent GIF
+    // Return 1x1 transparent GIF — sent immediately, analytics run in background
     const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
     res.set('Content-Type', 'image/gif');
     res.send(gif);
@@ -1347,10 +1345,8 @@ export async function registerRoutes(
     const baitData = await consumeTikTok2Token(token);
     if (baitData) {
       const elapsed = Date.now() - baitData.createdAt;
-      
       console.log(`[TikTok2] BOT DETECTED (${reason}) - Token: ${token.substring(0, 16)}... (${elapsed}ms)`);
-      
-      await storage.createClickLog({
+      storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
         ipAddress: baitData.ip,
@@ -1372,12 +1368,12 @@ export async function registerRoutes(
           xcode: baitData.xcode,
           botReason: reason,
         },
-      });
-      
-      await storage.incrementOfferClicks(baitData.offerId, false);
+      }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+      storage.incrementOfferClicks(baitData.offerId, false)
+        .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
     }
     
-    // Return 1x1 transparent GIF
+    // Return 1x1 transparent GIF — sent immediately, analytics run in background
     const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
     res.set('Content-Type', 'image/gif');
     res.send(gif);
@@ -1411,7 +1407,7 @@ export async function registerRoutes(
     // Validate timing - too fast is suspicious, too slow means expired
     if (elapsed < 200) {
       console.log(`[TikTok2] BOT DETECTED - Too fast (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
-      await storage.createClickLog({
+      storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
         ipAddress: baitData.ip,
@@ -1433,14 +1429,15 @@ export async function registerRoutes(
           xcode: baitData.xcode,
           botReason: 'too_fast',
         },
-      });
-      await storage.incrementOfferClicks(baitData.offerId, false);
+      }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+      storage.incrementOfferClicks(baitData.offerId, false)
+        .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
       return res.redirect(302, baitData.whiteUrl);
     }
     
     if (elapsed > TIKTOK2_BAIT_EXPIRY_MS) {
       console.log(`[TikTok2] Token expired (${elapsed}ms) - Token: ${token.substring(0, 16)}...`);
-      await storage.createClickLog({
+      storage.createClickLog({
         offerId: baitData.offerId,
         userId: baitData.userId,
         ipAddress: baitData.ip,
@@ -1462,15 +1459,16 @@ export async function registerRoutes(
           xcode: baitData.xcode,
           botReason: 'expired',
         },
-      });
-      await storage.incrementOfferClicks(baitData.offerId, false);
+      }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+      storage.incrementOfferClicks(baitData.offerId, false)
+        .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
       return res.redirect(302, baitData.whiteUrl);
     }
     
-    // Valid human visitor - log as BLACK and redirect
+    // Valid human visitor - log as BLACK and redirect immediately
     console.log(`[TikTok2] HUMAN VERIFIED (${elapsed}ms) - Token: ${token.substring(0, 16)}... → BLACK`);
     
-    await storage.createClickLog({
+    storage.createClickLog({
       offerId: baitData.offerId,
       userId: baitData.userId,
       ipAddress: baitData.ip,
@@ -1491,9 +1489,9 @@ export async function registerRoutes(
         campaignName: baitData.cname,
         xcode: baitData.xcode,
       },
-    });
-    
-    await storage.incrementOfferClicks(baitData.offerId, true);
+    }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+    storage.incrementOfferClicks(baitData.offerId, true)
+      .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
     
     // Append UTM parameters to black page URL
     const finalBlackUrl = appendUTMParams(baitData.blackUrl, baitData.queryParams);
@@ -1637,8 +1635,9 @@ export async function registerRoutes(
       targetUrl = appendUTMParams(challenge.targetUrl, challenge.queryParams);
     }
     
-    // LOG THE CLICK AFTER CHALLENGE RESULT (this is the only place clicks to black are logged)
-    await storage.createClickLog({
+    // LOG THE CLICK AFTER CHALLENGE RESULT — fire-and-forget, redirect goes first
+    const redirectStart = Date.now();
+    storage.createClickLog({
       offerId: challenge.offerId,
       userId: challenge.userId,
       ipAddress: challenge.ip,
@@ -1661,12 +1660,11 @@ export async function registerRoutes(
         challengeElapsed: elapsed,
         honeypotTriggered: challenge.honeypotTriggered,
       },
-    });
+    }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+    storage.incrementOfferClicks(challenge.offerId, !isBot)
+      .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
     
-    // Increment click counters
-    await storage.incrementOfferClicks(challenge.offerId, !isBot);
-    
-    console.log(`[AntiBot] ${redirectedTo.toUpperCase()} redirect after challenge - Score: ${score}, Elapsed: ${elapsed}ms, Bot: ${isBot}`);
+    console.log(`[AntiBot] ${redirectedTo.toUpperCase()} redirect after challenge - Score: ${score}, Elapsed: ${elapsed}ms, Bot: ${isBot} - Redirect in ${Date.now() - redirectStart}ms`);
     
     return res.redirect(302, targetUrl);
   });
@@ -6018,10 +6016,9 @@ export async function registerRoutes(
       // Build full request URL for logging
       const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-      // If going to WHITE page - log and redirect directly (no challenge needed)
+      // If going to WHITE page - fire-and-forget analytics, redirect immediately
       if (!shouldRedirectToBlack) {
-        // Log the click with response time
-        await storage.createClickLog({
+        storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
           ipAddress: ip,
@@ -6050,9 +6047,9 @@ export async function registerRoutes(
             })(),
             isBotDetected,
           },
-        });
-
-        await storage.incrementOfferClicks(offer.id, false);
+        }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+        storage.incrementOfferClicks(offer.id, false)
+          .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
         console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${failReason}`);
         return res.redirect(302, targetUrl);
       }
@@ -6120,8 +6117,10 @@ export async function registerRoutes(
       // Facebook uses simple validation: params + filters → direct redirect
       // No JavaScript challenge needed - just redirect immediately
       if (offer.platform === "facebook") {
-        // Log the click
-        await storage.createClickLog({
+        // Append UTM parameters to black page URL
+        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        // Fire-and-forget analytics — redirect goes first
+        storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
           ipAddress: ip,
@@ -6141,14 +6140,10 @@ export async function registerRoutes(
             campaignId: fbcl?.split("|")[1] || null,
             xcode: xcode || null,
           },
-        });
-
-        await storage.incrementOfferClicks(offer.id, true);
-        
-        // Append UTM parameters to black page URL
-        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+        storage.incrementOfferClicks(offer.id, true)
+          .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
         console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${finalUrl}`);
-        
         // Direct 302 redirect - no intermediate page
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.redirect(302, finalUrl);
@@ -6541,9 +6536,9 @@ export async function registerRoutes(
       // Build full request URL for logging
       const requestUrl = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-      // If going to WHITE page - log and redirect directly (no challenge needed)
+      // If going to WHITE page - fire-and-forget analytics, redirect immediately
       if (!shouldRedirectToBlack) {
-        await storage.createClickLog({
+        storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
           ipAddress: ip,
@@ -6571,9 +6566,9 @@ export async function registerRoutes(
               return parts.join(';') || 'unknown';
             })(),
           },
-        });
-
-        await storage.incrementOfferClicks(offer.id, false);
+        }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+        storage.incrementOfferClicks(offer.id, false)
+          .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
         console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${failReason}`);
         return res.redirect(302, targetUrl);
       }
@@ -6639,8 +6634,10 @@ export async function registerRoutes(
       // Facebook uses simple validation: params + filters → direct redirect
       // No JavaScript challenge needed - just redirect immediately
       if (offer.platform === "facebook") {
-        // Log the click
-        await storage.createClickLog({
+        // Append UTM parameters to black page URL
+        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        // Fire-and-forget analytics — redirect goes first
+        storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
           ipAddress: ip,
@@ -6660,14 +6657,10 @@ export async function registerRoutes(
             campaignId: fbcl?.split("|")[1] || null,
             xcode: xcode || null,
           },
-        });
-
-        await storage.incrementOfferClicks(offer.id, true);
-        
-        // Append UTM parameters to black page URL
-        const finalUrl = appendUTMParams(targetUrl, req.query as Record<string, any>);
+        }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
+        storage.incrementOfferClicks(offer.id, true)
+          .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
         console.log(`[Facebook] BLACK redirect for ${slug} (${duration}ms) - Direct redirect to: ${finalUrl}`);
-        
         // Direct 302 redirect - no intermediate page
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return res.redirect(302, finalUrl);

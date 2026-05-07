@@ -1,0 +1,84 @@
+Implemente a versão simples de analytics assíncrono com fire-and-forget, sem BullMQ.
+
+Faça exatamente isto:
+
+1. Procure todos os redirects onde existe await antes do res.redirect relacionado a:
+- createClickLog
+- incrementOfferClicks
+- daily metrics
+- analytics
+- logs não essenciais
+
+2. Não altere a lógica de decisão black/white.
+
+3. Não altere o destino do redirect.
+
+4. Remova o await apenas dos inserts/updates de analytics que não são necessários para decidir o redirect.
+
+5. Transforme isso:
+
+await storage.createClickLog(...)
+await storage.incrementOfferClicks(...)
+return res.redirect(302, targetUrl)
+
+Em algo assim:
+
+storage.createClickLog(...).catch(err => {
+  console.error('[Analytics] createClickLog failed:', err.message)
+})
+
+storage.incrementOfferClicks(...).catch(err => {
+  console.error('[Analytics] incrementOfferClicks failed:', err.message)
+})
+
+return res.redirect(302, targetUrl)
+
+6. Garanta que erro de analytics nunca quebre redirect.
+
+7. Garanta que nenhuma promise fique sem catch.
+
+8. Adicione logs simples de performance temporários:
+- início do processamento
+- decisão tomada
+- redirect enviado
+- tempo total até redirect
+
+Exemplo:
+console.log(`[Cloak] Redirect completed in ${duration}ms`)
+
+9. Não adicionar BullMQ agora.
+
+10. Não adicionar nova dependência.
+
+11. Não mexer em Redis.
+
+12. Não mexer em Stripe.
+
+13. Não mexer em frontend.
+
+14. Não refatorar routes.ts ainda.
+
+15. Não mudar schema do banco.
+
+16. Testar:
+- redirect black normal;
+- redirect white normal;
+- erro proposital em createClickLog;
+- erro proposital em incrementOfferClicks;
+- garantir que mesmo com erro o redirect acontece;
+- verificar se logs continuam sendo salvos quando banco está ok.
+
+Critérios de aceite:
+- Nenhum await de analytics bloqueia redirect.
+- Redirect continua funcionando mesmo se analytics falhar.
+- Toda promise fire-and-forget tem catch.
+- Sem nova dependência.
+- Sem mudança de comportamento para o usuário.
+- Logs mostram tempo até redirect.
+
+No final me entregue:
+- arquivos alterados;
+- quais awaits foram removidos;
+- onde fire-and-forget foi aplicado;
+- logs de performance antes/depois;
+- riscos restantes.
