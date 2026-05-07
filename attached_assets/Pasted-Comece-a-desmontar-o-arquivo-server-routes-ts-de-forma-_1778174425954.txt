@@ -1,0 +1,151 @@
+Comece a desmontar o arquivo server/routes.ts de forma incremental, segura e sem alterar comportamento.
+
+IMPORTANTE:
+Não fazer refactor gigante.
+Não reescrever o sistema.
+Não mudar lógica de negócio.
+Não alterar comportamento do cloaker.
+Não alterar endpoints.
+Não alterar respostas da API.
+O objetivo é apenas separar responsabilidades e reduzir o tamanho do routes.ts com segurança.
+
+Faça exatamente isto:
+
+1. Analise o routes.ts e identifique grupos claros de responsabilidade.
+
+Separar mentalmente em blocos como:
+- auth
+- billing
+- admin
+- offers
+- domains
+- notifications
+- analytics
+- challenge
+- tiktok2
+- redirect/cloaker
+- email
+- affiliate
+- websocket
+- healthcheck
+
+2. NÃO mover o cloaker principal ainda.
+As rotas críticas de redirect:
+- /r/:slug
+- /:slug
+- challenge verification
+- tiktok2 critical flow
+
+devem permanecer no routes.ts por enquanto.
+
+Essas rotas são críticas e têm alto risco.
+
+3. Comece movendo APENAS rotas administrativas e não críticas.
+
+Prioridade:
+- admin
+- coupons
+- notifications
+- email templates
+- affiliate admin
+- healthcheck
+- settings
+
+4. Criar estrutura organizada.
+
+Exemplo:
+
+server/routes/
+  admin.routes.ts
+  billing.routes.ts
+  offers.routes.ts
+  domains.routes.ts
+  notifications.routes.ts
+  analytics.routes.ts
+
+5. Cada arquivo deve exportar uma função/router clara.
+
+Exemplo:
+export function registerAdminRoutes(app: Express) {}
+
+ou
+const router = Router()
+
+6. O routes.ts principal deve virar apenas:
+- imports;
+- middlewares globais;
+- registro dos módulos;
+- rotas críticas temporariamente.
+
+7. NÃO duplicar middleware.
+Reaproveitar:
+- isAuthenticated
+- isAdmin
+- rateLimit
+- validações existentes
+
+8. Não mover código “copiando e colando bagunçado”.
+Organizar importações corretamente.
+
+9. Não quebrar tipagem TypeScript.
+
+10. Não alterar schema do banco.
+
+11. Não alterar frontend.
+
+12. Não alterar Redis.
+
+13. Não alterar Stripe.
+
+14. Não alterar lógica anti-bot.
+
+15. Não alterar challenge flow.
+
+16. Não alterar analytics agora.
+
+17. Adicionar comentários temporários explicando:
+- o que já foi modularizado;
+- o que ainda é crítico;
+- o que ficou propositalmente no routes.ts.
+
+18. Garantir que:
+- todas as rotas continuam funcionando;
+- mesmos endpoints;
+- mesma autenticação;
+- mesmas permissões;
+- mesmos retornos.
+
+19. Validar que:
+- app sobe sem erro;
+- imports não criaram ciclos;
+- nenhuma rota sumiu;
+- nenhuma rota mudou path.
+
+20. Objetivo desta etapa:
+reduzir o routes.ts sem tocar no core do cloaker.
+
+21. Meta:
+tirar pelo menos 30–40% do código não crítico do routes.ts.
+
+22. NÃO tentar deixar perfeito.
+A prioridade é:
+- reduzir risco;
+- melhorar manutenção;
+- preparar futuras separações.
+
+Critérios de aceite:
+- routes.ts significativamente menor;
+- rotas administrativas separadas;
+- código mais navegável;
+- nenhum endpoint quebrado;
+- cloaker continua intacto;
+- TypeScript sem erros;
+- sem regressão funcional.
+
+No final me entregue:
+- nova estrutura de arquivos;
+- quantas linhas saíram do routes.ts;
+- quais módulos foram separados;
+- o que ainda ficou no routes.ts;
+- riscos restantes;
+- próximos candidatos para modularização.
