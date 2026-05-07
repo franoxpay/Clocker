@@ -6,8 +6,12 @@ import { readdirSync } from "fs";
 // ==========================================
 // POSTGRESQL BACKUP SCRIPT
 // ==========================================
-// Usage: npm run db:backup
-// Output: backups/backup-YYYY-MM-DD-HH-mm.sql.gz
+// Usage:  npm run db:backup  (CLI — exits with 0 or 1)
+// Import: import { runBackup } from "./backupDatabase"  (scheduler)
+
+export const BACKUP_DIR = resolve(process.cwd(), "backups");
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function parseDbUrl(url: string): {
   host: string;
@@ -53,7 +57,7 @@ function formatTimestamp(): string {
   ].join("-");
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -70,28 +74,24 @@ function sanitizeOutput(text: string, password: string): string {
  * Priority: PG_DUMP_PATH env var > nix store match > system default.
  */
 function findPgDump(serverMajor: number): string {
-  // 1. Explicit override
   if (process.env.PG_DUMP_PATH) {
-    console.log(`[BACKUP] Usando PG_DUMP_PATH: ${process.env.PG_DUMP_PATH}`);
+    console.log(`[Backup] Using PG_DUMP_PATH: ${process.env.PG_DUMP_PATH}`);
     return process.env.PG_DUMP_PATH;
   }
 
-  // 2. Search nix store for matching major version
   const nixStore = "/nix/store";
   if (existsSync(nixStore)) {
     try {
       const entries = readdirSync(nixStore);
-      // Look for postgresql-{major}.x packages (not lib, dev, doc, debug, man, etc.)
       const pattern = new RegExp(`^[a-z0-9]+-postgresql-${serverMajor}\\.\\d+$`);
       const candidates = entries
         .filter((e) => pattern.test(e))
         .sort()
-        .reverse(); // prefer higher patch versions
+        .reverse();
 
       for (const candidate of candidates) {
         const pgDumpPath = `${nixStore}/${candidate}/bin/pg_dump`;
         if (existsSync(pgDumpPath)) {
-          console.log(`[BACKUP] pg_dump v${serverMajor} encontrado: ${pgDumpPath}`);
           return pgDumpPath;
         }
       }
@@ -100,13 +100,11 @@ function findPgDump(serverMajor: number): string {
     }
   }
 
-  // 3. Fall back to system default and hope for the best
-  console.log("[BACKUP] Usando pg_dump do sistema (sem garantia de versão compatível).");
   return "pg_dump";
 }
 
 /**
- * Get the server's major version by running psql --version against the server.
+ * Query the server's major version via psql.
  * Returns null if it cannot be determined.
  */
 function getServerMajorVersion(
@@ -134,81 +132,72 @@ function getServerMajorVersion(
   return parseInt(match[1], 10);
 }
 
-async function runBackup(): Promise<void> {
+// ── Core backup function (exported — throws on failure) ────────────────────
+
+/**
+ * Runs the full PostgreSQL backup pipeline.
+ * - Throws an Error on any failure (safe for scheduler / caller to catch).
+ * - Returns the path of the created .gz file on success.
+ */
+export async function runBackup(): Promise<string> {
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("  PostgreSQL Backup — Cleryon");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`[BACKUP] Iniciado em ${new Date().toISOString()}`);
+  console.log(`[Backup] Started at ${new Date().toISOString()}`);
 
   // ── 1. Validate env vars ──────────────────
   const DATABASE_URL = process.env.DATABASE_URL;
   if (!DATABASE_URL) {
-    console.error("[BACKUP] ERRO: DATABASE_URL não definida.");
-    console.error("         Defina a variável antes de rodar o backup.");
-    process.exit(1);
+    throw new Error("DATABASE_URL is not defined. Set it before running backup.");
   }
 
-  let conn: ReturnType<typeof parseDbUrl>;
-  try {
-    conn = parseDbUrl(DATABASE_URL);
-  } catch (err) {
-    console.error("[BACKUP] ERRO ao analisar DATABASE_URL:", err);
-    process.exit(1);
-  }
+  const conn = parseDbUrl(DATABASE_URL);
 
   if (!conn.host || !conn.database || !conn.user) {
-    console.error("[BACKUP] ERRO: DATABASE_URL incompleta (host/database/user ausente).");
-    process.exit(1);
+    throw new Error("DATABASE_URL is incomplete (missing host / database / user).");
   }
 
-  console.log(`[BACKUP] Host:     ${conn.host}:${conn.port}`);
-  console.log(`[BACKUP] Database: ${conn.database}`);
-  console.log(`[BACKUP] User:     ${conn.user}`);
+  console.log(`[Backup] Host:     ${conn.host}:${conn.port}`);
+  console.log(`[Backup] Database: ${conn.database}`);
+  console.log(`[Backup] User:     ${conn.user}`);
 
-  // Password goes into env — NEVER into command line args
-  const pgEnv: NodeJS.ProcessEnv = {
-    ...process.env,
-    PGPASSWORD: conn.password,
-  };
+  // Password via env var only — NEVER in command-line args
+  const pgEnv: NodeJS.ProcessEnv = { ...process.env, PGPASSWORD: conn.password };
 
-  // ── 2. Detect server version & find pg_dump ──
-  console.log("[BACKUP] Detectando versão do servidor...");
+  // ── 2. Detect server version & find matching pg_dump ──
+  console.log("[Backup] Detecting server version...");
   const serverMajor = getServerMajorVersion(conn, pgEnv);
   if (serverMajor) {
-    console.log(`[BACKUP] Versão do servidor: PostgreSQL ${serverMajor}`);
+    console.log(`[Backup] Server version: PostgreSQL ${serverMajor}`);
   } else {
-    console.log("[BACKUP] Não foi possível detectar a versão do servidor — usando pg_dump padrão.");
+    console.log("[Backup] Could not detect server version — using default pg_dump.");
   }
 
   const pgDumpBin = serverMajor ? findPgDump(serverMajor) : "pg_dump";
-
-  // Verify the pg_dump binary version
   const versionCheck = spawnSync(pgDumpBin, ["--version"], {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf-8",
   });
-  const pgDumpVersion = (versionCheck.stdout || "").trim();
-  console.log(`[BACKUP] pg_dump: ${pgDumpVersion}`);
+  console.log(`[Backup] pg_dump binary: ${(versionCheck.stdout || "").trim()}`);
 
-  // ── 3. Prepare backup directory ──────────
-  const backupDir = resolve(process.cwd(), "backups");
-  if (!existsSync(backupDir)) {
-    mkdirSync(backupDir, { recursive: true });
-    console.log(`[BACKUP] Pasta criada: ${backupDir}`);
+  // ── 3. Ensure backup directory exists ────
+  if (!existsSync(BACKUP_DIR)) {
+    mkdirSync(BACKUP_DIR, { recursive: true });
+    console.log(`[Backup] Created directory: ${BACKUP_DIR}`);
   }
 
-  // ── 4. Build unique filename ──────────────
+  // ── 4. Build unique timestamped filename ──
   const timestamp = formatTimestamp();
-  const sqlFile = resolve(backupDir, `backup-${timestamp}.sql`);
+  const sqlFile = resolve(BACKUP_DIR, `backup-${timestamp}.sql`);
   const gzFile = `${sqlFile}.gz`;
 
   if (existsSync(gzFile)) {
-    console.error(`[BACKUP] ERRO: Arquivo já existe: ${gzFile}`);
-    console.error("         Aguarde 1 minuto ou remova o arquivo manualmente.");
-    process.exit(1);
+    throw new Error(
+      `File already exists: ${gzFile}\nWait 1 minute or remove it manually.`
+    );
   }
 
-  console.log(`[BACKUP] Destino: ${gzFile}`);
+  console.log(`[Backup] Target file: ${gzFile}`);
 
   // ── 5. Run pg_dump ────────────────────────
   const pgDumpArgs = [
@@ -222,7 +211,7 @@ async function runBackup(): Promise<void> {
     "--file", sqlFile,
   ];
 
-  console.log("[BACKUP] Executando pg_dump...");
+  console.log("[Backup] Running pg_dump...");
 
   const dumpResult = spawnSync(pgDumpBin, pgDumpArgs, {
     env: pgEnv,
@@ -233,24 +222,21 @@ async function runBackup(): Promise<void> {
   if (dumpResult.status !== 0) {
     const errOutput = (dumpResult.stderr || "").trim();
     const safeErr = sanitizeOutput(errOutput, conn.password);
-    console.error("[BACKUP] FALHA no pg_dump:");
-    console.error(safeErr || "(sem saída de erro)");
     if (existsSync(sqlFile)) {
       try { execSync(`rm -f "${sqlFile}"`); } catch {}
     }
-    process.exit(1);
+    throw new Error(`pg_dump failed:\n${safeErr || "(no error output)"}`);
   }
 
   if (!existsSync(sqlFile)) {
-    console.error("[BACKUP] ERRO: pg_dump concluiu mas o arquivo SQL não foi criado.");
-    process.exit(1);
+    throw new Error("pg_dump exited successfully but the SQL file was not created.");
   }
 
   const sqlStats = statSync(sqlFile);
-  console.log(`[BACKUP] SQL gerado: ${formatBytes(sqlStats.size)}`);
+  console.log(`[Backup] SQL dump size: ${formatBytes(sqlStats.size)}`);
 
   // ── 6. Compress with gzip ─────────────────
-  console.log("[BACKUP] Compactando com gzip...");
+  console.log("[Backup] Compressing with gzip...");
 
   const gzResult = spawnSync("gzip", ["-9", sqlFile], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -258,15 +244,11 @@ async function runBackup(): Promise<void> {
   });
 
   if (gzResult.status !== 0) {
-    console.error("[BACKUP] ERRO na compactação com gzip:");
-    console.error((gzResult.stderr || "").trim());
-    process.exit(1);
+    throw new Error(`gzip failed:\n${(gzResult.stderr || "").trim()}`);
   }
 
-  // gzip replaces sqlFile with sqlFile.gz automatically
   if (!existsSync(gzFile)) {
-    console.error("[BACKUP] ERRO: gzip concluiu mas o arquivo .gz não foi encontrado.");
-    process.exit(1);
+    throw new Error("gzip exited successfully but the .gz file was not found.");
   }
 
   // ── 7. Report success ─────────────────────
@@ -274,14 +256,27 @@ async function runBackup(): Promise<void> {
   const sizeFmt = formatBytes(stats.size);
 
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`[BACKUP] ✓ Backup concluído com sucesso!`);
-  console.log(`[BACKUP] Arquivo: ${gzFile}`);
-  console.log(`[BACKUP] Tamanho: ${sizeFmt}`);
-  console.log(`[BACKUP] Horário: ${new Date().toISOString()}`);
+  console.log(`[Backup] Backup created: ${gzFile}`);
+  console.log(`[Backup] Compressed size: ${sizeFmt}`);
+  console.log(`[Backup] Completed at: ${new Date().toISOString()}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+  return gzFile;
 }
 
-runBackup().catch((err) => {
-  console.error("[BACKUP] ERRO inesperado:", err);
-  process.exit(1);
-});
+// ── CLI entry point ────────────────────────────────────────────────────────
+// Only executes when the file is run directly (not when imported as a module).
+
+const isDirectRun = process.argv[1] && (
+  process.argv[1].endsWith("backupDatabase.ts") ||
+  process.argv[1].endsWith("backupDatabase.js")
+);
+
+if (isDirectRun) {
+  runBackup().then(() => {
+    process.exit(0);
+  }).catch((err) => {
+    console.error("[Backup] FATAL ERROR:", err.message || err);
+    process.exit(1);
+  });
+}

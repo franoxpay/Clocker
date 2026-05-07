@@ -1,0 +1,117 @@
+Automatize o sistema de backup do banco de dados.
+
+Objetivo:
+O backup deve acontecer automaticamente sem precisar rodar comando manual.
+Também deve apagar backups antigos automaticamente para evitar crescimento infinito de armazenamento.
+
+Faça exatamente isto:
+
+1. Reutilize o script já existente:
+server/scripts/backupDatabase.ts
+
+Não reescrever do zero.
+
+2. Criar um agendador automático simples.
+
+Pode ser:
+- node-cron
+OU
+- setInterval controlado
+OU
+- scheduler interno simples
+
+Escolha a solução mais simples e estável.
+
+3. O backup deve rodar automaticamente 1 vez por dia.
+
+Horário recomendado:
+03:00 da manhã UTC
+
+Se existir timezone configurado no app, respeitar.
+
+4. O sistema deve:
+- iniciar junto com o servidor;
+- logar que o agendador iniciou;
+- logar próximo horário do backup;
+- logar quando backup começar;
+- logar sucesso;
+- logar falha.
+
+5. O backup automático deve reutilizar exatamente a mesma lógica do backup manual.
+
+Não duplicar código.
+
+6. Implementar retenção automática.
+
+Manter apenas os 5 backups mais recentes.
+
+Todos os mais antigos devem ser apagados automaticamente.
+
+7. A limpeza deve acontecer:
+- após backup novo ser criado;
+- de forma segura;
+- sem apagar os backups recentes.
+
+8. Nunca apagar:
+- o backup recém criado;
+- os 5 backups mais novos.
+
+9. Adicionar logs claros:
+
+Exemplo:
+[Backup] Starting scheduled backup...
+[Backup] Backup created: backup-2026-05-07-03-00.sql.gz
+[Backup] Removed old backup: backup-2026-05-01.sql.gz
+[Backup] Retained backups: 5
+
+10. Se backup falhar:
+- não derrubar o servidor;
+- logar erro completo;
+- continuar funcionamento normal do SaaS.
+
+11. Não alterar:
+- frontend;
+- Stripe;
+- Redis;
+- cloaker;
+- analytics;
+- rotas.
+
+12. Criar proteção para:
+- não executar dois backups ao mesmo tempo;
+- evitar corrida caso servidor reinicie durante backup.
+
+13. Se a pasta backups/ não existir:
+- criar automaticamente.
+
+14. Adicionar configuração simples opcional:
+Exemplo:
+BACKUP_RETENTION_COUNT=5
+BACKUP_SCHEDULE="0 3 * * *"
+
+Mas manter defaults funcionando sem env.
+
+15. Testar:
+- execução manual;
+- execução automática;
+- retenção funcionando;
+- deleção de backups antigos;
+- restart do servidor;
+- falha proposital no pg_dump.
+
+Critérios de aceite:
+- backup automático roda diariamente;
+- backups antigos são removidos;
+- apenas 5 mais recentes permanecem;
+- servidor não trava se backup falhar;
+- logs claros;
+- sem duplicação de código;
+- backup manual continua funcionando.
+
+No final me entregue:
+- arquivos alterados;
+- como o scheduler funciona;
+- horário configurado;
+- política de retenção;
+- exemplos de logs;
+- riscos restantes.

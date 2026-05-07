@@ -11,6 +11,7 @@ import { storage } from "./storage";
 import { startDomainMonitor } from "./domainMonitor";
 import { startSubscriptionReminder } from "./subscriptionReminder";
 import { getRedisClient } from "./redis";
+import { startBackupScheduler } from "./scripts/backupScheduler";
 
 const app = express();
 app.set('trust proxy', true);
@@ -464,6 +465,7 @@ async function reconcileStaleSubscriptions() {
   setupWebSocket(httpServer);
   startDomainMonitor();
   startSubscriptionReminder();
+  startBackupScheduler();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
