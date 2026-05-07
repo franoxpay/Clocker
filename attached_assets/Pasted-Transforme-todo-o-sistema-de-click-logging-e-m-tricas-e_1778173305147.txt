@@ -1,0 +1,147 @@
+Transforme todo o sistema de click logging e métricas em processamento assíncrono usando fila.
+
+Objetivo:
+O redirect/cloaking não deve mais esperar inserts de analytics, logs ou agregações no banco antes de responder.
+
+Hoje o sistema faz inserts síncronos durante o redirect.
+Isso precisa sair do request principal.
+
+Faça exatamente isto:
+
+1. Identifique tudo que hoje acontece durante o request de redirect:
+- inserts em click_logs;
+- updates de métricas;
+- analytics;
+- daily_click_metrics;
+- logs;
+- telemetria;
+- qualquer processamento não essencial para decidir black/white.
+
+2. NÃO alterar a lógica de decisão do cloaker.
+A decisão black/white deve continuar igual.
+
+3. O request de redirect deve:
+- carregar apenas o necessário para decidir;
+- responder o redirect o mais rápido possível;
+- enviar o restante para fila assíncrona.
+
+4. Instale e configure BullMQ usando Redis já existente.
+
+5. Criar estrutura organizada:
+
+Exemplo:
+- server/queues/
+- server/workers/
+- server/jobs/
+
+Não deixar lógica espalhada no routes.ts.
+
+6. Criar fila de click tracking.
+
+Exemplo:
+clickTrackingQueue
+
+7. Quando ocorrer redirect:
+Em vez de inserir direto no banco:
+- criar job na fila;
+- retornar redirect imediatamente.
+
+8. O job deve conter apenas os dados necessários:
+- offerId
+- userId
+- ip
+- userAgent
+- country
+- platform
+- device
+- redirectType
+- timestamp
+- telemetry mínima
+
+Não colocar payload gigante desnecessário.
+
+9. Criar worker separado para processar:
+- click_logs;
+- daily_click_metrics;
+- analytics agregados.
+
+10. Garantir retry automático em falha.
+Configurar:
+- attempts;
+- backoff exponencial;
+- logs claros.
+
+11. Se PostgreSQL cair:
+- jobs devem permanecer na fila;
+- nada deve ser perdido imediatamente.
+
+12. Se Redis cair:
+- redirect NÃO pode quebrar;
+- usar fallback seguro;
+- logar claramente;
+- continuar respondendo redirect.
+
+13. Não fazer await desnecessário antes do redirect.
+
+14. Medir tempo do redirect antes e depois.
+Adicionar logs temporários de performance:
+
+Exemplo:
+[Cloak] Redirect completed in 24ms
+[Cloak] Queue job added in 2ms
+
+15. Adicionar limpeza automática de jobs antigos da fila.
+
+16. Criar limite de concorrência do worker para evitar overload no banco.
+
+17. Garantir que múltiplos workers possam rodar no futuro sem conflito.
+
+18. Não alterar frontend agora.
+
+19. Não alterar Stripe agora.
+
+20. Não alterar challenge logic agora.
+
+21. Não alterar regras anti-bot agora.
+
+22. Organizar o código:
+- remover inserts síncronos do routes.ts;
+- mover lógica pesada para workers;
+- deixar o redirect mais limpo possível.
+
+23. Testar manualmente:
+- redirect normal;
+- alto volume de redirects;
+- PostgreSQL lento;
+- Redis lento;
+- Redis offline;
+- restart do worker;
+- restart do servidor;
+- jobs duplicados;
+- falha temporária no banco.
+
+24. Garantir que:
+- redirect continua funcionando;
+- analytics continuam sendo registrados;
+- métricas não somem;
+- fila reprocessa falhas;
+- usuário não percebe atraso.
+
+Critérios de aceite:
+- Redirect responde sem esperar inserts no banco.
+- click_logs são processados pela fila.
+- daily_click_metrics são assíncronas.
+- Worker separado funcionando.
+- Retry automático funcionando.
+- Código organizado fora do routes.ts.
+- Latência do redirect reduzida.
+- Sistema preparado para escala horizontal futura.
+
+No final me entregue:
+- arquivos criados;
+- arquivos alterados;
+- o que saiu do request síncrono;
+- como os jobs estão estruturados;
+- logs de performance antes/depois;
+- riscos restantes;
+- pontos que ainda precisam virar assíncronos futuramente.
