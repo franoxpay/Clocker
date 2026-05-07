@@ -1,0 +1,97 @@
+Corrija o bug de login retornando "Credenciais inválidas" mesmo com email e senha corretos.
+
+Faça exatamente isto:
+
+1. Investigue o fluxo completo de login:
+- frontend form de login;
+- request enviado;
+- endpoint backend de login;
+- busca do usuário no banco;
+- comparação de senha com bcrypt;
+- criação de sessão;
+- cookie/session;
+- resposta final.
+
+2. Verifique se o login está consultando o banco correto.
+Atenção especial:
+- o backup aponta para EasyPanel;
+- o app pode estar usando banco Replit/helium;
+- o usuário pode existir no banco EasyPanel, mas o login estar consultando outro banco.
+
+3. Adicione logs temporários seguros no backend:
+- email recebido;
+- banco/host usado sem senha;
+- usuário encontrado: sim/não;
+- campo password existe: sim/não;
+- bcrypt compare retornou true/false;
+- sessão criada: sim/não.
+
+Não logar senha.
+Não logar hash completo.
+
+4. Verifique se o email está sendo normalizado:
+- trim;
+- lowercase.
+
+5. Verifique se no cadastro o email também é salvo normalizado.
+
+6. Verifique se a senha está chegando corretamente do frontend.
+Não logar a senha, apenas:
+- tamanho da senha;
+- tipo string;
+- se está vazia ou não.
+
+7. Verifique se o campo usado para senha no banco é o correto.
+Exemplos possíveis:
+- password
+- passwordHash
+- hashedPassword.
+
+8. Verifique se o bcrypt.compare está usando:
+- senha digitada;
+- hash salvo no banco.
+
+9. Verifique se o usuário está suspenso/inativo.
+Se estiver, retornar erro correto, não "credenciais inválidas".
+
+10. Verifique se existe conflito entre login antigo e novo:
+- rota duplicada;
+- middleware interceptando;
+- banco diferente;
+- session store diferente.
+
+11. Corrija a causa real encontrada.
+
+12. Não alterar Stripe.
+13. Não alterar backup.
+14. Não alterar cloaker.
+15. Não alterar frontend inteiro.
+16. Não criar novo sistema de auth.
+17. Não resetar senha de usuários sem necessidade.
+
+18. Depois de corrigir, remover logs sensíveis temporários.
+Pode manter logs seguros e úteis.
+
+19. Testar:
+- login com usuário existente;
+- login com senha errada;
+- login com email em maiúsculo;
+- login com espaços antes/depois;
+- usuário inexistente;
+- usuário suspenso, se existir;
+- sessão persistindo após refresh.
+
+Critérios de aceite:
+- login funciona com credenciais corretas;
+- erro de senha errada continua funcionando;
+- app usa o banco correto;
+- sessão é criada corretamente;
+- cookie é salvo corretamente;
+- nenhum dado sensível aparece nos logs.
+
+No final me entregue:
+- causa real do bug;
+- arquivos alterados;
+- banco usado pelo login;
+- como testou;
+- riscos restantes.

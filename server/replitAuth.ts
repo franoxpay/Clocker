@@ -5,15 +5,22 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { sendWelcomeEmail } from "./email";
 
+function getSessionDatabaseUrl(): string {
+  // Mirror the same priority as server/db.ts so the session store
+  // always uses the same database as the application.
+  if (process.env.EXTERNAL_DATABASE_URL) return process.env.EXTERNAL_DATABASE_URL;
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
+  if (process.env.PGHOST && process.env.PGDATABASE && process.env.PGUSER) {
+    return `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD || ""}@${process.env.PGHOST}:${process.env.PGPORT || "5432"}/${process.env.PGDATABASE}`;
+  }
+  throw new Error("No database URL available for session store.");
+}
+
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
   const pgStore = connectPg(session);
-  const databaseUrl = process.env.EXTERNAL_DATABASE_URL ||
-    (process.env.PGHOST && process.env.PGDATABASE && process.env.PGUSER
-      ? `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD || ""}@${process.env.PGHOST}:${process.env.PGPORT || "5432"}/${process.env.PGDATABASE}`
-      : process.env.DATABASE_URL);
   const sessionStore = new pgStore({
-    conString: databaseUrl,
+    conString: getSessionDatabaseUrl(),
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
@@ -44,11 +51,14 @@ export async function setupAuth(app: Express) {
 
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const { email, password, firstName, lastName } = req.body;
+      const { email: rawEmail, password, firstName, lastName } = req.body;
 
-      if (!email || !password) {
+      if (!rawEmail || !password) {
         return res.status(400).json({ message: "Email e senha são obrigatórios" });
       }
+
+      // Normalize email: trim whitespace + lowercase
+      const email = rawEmail.trim().toLowerCase();
 
       if (password.length < 6) {
         return res.status(400).json({ message: "Senha deve ter pelo menos 6 caracteres" });
@@ -76,7 +86,7 @@ export async function setupAuth(app: Express) {
       }
 
       req.session.userId = user.id;
-      
+
       const { password: _, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
@@ -87,26 +97,42 @@ export async function setupAuth(app: Express) {
 
   app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { email: rawEmail, password } = req.body;
 
-      if (!email || !password) {
+      if (!rawEmail || !password) {
         return res.status(400).json({ message: "Email e senha são obrigatórios" });
       }
 
+      // Normalize email: trim whitespace + lowercase
+      const email = rawEmail.trim().toLowerCase();
+
       const user = await storage.getUserByEmail(email);
+
       if (!user || !user.password) {
         return res.status(401).json({ message: "Credenciais inválidas" });
       }
 
+      // Check if account is suspended
+      if (user.suspendedAt) {
+        return res.status(403).json({ message: "Conta suspensa. Entre em contato com o suporte." });
+      }
+
       const isValidPassword = await bcrypt.compare(password, user.password);
+
       if (!isValidPassword) {
         return res.status(401).json({ message: "Credenciais inválidas" });
       }
 
       req.session.userId = user.id;
-      
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+
+      req.session.save((err) => {
+        if (err) {
+          console.error("[Auth] Session save error:", err);
+          return res.status(500).json({ message: "Erro ao criar sessão" });
+        }
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error) {
       console.error("Error logging in:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
@@ -151,7 +177,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 
 export const isAdmin: RequestHandler = async (req, res, next) => {
   const userId = req.session.userId;
-  
+
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -161,10 +187,10 @@ export const isAdmin: RequestHandler = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    
+
     const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
     const isAdminUser = adminEmail && user.email?.toLowerCase() === adminEmail;
-    
+
     if (!isAdminUser) {
       return res.status(403).json({ message: "Forbidden" });
     }
