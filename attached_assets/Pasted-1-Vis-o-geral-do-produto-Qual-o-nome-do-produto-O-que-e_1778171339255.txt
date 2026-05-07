@@ -1,0 +1,149 @@
+1. Visão geral do produto
+Qual é o nome do produto?
+O que ele faz?
+Qual problema resolve?
+Como funciona na prática?
+Qual foi a motivação para criar isso?
+Em que estágio está? (ideia, MVP, validado, faturando, escala, etc.)
+2. Público-alvo
+Quem usa o sistema?
+Existe mais de um tipo de usuário?
+O foco é B2B, B2C ou ambos?
+Qual nicho/mercado atende?
+Qual é o perfil ideal do cliente?
+Quem NÃO é o cliente ideal?
+Como os usuários descobrem o produto hoje?
+3. Estrutura do sistema
+Frontend
+Quais tecnologias usa?
+Existe dashboard?
+Existe painel admin?
+Tem responsividade mobile?
+Tem app mobile?
+Como é a UX atual?
+Backend
+Quais tecnologias usa?
+Como funciona a arquitetura?
+Usa APIs externas?
+Usa microserviços ou monolito?
+Tem filas/processamento assíncrono?
+Como funciona autenticação?
+Como funciona autorização/permissões?
+Existe sistema multi-tenant?
+Banco de dados
+Qual banco usa?
+Como os dados estão organizados?
+Existe cache?
+Existe sistema de backup?
+Infraestrutura
+Onde está hospedado?
+Usa AWS/Vercel/DigitalOcean/etc?
+Como funciona deploy?
+Existe CI/CD?
+Existe monitoramento/logs?
+4. Funcionalidades atuais
+
+Liste todas as funcionalidades já existentes.
+
+Exemplos:
+
+login
+onboarding
+dashboard
+relatórios
+automações
+notificações
+IA
+integrações
+exportação
+sistema admin
+analytics
+permissões
+webhooks
+API pública
+billing
+afiliados
+etc.
+5. Monetização
+Como ganha dinheiro?
+Existem planos?
+Quais são os preços?
+Existe free trial?
+Existe plano grátis?
+Como funciona cobrança?
+Usa Stripe, Mercado Pago, etc?
+Existem limites por plano?
+Como funciona upgrade/downgrade?
+Existe retenção/cancelamento automatizado?
+6. Métricas e operação
+Quantos usuários existem hoje?
+Quantos ativos?
+Quantos pagantes?
+Qual MRR aproximado?
+Existe churn?
+Qual CAC aproximado?
+Existe tracking de métricas?
+Quais KPIs você acompanha?
+Existe analytics interno?
+7. Segurança e administração
+Existe painel admin?
+Existe auditoria/logs?
+Existe RBAC/permissões?
+Existe proteção contra abuso?
+Existe rate limit?
+Existe criptografia?
+Existe compliance/LGPD?
+Existe sistema antifraude?
+Como funciona recuperação de conta?
+8. Problemas atuais
+Qual o maior gargalo hoje?
+O que mais quebra?
+O que os usuários reclamam?
+O que está lento?
+O que está difícil de escalar?
+O que você sente que está mal feito?
+O que está impedindo crescimento?
+Existe dívida técnica?
+9. Objetivos do produto
+Onde você quer chegar com esse SaaS?
+Quer vender a empresa?
+Quer bootstrap?
+Quer escalar?
+Quer levantar investimento?
+Quer virar referência em um nicho?
+Qual meta de receita?
+Qual meta de usuários?
+Qual seria o cenário ideal em 1 ano?
+10. Roadmap atual
+O que você pretende implementar?
+O que já tentou implementar e falhou?
+Quais ideias você tem?
+O que está em desenvolvimento agora?
+11. Concorrência
+Quem são os concorrentes?
+O que eles fazem melhor?
+O que você faz melhor?
+Qual diferencial real do produto?
+Existe algum produto que você admira?
+12. Time e operação
+Quantas pessoas trabalham no projeto?
+Quem faz o quê?
+Você programa?
+Existe suporte?
+Existe equipe comercial?
+Existe marketing?
+Como funciona o atendimento ao cliente?
+13. IA (se existir)
+Onde a IA é usada?
+Qual modelo usa?
+Usa OpenAI/Claude/local?
+Como controla custo?
+Existe RAG?
+Existe memória/contexto?
+Existe fine-tuning?
+Como funciona o pipeline da IA?
+14. Perguntas abertas
+O que você acha que eu PRECISO entender sobre o projeto?
+O que quase ninguém entende sobre seu SaaS?
+Qual é a visão de longo prazo?
+Se pudesse resolver apenas 1 problema hoje, qual seria?
