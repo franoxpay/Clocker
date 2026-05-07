@@ -1,0 +1,93 @@
+Auditoria completa de billing/subscription
+1. Planos atuais
+Quais planos existem hoje?
+Qual preço de cada um?
+Qual limite de cada plano?
+O que exatamente muda entre eles?
+Existe mensal e anual?
+Existe trial?
+Existe plano free?
+2. Plays extras
+
+Explique EXATAMENTE como funciona hoje.
+
+O que é considerado “play”?
+Como é contado?
+Onde é contado?
+É por clique?
+É por redirect?
+É por visitante único?
+Reseta mensalmente?
+Existe limite hard?
+O sistema bloqueia ao atingir limite?
+Existe cobrança automática excedente?
+Existe compra manual de pacote?
+Existe overage billing?
+Como isso está salvo no banco?
+3. Cobrança excedente
+Hoje o usuário consegue passar do limite?
+O que acontece quando passa?
+O sistema bloqueia?
+Continua funcionando?
+Só mostra aviso?
+Existe grace period?
+Existe cálculo proporcional?
+Existe cobrança automática no Stripe?
+Existe risco de usuário usar muito sem pagar?
+4. Upgrade/downgrade
+O upgrade é imediato?
+O downgrade espera renovação?
+O Stripe está sincronizado corretamente?
+O banco atualiza imediatamente?
+O usuário perde acesso instantaneamente?
+Existe troca proporcional de valor?
+Como estão sendo tratados:
+upgrade
+downgrade
+cancelamento
+reativação
+falha de pagamento
+5. Stripe
+Está usando subscriptions normais?
+Está usando metered billing?
+Está usando usage records?
+Está usando products/prices corretamente?
+Existe customer portal?
+Existe webhook de invoice?
+Existe retry automático?
+Existe dunning?
+Existe webhook idempotente?
+6. Limites
+
+Hoje quais limites existem?
+
+offers
+domains
+clicks
+users
+shared domains
+API
+anything else
+
+Como esses limites são aplicados?
+
+middleware?
+query?
+frontend apenas?
+backend também?
+7. Falhas possíveis
+
+Quero saber:
+
+Já aconteceu usuário pagar e não liberar plano?
+Já aconteceu usuário cancelado continuar ativo?
+Já aconteceu cobrança duplicada?
+Já aconteceu limite não funcionar?
+Já aconteceu Stripe e banco divergirem?
+Já aconteceu webhook falhar?
+8. Admin
+Você consegue alterar assinatura manualmente?
+Existe override admin?
+Existe grant manual?
+Existe refund?
+Existe ajuste manual de plays?
