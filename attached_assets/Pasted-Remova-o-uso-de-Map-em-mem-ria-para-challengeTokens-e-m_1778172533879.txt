@@ -1,0 +1,87 @@
+Remova o uso de Map em memória para challengeTokens e mova os tokens de desafio para Redis.
+
+Faça exatamente isto:
+
+1. Procure no código por:
+- challengeTokens
+- new Map
+- token de challenge
+- nonce
+- expiração de 30s
+- validação do desafio
+- geração do token
+- conclusão do desafio
+
+2. Identifique onde o token é criado, salvo, lido, validado e removido.
+
+3. Substitua o armazenamento em memória por Redis.
+
+4. Cada token deve ser salvo no Redis com TTL automático.
+Use TTL de 30 segundos, mantendo o comportamento atual.
+
+5. O valor salvo no Redis deve conter os dados necessários para validar o challenge.
+Não salve apenas “true” se o sistema precisa de mais dados depois.
+
+6. Ao validar um token:
+- buscar no Redis;
+- se não existir, tratar como expirado/inválido;
+- se existir, validar os dados;
+- depois de usado, remover do Redis para evitar replay.
+
+7. O token precisa ser one-time-use.
+Depois que passou uma vez, não pode ser reutilizado.
+
+8. Se Redis estiver indisponível:
+- não quebrar o servidor inteiro;
+- logar erro claro;
+- usar fallback seguro.
+Fallback seguro significa mandar para white page, não liberar acesso.
+
+9. Não usar fallback em memória em produção.
+Se quiser fallback em memória apenas para desenvolvimento local, deixe explícito e com log de alerta.
+
+10. Criar funções utilitárias claras, por exemplo:
+- createChallengeToken()
+- getChallengeToken()
+- consumeChallengeToken()
+- deleteChallengeToken()
+
+11. Não espalhar chamadas Redis diretamente no routes.ts se puder evitar.
+Coloque a lógica em um arquivo separado, por exemplo:
+server/challengeStore.ts
+
+12. Adicionar logs claros:
+- token criado;
+- token expirado;
+- token consumido;
+- token inválido;
+- erro ao acessar Redis.
+
+13. Cuidado para não logar fingerprint completo ou dados sensíveis.
+
+14. Testar manualmente:
+- usuário real passando no challenge;
+- token expirado após 30s;
+- tentativa de reutilizar o mesmo token;
+- restart do servidor no meio do fluxo;
+- múltiplas instâncias simuladas, se possível;
+- Redis fora do ar.
+
+15. Não alterar Stripe, billing, frontend, domínio ou analytics agora.
+O foco é somente remover challengeTokens da memória.
+
+Critérios de aceite:
+- Não existe mais Map em memória para challenge tokens em produção.
+- Tokens ficam no Redis com TTL.
+- Token usado é removido.
+- Token expirado manda para white page.
+- Redis fora do ar não libera black page.
+- Código fica isolado em arquivo próprio.
+- O comportamento visual do usuário não muda.
+
+No final, me entregue:
+- arquivos alterados;
+- onde o Map foi removido;
+- como os tokens estão sendo salvos no Redis;
+- como testar;
+- riscos restantes.

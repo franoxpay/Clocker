@@ -12,94 +12,28 @@ import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInf
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { z } from "zod";
 import { startOfLocalDay, endOfLocalDay } from "./timezone";
+import {
+  type ChallengeData,
+  type TikTok2BaitData,
+  generateToken as generateChallengeToken,
+  createChallengeToken,
+  getChallengeToken,
+  updateChallengeToken,
+  consumeChallengeToken,
+  createTikTok2Token,
+  getTikTok2Token,
+  consumeTikTok2Token,
+  CHALLENGE_TTL_MS,
+  TIKTOK2_TTL_MS,
+} from "./challengeStore";
 
 // ==========================================
 // ANTI-BOT CHALLENGE SYSTEM
 // ==========================================
 
-interface ChallengeData {
-  offerId: number;
-  slug: string;
-  targetUrl: string;
-  redirectType: 'black' | 'white';
-  ip: string;
-  userAgent: string;
-  createdAt: number;
-  queryParams: Record<string, any>;
-  honeypotTriggered: boolean;
-  // Server-side verification data
-  verifiedAt: number | null;
-  verifiedScore: number | null;
-  verificationNonce: string | null;
-  // Additional data for logging after challenge
-  userId: string;
-  country: string;
-  device: 'smartphone' | 'tablet' | 'desktop';
-  requestUrl: string;
-  platform: string;
-  referer: string;
-  ttclid: string | null;
-  fbcl: string | null;
-  cname: string | null;
-}
-
-// Store challenge tokens (in production, use Redis for distributed systems)
-const challengeTokens = new Map<string, ChallengeData>();
-const CHALLENGE_EXPIRY_MS = 30000; // 30 seconds to complete challenge
+const CHALLENGE_EXPIRY_MS = CHALLENGE_TTL_MS;
+const TIKTOK2_BAIT_EXPIRY_MS = TIKTOK2_TTL_MS;
 const MIN_HUMAN_TIME_MS = 800; // Minimum 800ms for human interaction
-
-// Clean up expired tokens periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, data] of challengeTokens.entries()) {
-    if (now - data.createdAt > CHALLENGE_EXPIRY_MS * 2) {
-      challengeTokens.delete(token);
-    }
-  }
-}, 60000);
-
-function generateChallengeToken(): string {
-  return randomBytes(32).toString('hex');
-}
-
-// ==========================================
-// TIKTOK 2 BAIT PAGE SYSTEM
-// ==========================================
-
-interface TikTok2BaitData {
-  offerId: number;
-  slug: string;
-  blackUrl: string;
-  whiteUrl: string;
-  ip: string;
-  userAgent: string;
-  createdAt: number;
-  queryParams: Record<string, any>;
-  userId: string;
-  country: string;
-  device: 'smartphone' | 'tablet' | 'desktop';
-  requestUrl: string;
-  referer: string;
-  ttclid: string | null;
-  adname: string | null;
-  adset: string | null;
-  cname: string | null;
-  xcode: string | null;
-  domainId: number | null;
-}
-
-const tiktok2BaitTokens = new Map<string, TikTok2BaitData>();
-const TIKTOK2_BAIT_EXPIRY_MS = 15000; // 15 seconds to complete
-
-// Clean up expired TikTok2 bait tokens
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, data] of tiktok2BaitTokens.entries()) {
-    if (now - data.createdAt > TIKTOK2_BAIT_EXPIRY_MS * 2) {
-      tiktok2BaitTokens.delete(token);
-    }
-  }
-}, 60000);
 
 function sanitizeUrl(url: string): string {
   try {
@@ -1229,32 +1163,32 @@ export async function registerRoutes(
   // ==========================================
   
   // Honeypot routes - if a bot accesses these, mark the token as compromised
-  app.get("/api/honeypot/:token", (req: Request, res: Response) => {
+  app.get("/api/honeypot/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
-    const challenge = challengeTokens.get(token);
+    const challenge = await getChallengeToken(token);
     if (challenge) {
-      challenge.honeypotTriggered = true;
+      await updateChallengeToken(token, { honeypotTriggered: true });
       console.log(`[AntiBot] HONEYPOT TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
     }
     // Return a fake success to not alert the bot
     res.status(200).send('OK');
   });
   
-  app.get("/api/trap/:token", (req: Request, res: Response) => {
+  app.get("/api/trap/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
-    const challenge = challengeTokens.get(token);
+    const challenge = await getChallengeToken(token);
     if (challenge) {
-      challenge.honeypotTriggered = true;
+      await updateChallengeToken(token, { honeypotTriggered: true });
       console.log(`[AntiBot] TRAP TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
     }
     res.status(200).send('OK');
   });
   
-  app.all("/api/submit/:token", (req: Request, res: Response) => {
+  app.all("/api/submit/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
-    const challenge = challengeTokens.get(token);
+    const challenge = await getChallengeToken(token);
     if (challenge) {
-      challenge.honeypotTriggered = true;
+      await updateChallengeToken(token, { honeypotTriggered: true });
       console.log(`[AntiBot] FORM SUBMIT TRIGGERED - Token: ${token.substring(0, 16)}... IP: ${challenge.ip}`);
     }
     res.status(200).send('OK');
@@ -1272,7 +1206,7 @@ export async function registerRoutes(
       return res.send(gif);
     }
     
-    const baitData = tiktok2BaitTokens.get(token);
+    const baitData = await consumeTikTok2Token(token);
     if (baitData) {
       const elapsed = Date.now() - baitData.createdAt;
       
@@ -1303,7 +1237,6 @@ export async function registerRoutes(
       });
       
       await storage.incrementOfferClicks(baitData.offerId, false);
-      tiktok2BaitTokens.delete(token);
     }
     
     // Return 1x1 transparent GIF
@@ -1352,7 +1285,7 @@ export async function registerRoutes(
       const decoded = Buffer.from(decodeURIComponent(encodedMetrics), 'base64').toString('utf-8');
       const data = JSON.parse(decoded);
       
-      const baitData = tiktok2BaitTokens.get(token);
+      const baitData = await getTikTok2Token(token);
       const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0] || req.socket.remoteAddress || 'unknown';
       
       console.log(`[TikTok2 Telemetry] Token: ${token.substring(0, 16)}... | Dest: ${data.d} | Time: ${data.t}ms | Touch: ${data.tc} | Mouse: ${data.mo} | Click: ${data.cl}`);
@@ -1411,7 +1344,7 @@ export async function registerRoutes(
       return res.send(gif);
     }
     
-    const baitData = tiktok2BaitTokens.get(token);
+    const baitData = await consumeTikTok2Token(token);
     if (baitData) {
       const elapsed = Date.now() - baitData.createdAt;
       
@@ -1442,7 +1375,6 @@ export async function registerRoutes(
       });
       
       await storage.incrementOfferClicks(baitData.offerId, false);
-      tiktok2BaitTokens.delete(token);
     }
     
     // Return 1x1 transparent GIF
@@ -1466,9 +1398,10 @@ export async function registerRoutes(
       return res.status(400).send('Invalid request');
     }
     
-    const baitData = tiktok2BaitTokens.get(token);
+    // Consume the token atomically (one-time use) — reads + deletes from Redis
+    const baitData = await consumeTikTok2Token(token);
     if (!baitData) {
-      console.log(`[TikTok2] Verify - Invalid/expired token: ${token.substring(0, 16)}... (Active tokens: ${tiktok2BaitTokens.size})`);
+      console.log(`[TikTok2] Verify - Invalid/expired token: ${token.substring(0, 16)}...`);
       return res.status(400).send('Session expired. Please try again.');
     }
     
@@ -1502,7 +1435,6 @@ export async function registerRoutes(
         },
       });
       await storage.incrementOfferClicks(baitData.offerId, false);
-      tiktok2BaitTokens.delete(token);
       return res.redirect(302, baitData.whiteUrl);
     }
     
@@ -1532,7 +1464,6 @@ export async function registerRoutes(
         },
       });
       await storage.incrementOfferClicks(baitData.offerId, false);
-      tiktok2BaitTokens.delete(token);
       return res.redirect(302, baitData.whiteUrl);
     }
     
@@ -1563,7 +1494,6 @@ export async function registerRoutes(
     });
     
     await storage.incrementOfferClicks(baitData.offerId, true);
-    tiktok2BaitTokens.delete(token);
     
     // Append UTM parameters to black page URL
     const finalBlackUrl = appendUTMParams(baitData.blackUrl, baitData.queryParams);
@@ -1591,12 +1521,12 @@ export async function registerRoutes(
   
   // Challenge verification route (called by JavaScript)
   // This stores the verification data server-side so it can't be faked
-  app.get("/api/challenge/verify/:token", (req: Request, res: Response) => {
+  app.get("/api/challenge/verify/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
     const score = parseInt(req.query.s as string) || 0;
     const nonce = req.query.r as string || '';
     
-    const challenge = challengeTokens.get(token);
+    const challenge = await getChallengeToken(token);
     if (!challenge) {
       console.log(`[AntiBot] Verify - Invalid/expired token: ${token.substring(0, 16)}...`);
       const gif = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -1606,10 +1536,12 @@ export async function registerRoutes(
     
     // SERVER-SIDE: Store verification data (can only be set once)
     if (challenge.verifiedAt === null) {
-      challenge.verifiedAt = Date.now();
-      challenge.verifiedScore = score;
-      challenge.verificationNonce = nonce;
-      console.log(`[AntiBot] Verify - Token: ${token.substring(0, 16)}... Score: ${score}, Nonce: ${nonce}, Honeypot: ${challenge.honeypotTriggered}`);
+      await updateChallengeToken(token, {
+        verifiedAt: Date.now(),
+        verifiedScore: score,
+        verificationNonce: nonce,
+      });
+      console.log(`[AntiBot] Verify - Token: ${token.substring(0, 16)}... Score: ${score}, Nonce: ${nonce.substring(0, 8)}, Honeypot: ${challenge.honeypotTriggered}`);
     } else {
       // Token already verified - potential replay attack
       console.log(`[AntiBot] Verify - DUPLICATE attempt for token: ${token.substring(0, 16)}...`);
@@ -1626,9 +1558,12 @@ export async function registerRoutes(
   app.get("/api/challenge/complete/:token", async (req: Request, res: Response) => {
     const { token } = req.params;
     
-    const challenge = challengeTokens.get(token);
+    // Consume the token atomically (one-time use) — reads + deletes from Redis.
+    // If Redis is unavailable or token is expired/already used, challenge returns null.
+    // Safe fallback: treat as bot → white page.
+    const challenge = await consumeChallengeToken(token);
     if (!challenge) {
-      console.log(`[AntiBot] Complete - Invalid/expired token: ${token.substring(0, 16)}...`);
+      console.log(`[AntiBot] Complete - Invalid/expired/already-used token: ${token.substring(0, 16)}...`);
       return res.status(400).send('Challenge expired. Please try again.');
     }
     
@@ -1666,7 +1601,7 @@ export async function registerRoutes(
       console.log(`[AntiBot] BOT - Response too fast: ${elapsed}ms (min: ${MIN_HUMAN_TIME_MS}ms)`);
     }
     
-    // 4. Check if token is too old
+    // 4. Check if token is too old (Redis TTL is authoritative; this is an extra safety net)
     if (!isBot && tokenAge > CHALLENGE_EXPIRY_MS) {
       isBot = true;
       botReason = `token_expired:${tokenAge}ms`;
@@ -1681,8 +1616,7 @@ export async function registerRoutes(
       console.log(`[AntiBot] BOT - Score too low: ${score} (min: ${MIN_SCORE})`);
     }
     
-    // Clean up the token
-    challengeTokens.delete(token);
+    // Token already consumed above (one-time use enforced by Redis GET+DEL)
     
     // Log the result
     console.log(`[AntiBot] Challenge result - Token: ${token.substring(0, 16)}... IsBot: ${isBot} Reason: ${botReason || 'passed'} Score: ${score} Elapsed: ${elapsed}ms`);
@@ -6134,7 +6068,7 @@ export async function registerRoutes(
         const baitToken = generateChallengeToken();
         const whiteUrl = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
         
-        tiktok2BaitTokens.set(baitToken, {
+        const baitStored = await createTikTok2Token(baitToken, {
           offerId: offer.id,
           slug,
           blackUrl: targetUrl,
@@ -6155,6 +6089,12 @@ export async function registerRoutes(
           xcode: xcode || null,
           domainId: domain?.id || offer.domainId || null,
         });
+        
+        if (!baitStored) {
+          // Redis unavailable — safe fallback: serve white page immediately
+          console.error(`[Cloak] Cannot store TikTok2 bait token (Redis unavailable) — redirecting to white page`);
+          return res.redirect(302, whiteUrl);
+        }
         
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
@@ -6224,11 +6164,11 @@ export async function registerRoutes(
       // TikTok (not TikTok2) uses a JavaScript challenge page
       // that verifies the visitor is a real human with a real browser
       
-      // Generate challenge token and store challenge data
+      // Generate challenge token and store challenge data in Redis (TTL: 30s)
       const challengeToken = generateChallengeToken();
       const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
       
-      challengeTokens.set(challengeToken, {
+      const challengeStored = await createChallengeToken(challengeToken, {
         offerId: offer.id,
         slug,
         targetUrl,
@@ -6241,7 +6181,6 @@ export async function registerRoutes(
         verifiedAt: null,
         verifiedScore: null,
         verificationNonce: null,
-        // Data for logging after challenge
         userId: offer.userId,
         country,
         device: deviceType,
@@ -6252,6 +6191,13 @@ export async function registerRoutes(
         fbcl: fbcl || null,
         cname: cname || null,
       });
+      
+      if (!challengeStored) {
+        // Redis unavailable — safe fallback: serve white page immediately
+        console.error(`[Cloak] Cannot store challenge token (Redis unavailable) — redirecting to white page`);
+        const safeWhiteUrl = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
+        return res.redirect(302, safeWhiteUrl);
+      }
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
       
@@ -6642,7 +6588,7 @@ export async function registerRoutes(
         const baitToken = generateChallengeToken();
         const whiteUrl = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
         
-        tiktok2BaitTokens.set(baitToken, {
+        const baitStored2 = await createTikTok2Token(baitToken, {
           offerId: offer.id,
           slug,
           blackUrl: targetUrl,
@@ -6663,6 +6609,11 @@ export async function registerRoutes(
           xcode: xcode || null,
           domainId: domain?.id || offer.domainId || null,
         });
+        
+        if (!baitStored2) {
+          console.error(`[Cloak] Cannot store TikTok2 bait token (Redis unavailable) — redirecting to white page`);
+          return res.redirect(302, whiteUrl);
+        }
         
         console.log(`[TikTok2] Serving bait page for ${slug} (${duration}ms) - Token: ${baitToken.substring(0, 16)}...`);
         
@@ -6732,7 +6683,7 @@ export async function registerRoutes(
       const challengeToken = generateChallengeToken();
       const honeypotId = `hp_${randomBytes(4).toString('hex')}`;
       
-      challengeTokens.set(challengeToken, {
+      const challengeStored2 = await createChallengeToken(challengeToken, {
         offerId: offer.id,
         slug,
         targetUrl,
@@ -6745,7 +6696,6 @@ export async function registerRoutes(
         verifiedAt: null,
         verifiedScore: null,
         verificationNonce: null,
-        // Data for logging after challenge
         userId: offer.userId,
         country,
         device: deviceType,
@@ -6756,6 +6706,12 @@ export async function registerRoutes(
         fbcl: fbcl || null,
         cname: cname || null,
       });
+      
+      if (!challengeStored2) {
+        console.error(`[Cloak] Cannot store challenge token (Redis unavailable) — redirecting to white page`);
+        const safeWhiteUrl2 = offer.whitePageUrl.startsWith('http') ? offer.whitePageUrl : `https://${offer.whitePageUrl}`;
+        return res.redirect(302, safeWhiteUrl2);
+      }
       
       console.log(`[Cloak] Serving JavaScript challenge for ${slug} - Token: ${challengeToken.substring(0, 16)}...`);
       
