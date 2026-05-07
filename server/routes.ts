@@ -2604,9 +2604,12 @@ export async function registerRoutes(
       });
 
       res.json({ url: session.url });
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      res.status(500).json({ message: "Internal server error" });
+    } catch (error: any) {
+      console.error("[Stripe] Error creating checkout session (/api/billing/checkout):", error?.message || error);
+      const message = error?.type === 'StripeAuthenticationError'
+        ? "Stripe key invalid or expired. Contact support."
+        : error?.message || "Internal server error";
+      res.status(500).json({ message, code: error?.code || "CHECKOUT_ERROR" });
     }
   });
 
@@ -3312,10 +3315,14 @@ export async function registerRoutes(
       }
 
       const session = await stripe.checkout.sessions.create(sessionConfig);
+      console.log(`[Stripe] Checkout session created: ${session.id} for user ${userId} plan ${plan?.id}`);
       res.json({ url: session.url });
-    } catch (error) {
-      console.error("Error creating checkout session:", error);
-      res.status(500).json({ message: "Internal server error" });
+    } catch (error: any) {
+      console.error("[Stripe] Error creating checkout session (/api/subscription/checkout):", error?.message || error);
+      const message = error?.type === 'StripeAuthenticationError'
+        ? "Stripe key invalid or expired. Contact support."
+        : error?.message || "Internal server error";
+      res.status(500).json({ message, code: error?.code || "CHECKOUT_ERROR" });
     }
   });
 

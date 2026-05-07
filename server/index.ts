@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { isStripeConfigured, getStripeSync, getStripeClient } from "./stripeClient";
+import { isStripeConfigured, getStripeSync, getStripeClient, validateStripeConfig } from "./stripeClient";
 import { WebhookHandlers } from "./webhookHandlers";
 import rateLimit from "express-rate-limit";
 import { setupWebSocket } from "./websocketService";
@@ -22,69 +22,89 @@ declare module "http" {
   }
 }
 
+function getDbUrl(): string {
+  if (process.env.EXTERNAL_DATABASE_URL) return process.env.EXTERNAL_DATABASE_URL;
+  if (process.env.PGHOST && process.env.PGDATABASE && process.env.PGUSER) {
+    const { PGUSER, PGPASSWORD = '', PGHOST, PGPORT = '5432', PGDATABASE } = process.env;
+    return `postgresql://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}`;
+  }
+  return process.env.DATABASE_URL || '';
+}
+
 async function initStripe() {
+  // Validate keys and log status clearly
+  await validateStripeConfig();
+
   const configured = await isStripeConfigured();
   if (!configured) {
-    console.log('Stripe not configured, skipping initialization');
+    console.log('[Stripe] Not configured — billing features disabled');
     return;
   }
 
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = getDbUrl();
   if (!databaseUrl) {
-    console.log('DATABASE_URL not set, skipping Stripe sync setup');
+    console.log('[Stripe] No database URL available — skipping Stripe sync setup');
     return;
   }
 
   try {
-    console.log('Initializing Stripe schema...');
+    console.log('[Stripe] Running schema migrations...');
     const { runMigrations } = await import('stripe-replit-sync');
     await runMigrations({ databaseUrl });
-    console.log('Stripe schema ready');
+    console.log('[Stripe] Schema ready');
 
     const stripeSync = await getStripeSync();
 
-    console.log('Setting up managed webhook...');
     const replitDomains = process.env.REPLIT_DOMAINS?.split(',') || [];
     const webhookBaseUrl = replitDomains[0] ? `https://${replitDomains[0]}` : '';
-    
+
     if (webhookBaseUrl) {
-      const { webhook } = await stripeSync.findOrCreateManagedWebhook(
-        `${webhookBaseUrl}/api/stripe/webhook`,
-        {
-          enabled_events: [
-            'customer.created',
-            'customer.updated',
-            'customer.deleted',
-            'customer.subscription.created',
-            'customer.subscription.updated',
-            'customer.subscription.deleted',
-            'invoice.created',
-            'invoice.paid',
-            'invoice.payment_failed',
-            'invoice.payment_succeeded',
-            'checkout.session.completed',
-            'payment_intent.succeeded',
-            'payment_intent.payment_failed',
-            'product.created',
-            'product.updated',
-            'product.deleted',
-            'price.created',
-            'price.updated',
-            'price.deleted',
-          ]
-        }
-      );
-      console.log(`Webhook configured: ${webhook.url}`);
+      console.log('[Stripe] Setting up managed webhook...');
+      try {
+        const { webhook } = await stripeSync.findOrCreateManagedWebhook(
+          `${webhookBaseUrl}/api/stripe/webhook`,
+          {
+            enabled_events: [
+              'customer.created',
+              'customer.updated',
+              'customer.deleted',
+              'customer.subscription.created',
+              'customer.subscription.updated',
+              'customer.subscription.deleted',
+              'invoice.created',
+              'invoice.paid',
+              'invoice.payment_failed',
+              'invoice.payment_succeeded',
+              'checkout.session.completed',
+              'payment_intent.succeeded',
+              'payment_intent.payment_failed',
+              'product.created',
+              'product.updated',
+              'product.deleted',
+              'price.created',
+              'price.updated',
+              'price.deleted',
+            ]
+          }
+        );
+        console.log(`[Stripe] Managed webhook configured: ${webhook.url}`);
+      } catch (webhookErr: any) {
+        console.warn(`[Stripe] Managed webhook setup failed (will use STRIPE_WEBHOOK_SECRET fallback): ${webhookErr.message}`);
+      }
     }
 
-    console.log('Syncing Stripe data in background...');
+    console.log('[Stripe] Syncing data in background...');
     stripeSync.syncBackfill()
-      .then(() => console.log('Stripe data synced'))
-      .catch((err: any) => console.error('Error syncing Stripe data:', err.message));
+      .then(() => console.log('[Stripe] Background sync complete'))
+      .catch((err: any) => console.error('[Stripe] Background sync error:', err.message));
 
-    console.log('Stripe initialized successfully');
+    console.log('[Stripe] Initialized successfully');
   } catch (error: any) {
-    console.error('Failed to initialize Stripe:', error.message);
+    if (error?.type === 'StripeAuthenticationError' || error?.code === 'api_key_expired') {
+      console.error('[Stripe] CRITICAL: API key expired or invalid. Update STRIPE_SECRET_KEY in secrets.');
+    } else {
+      console.error('[Stripe] Initialization error:', error.message);
+    }
   }
 }
 

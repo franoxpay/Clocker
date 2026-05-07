@@ -1,0 +1,75 @@
+Corrija e valide toda a integração com Stripe.
+
+Faça exatamente isto:
+
+1. Procure no código tudo relacionado a Stripe:
+- checkout
+- webhooks
+- subscription
+- customer
+- priceId
+- productId
+- plans
+- billing
+- cancelamento
+
+2. Verifique se as variáveis de ambiente estão sendo lidas corretamente:
+- STRIPE_SECRET_KEY
+- STRIPE_WEBHOOK_SECRET
+- APP_URL ou FRONTEND_URL
+- DATABASE_URL
+
+3. Não coloque nenhuma chave Stripe direto no código.
+
+4. Se alguma variável obrigatória estiver faltando, o sistema deve mostrar um erro claro no log.
+
+5. Corrija o erro de chave expirada do Stripe garantindo que o sistema use a chave atual do ambiente.
+
+6. Organize a inicialização do Stripe em um único arquivo, se ainda não existir.
+
+7. Revise a criação do checkout:
+- usuário precisa estar logado;
+- plano precisa existir;
+- plano precisa ter stripePriceId válido;
+- customer Stripe deve ser criado ou reutilizado;
+- success_url e cancel_url precisam estar corretas;
+- erros precisam retornar mensagem clara.
+
+8. Revise os webhooks:
+- validar assinatura do webhook;
+- usar raw body corretamente;
+- tratar:
+  - checkout.session.completed
+  - customer.subscription.created
+  - customer.subscription.updated
+  - customer.subscription.deleted
+  - invoice.payment_succeeded
+  - invoice.payment_failed
+
+9. Garantir que assinatura, cancelamento e pagamento falho atualizem o banco corretamente.
+
+10. Adicionar logs claros para:
+- checkout criado;
+- checkout com erro;
+- webhook recebido;
+- webhook inválido;
+- assinatura ativada;
+- assinatura cancelada;
+- pagamento falhou.
+
+11. Não mexer em cloaking, analytics, domínio, frontend ou outras áreas agora.
+
+12. Testar manualmente:
+- criar checkout;
+- concluir pagamento;
+- receber webhook;
+- ativar assinatura;
+- cancelar assinatura;
+- simular pagamento falho;
+- verificar se usuário sem assinatura continua bloqueado.
+
+No final, me entregue:
+- arquivos alterados;
+- o que foi corrigido;
+- como testar;
+- riscos restantes.
