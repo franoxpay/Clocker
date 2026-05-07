@@ -1,0 +1,120 @@
+Implemente o sistema de cobrança por limite com auto-upgrade inteligente, grace period de 3 dias e página de conta suspensa.
+
+Regras finais:
+
+1. O usuário tem um limite mensal de clicks conforme o plano.
+
+2. O usuário pode passar até 20% acima do limite atual sem auto-upgrade imediato.
+
+Exemplo:
+Plano com 30.000 clicks:
+- até 36.000 clicks = tolerância
+- acima de 36.000 clicks = aciona cobrança/upgrade
+
+3. Quando passar de 20% do limite:
+- registrar o excedente;
+- cobrar os clicks extras devidos;
+- tentar fazer upgrade automático para o próximo plano compatível.
+
+4. O upgrade deve ser somente para o próximo plano acima.
+
+Ordem dos planos:
+- Plano Básico
+- Plano Avançado
+- Plano Pré-Escala
+- Plano Escala
+- Plano Ilimitado
+
+5. Plano Free não participa de auto-upgrade.
+6. Plano Ilimitado não cobra excedente.
+7. Se o pagamento do upgrade/excedente falhar:
+- colocar usuário em grace period;
+- manter redirects funcionando por 3 dias;
+- enviar/registrar aviso;
+- mostrar aviso no painel.
+
+8. Após 3 dias sem pagamento:
+- marcar usuário como suspended;
+- bloquear funcionalidades do painel;
+- todos os redirects devem ir para uma página de conta suspensa.
+
+9. Criar página simples de conta suspensa.
+
+Exemplo de rota:
+GET /suspended
+
+Essa página deve:
+- ser HTML simples;
+- carregar rápido;
+- não depender do React;
+- não exigir login;
+- não mostrar dados técnicos;
+- não mostrar erro interno.
+
+Texto sugerido:
+"Conta temporariamente suspensa. Regularize sua assinatura para reativar o acesso."
+
+10. Quando usuário suspenso acessar qualquer redirect:
+- não retornar 404;
+- não retornar erro;
+- redirecionar para /suspended.
+
+11. Quando pagamento for regularizado:
+- remover grace period;
+- remover suspensão;
+- restaurar redirects automaticamente.
+
+12. Implementar status claros:
+- active
+- grace_period
+- suspended
+- canceled
+
+13. Não deletar offers, domains ou dados do usuário ao suspender.
+Apenas bloquear uso.
+
+14. Adicionar logs claros:
+- limite atingido;
+- tolerância de 20% atingida;
+- auto-upgrade iniciado;
+- cobrança extra iniciada;
+- pagamento falhou;
+- grace period iniciado;
+- usuário suspenso;
+- usuário reativado.
+
+15. Não mexer em cloaker além do necessário para:
+- verificar status do usuário;
+- redirecionar suspensos para /suspended.
+
+16. Não alterar domínio, DNS, backup ou autenticação.
+
+17. Testar:
+- usuário abaixo do limite;
+- usuário entre 100% e 120%;
+- usuário acima de 120%;
+- auto-upgrade com sucesso;
+- pagamento falhando;
+- grace period ativo;
+- grace period vencido;
+- redirect indo para /suspended;
+- pagamento regularizado;
+- conta reativada.
+
+Critérios de aceite:
+- tolerância de 20% funciona;
+- auto-upgrade só acontece depois de 120%;
+- falha de pagamento dá 3 dias de uso;
+- após 3 dias, redirects vão para /suspended;
+- pagamento bem-sucedido reativa tudo;
+- dados do usuário não são apagados;
+- plano ilimitado não cobra excedente;
+- plano free não faz auto-upgrade.
+
+No final me entregue:
+- arquivos alterados;
+- campos novos no banco, se houver;
+- como funciona o cálculo dos 20%;
+- como funciona o auto-upgrade;
+- como funciona a suspensão;
+- como testar manualmente.
