@@ -8,7 +8,10 @@ import { sendWelcomeEmail } from "./email";
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000;
   const pgStore = connectPg(session);
-  const databaseUrl = process.env.EXTERNAL_DATABASE_URL || process.env.DATABASE_URL;
+  const databaseUrl = process.env.EXTERNAL_DATABASE_URL ||
+    (process.env.PGHOST && process.env.PGDATABASE && process.env.PGUSER
+      ? `postgresql://${process.env.PGUSER}:${process.env.PGPASSWORD || ""}@${process.env.PGHOST}:${process.env.PGPORT || "5432"}/${process.env.PGDATABASE}`
+      : process.env.DATABASE_URL);
   const sessionStore = new pgStore({
     conString: databaseUrl,
     createTableIfMissing: false,
