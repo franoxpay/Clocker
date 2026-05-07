@@ -73,6 +73,7 @@ export interface IStorage {
   getPlan(id: number): Promise<Plan | undefined>;
   getPlanByStripePriceId(priceId: string): Promise<Plan | undefined>;
   getAllPlans(): Promise<Plan[]>;
+  getActivePlans(): Promise<Plan[]>;
   createPlan(plan: InsertPlan): Promise<Plan>;
   updatePlan(id: number, data: Partial<InsertPlan>): Promise<Plan | undefined>;
   deletePlan(id: number): Promise<void>;
@@ -563,12 +564,50 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(plans).orderBy(plans.price);
   }
 
+  async getActivePlans(): Promise<Plan[]> {
+    return db.select().from(plans).where(eq(plans.isActive, true)).orderBy(plans.price);
+  }
+
   async createPlan(plan: InsertPlan): Promise<Plan> {
+    if (!plan.name || !plan.name.trim()) throw new Error("Plan name is required");
+    if (!plan.nameEn || !plan.nameEn.trim()) throw new Error("Plan English name is required");
+    if (!plan.isUnlimited) {
+      if ((plan.maxOffers ?? 0) < 0) throw new Error("maxOffers cannot be negative");
+      if ((plan.maxDomains ?? 0) < 0) throw new Error("maxDomains cannot be negative");
+      if ((plan.maxClicks ?? 0) < 0) throw new Error("maxClicks cannot be negative");
+    }
+    const existing = await db.select().from(plans)
+      .where(and(eq(plans.isActive, true), eq(plans.name, plan.name.trim())));
+    if (existing.length > 0) throw new Error(`An active plan named "${plan.name}" already exists`);
+    if (plan.stripePriceId) {
+      const dup = await db.select().from(plans)
+        .where(and(eq(plans.isActive, true), eq(plans.stripePriceId, plan.stripePriceId)));
+      if (dup.length > 0) throw new Error("Another active plan already uses this Stripe Price ID");
+    }
     const [created] = await db.insert(plans).values(plan).returning();
     return created;
   }
 
   async updatePlan(id: number, data: Partial<InsertPlan>): Promise<Plan | undefined> {
+    if (data.name !== undefined && !data.name?.trim()) throw new Error("Plan name is required");
+    if (data.nameEn !== undefined && !data.nameEn?.trim()) throw new Error("Plan English name is required");
+    if (!data.isUnlimited) {
+      if (data.maxOffers !== undefined && (data.maxOffers ?? 0) < 0) throw new Error("maxOffers cannot be negative");
+      if (data.maxDomains !== undefined && (data.maxDomains ?? 0) < 0) throw new Error("maxDomains cannot be negative");
+      if (data.maxClicks !== undefined && (data.maxClicks ?? 0) < 0) throw new Error("maxClicks cannot be negative");
+    }
+    if (data.name) {
+      const existing = await db.select().from(plans)
+        .where(and(eq(plans.isActive, true), eq(plans.name, data.name.trim())));
+      const conflict = existing.filter(p => p.id !== id);
+      if (conflict.length > 0) throw new Error(`Another active plan named "${data.name}" already exists`);
+    }
+    if (data.stripePriceId) {
+      const dup = await db.select().from(plans)
+        .where(and(eq(plans.isActive, true), eq(plans.stripePriceId, data.stripePriceId)));
+      const conflict = dup.filter(p => p.id !== id);
+      if (conflict.length > 0) throw new Error("Another active plan already uses this Stripe Price ID");
+    }
     const [updated] = await db
       .update(plans)
       .set({ ...data, updatedAt: new Date() })
@@ -578,6 +617,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePlan(id: number): Promise<void> {
+    const usersOnPlan = await db.select().from(users).where(eq(users.planId, id)).limit(1);
+    if (usersOnPlan.length > 0) {
+      await db.update(plans).set({ isActive: false, updatedAt: new Date() }).where(eq(plans.id, id));
+      return;
+    }
     await db.delete(plans).where(eq(plans.id, id));
   }
 

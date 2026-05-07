@@ -76,9 +76,6 @@ const planMetadataByName: Record<string, PlanMetadata> = {
   "Scale Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
   "Plano Ilimitado": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
   "Unlimited Plan": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
-  "Starter": { trafficSources: ["facebook", "instagram"], supportType: "normal" },
-  "Professional": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "normal" },
-  "Enterprise": { trafficSources: ["facebook", "instagram", "tiktok"], supportType: "vip" },
 };
 
 const getTrafficSourcesForPlan = (plan: { name: string; nameEn: string; price: number }): string[] => {

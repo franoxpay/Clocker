@@ -607,6 +607,9 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       if (!newPlan) {
         return res.status(404).json({ message: "Plan not found" });
       }
+      if (!newPlan.isActive && !newPlan.isFree) {
+        return res.status(400).json({ message: `Plan "${newPlan.name}" is deprecated and cannot be assigned to users` });
+      }
       
       const subscriptionEndDate = new Date();
       subscriptionEndDate.setDate(subscriptionEndDate.getDate() + 30);
@@ -1081,12 +1084,25 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
   // ADMIN PLANS
   // ==========================================
 
+  app.get("/api/admin/plans", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const allPlans = await storage.getAllPlans();
+      res.json(allPlans);
+    } catch (error) {
+      console.error("Error fetching plans:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/plans", isAdmin, async (req: Request, res: Response) => {
     try {
       const plan = await storage.createPlan(req.body);
       res.json(plan);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating plan:", error);
+      if (error?.message?.includes("already exists") || error?.message?.includes("required") || error?.message?.includes("cannot be negative")) {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -1096,8 +1112,11 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const planId = parseInt(req.params.id);
       const updated = await storage.updatePlan(planId, req.body);
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating plan:", error);
+      if (error?.message?.includes("already exists") || error?.message?.includes("required") || error?.message?.includes("cannot be negative")) {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -1105,6 +1124,11 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
   app.delete("/api/admin/plans/:id", isAdmin, async (req: Request, res: Response) => {
     try {
       const planId = parseInt(req.params.id);
+      const plan = await storage.getPlan(planId);
+      if (!plan) return res.status(404).json({ message: "Plan not found" });
+      if (plan.isFree || plan.isDefault) {
+        return res.status(400).json({ message: "Cannot delete the free/default plan" });
+      }
       await storage.deletePlan(planId);
       res.json({ success: true });
     } catch (error) {

@@ -1,0 +1,125 @@
+Padronize completamente o sistema de planos e billing.
+
+IMPORTANTE:
+Os únicos planos oficiais do sistema agora são:
+
+1. Free
+2. Plano Básico
+3. Plano Avançado
+4. Plano Pré-Escala
+5. Plano Escala
+6. Plano Ilimitado
+
+Todos os outros planos devem ser removidos/desativados de forma segura.
+
+Faça exatamente isto:
+
+1. Identifique todos os planos existentes no banco.
+
+2. Localize:
+- IDs;
+- usuários associados;
+- stripePriceId;
+- referências em código;
+- referências em frontend;
+- referências em limits;
+- referências em upgrade/downgrade;
+- referências em admin.
+
+3. Os seguintes planos devem deixar de existir:
+- Iniciante
+- Profissional
+- Empresarial
+
+4. NÃO apagar diretamente sem migração segura.
+
+5. Para usuários nesses planos:
+- migrar automaticamente para o plano equivalente mais próximo;
+- preservar acesso;
+- preservar clicks atuais;
+- preservar offers/domains existentes;
+- não quebrar assinatura.
+
+6. Criar lógica clara de migração.
+
+Sugestão:
+- Iniciante → Plano Básico
+- Profissional → Plano Avançado
+- Empresarial → Plano Ilimitado
+
+Mas validar pelo limite mais compatível.
+
+7. Após migrar usuários:
+- marcar planos antigos como inactive
+OU
+- removê-los com segurança se não houver mais referência.
+
+8. Garantir que frontend mostre APENAS os 6 planos oficiais.
+
+9. Garantir que APIs retornem APENAS os planos ativos/oficiais.
+
+10. Garantir que admin não consiga atribuir planos antigos.
+
+11. Garantir que upgrade/downgrade só funcione entre os 6 planos oficiais.
+
+12. Verificar inconsistências de preço.
+
+Hoje existem preços iguais com limites muito diferentes.
+Validar se isso foi erro antigo e limpar referências antigas.
+
+13. Adicionar proteção:
+- não permitir dois planos ativos com mesmo nome;
+- não permitir stripePriceId duplicado;
+- não permitir plano sem nome;
+- não permitir limites inválidos negativos.
+
+14. Criar campo/status claro:
+- active
+- deprecated
+- hidden
+
+Se necessário.
+
+15. Não quebrar usuários existentes.
+
+16. Não apagar dados financeiros.
+
+17. Não alterar cloaker.
+
+18. Não alterar analytics.
+
+19. Não alterar domains.
+
+20. Testar:
+- usuário antigo migrado;
+- admin editando plano;
+- frontend carregando planos;
+- upgrade;
+- downgrade;
+- usuário free;
+- plano ilimitado;
+- limits funcionando.
+
+21. Depois da limpeza:
+preparar estrutura para Stripe real.
+
+22. NÃO implementar Stripe novo ainda.
+Primeiro limpar os planos.
+
+Critérios de aceite:
+- somente 6 planos oficiais existem;
+- usuários antigos migrados;
+- frontend limpo;
+- APIs limpas;
+- admin limpo;
+- sem referências quebradas;
+- limits continuam funcionando;
+- planos antigos não aparecem mais.
+
+No final me entregue:
+- planos removidos;
+- usuários migrados;
+- novos IDs de planos;
+- mudanças no banco;
+- riscos restantes;
+- pontos ainda pendentes antes do Stripe real.

@@ -41,7 +41,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Plan } from "@shared/schema";
-import { Plus, Pencil, Trash2, Star, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, Star, CreditCard, Archive } from "lucide-react";
 
 export default function AdminPlans() {
   const { t, language } = useLanguage();
@@ -66,7 +66,7 @@ export default function AdminPlans() {
   });
 
   const { data: plans = [], isLoading } = useQuery<Plan[]>({
-    queryKey: ["/api/plans"],
+    queryKey: ["/api/admin/plans"],
   });
 
   const createMutation = useMutation({
@@ -88,6 +88,7 @@ export default function AdminPlans() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
       setIsCreateOpen(false);
       resetForm();
@@ -96,11 +97,13 @@ export default function AdminPlans() {
         description: language === "pt-BR" ? "Plano criado" : "Plan created",
       });
     },
-    onError: () => {
-      toast({
-        title: t("common.error"),
-        variant: "destructive",
-      });
+    onError: async (error: any) => {
+      let msg = t("common.error");
+      try {
+        const body = await error?.response?.json?.();
+        if (body?.message) msg = body.message;
+      } catch {}
+      toast({ title: msg, variant: "destructive" });
     },
   });
 
@@ -121,9 +124,14 @@ export default function AdminPlans() {
         hasTrial: formFields.hasTrial,
         stripePriceId: formFields.stripePriceId || null,
       });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Error updating plan");
+      }
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
       setEditingPlan(null);
       resetForm();
@@ -132,32 +140,31 @@ export default function AdminPlans() {
         description: language === "pt-BR" ? "Plano atualizado" : "Plan updated",
       });
     },
-    onError: () => {
-      toast({
-        title: t("common.error"),
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      toast({ title: error?.message || t("common.error"), variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/admin/plans/${id}`);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Error deleting plan");
+      }
       return res.json();
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/plans"] });
       queryClient.invalidateQueries({ queryKey: ["/api/plans"] });
       setDeletingPlan(null);
       toast({
         title: t("common.success"),
-        description: language === "pt-BR" ? "Plano excluído" : "Plan deleted",
+        description: language === "pt-BR" ? "Plano removido" : "Plan removed",
       });
     },
-    onError: () => {
-      toast({
-        title: t("common.error"),
-        variant: "destructive",
-      });
+    onError: (error: any) => {
+      toast({ title: error?.message || t("common.error"), variant: "destructive" });
     },
   });
 
@@ -437,14 +444,24 @@ export default function AdminPlans() {
               </TableHeader>
               <TableBody>
                 {plans.map((plan) => (
-                  <TableRow key={plan.id} data-testid={`row-plan-${plan.id}`}>
+                  <TableRow
+                    key={plan.id}
+                    data-testid={`row-plan-${plan.id}`}
+                    className={!plan.isActive ? "opacity-50 bg-muted/30" : ""}
+                  >
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {language === "pt-BR" ? plan.name : plan.nameEn}
                         {plan.isPopular && (
                           <Badge variant="default" className="gap-1">
                             <Star className="w-3 h-3" />
                             {language === "pt-BR" ? "Popular" : "Popular"}
+                          </Badge>
+                        )}
+                        {!plan.isActive && (
+                          <Badge variant="outline" className="gap-1 text-muted-foreground border-muted-foreground/40">
+                            <Archive className="w-3 h-3" />
+                            {language === "pt-BR" ? "Descontinuado" : "Deprecated"}
                           </Badge>
                         )}
                       </div>
@@ -489,7 +506,7 @@ export default function AdminPlans() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={plan.isActive ? "default" : "secondary"}>
-                        {plan.isActive ? t("offers.active") : t("offers.inactive")}
+                        {plan.isActive ? t("offers.active") : (language === "pt-BR" ? "Descontinuado" : "Deprecated")}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -502,14 +519,16 @@ export default function AdminPlans() {
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeletingPlan(plan)}
-                          data-testid={`button-delete-plan-${plan.id}`}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
+                        {!plan.isFree && !plan.isDefault && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeletingPlan(plan)}
+                            data-testid={`button-delete-plan-${plan.id}`}
+                          >
+                            <Trash2 className="w-4 h-4 text-destructive" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -533,12 +552,12 @@ export default function AdminPlans() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {language === "pt-BR" ? "Excluir plano?" : "Delete plan?"}
+              {language === "pt-BR" ? "Remover plano?" : "Remove plan?"}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {language === "pt-BR" 
-                ? `Tem certeza que deseja excluir o plano "${deletingPlan?.name}"? Esta ação não pode ser desfeita.`
-                : `Are you sure you want to delete the plan "${deletingPlan?.nameEn}"? This action cannot be undone.`}
+              {language === "pt-BR"
+                ? `O plano "${deletingPlan?.name}" será marcado como descontinuado se houver usuários associados, ou excluído permanentemente se estiver vazio.`
+                : `Plan "${deletingPlan?.nameEn}" will be marked as deprecated if it has users, or permanently deleted if empty.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
