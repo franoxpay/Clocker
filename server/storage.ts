@@ -287,7 +287,8 @@ export interface IStorage {
   suspendUser(userId: string, reason: string): Promise<void>;
   unsuspendUser(userId: string, actorId?: string): Promise<void>;
   resetUserMonthlyClicks(userId: string): Promise<void>;
-  
+  getUsersWithExpiredGracePeriod(): Promise<User[]>;
+
   // Suspension history
   createSuspensionHistoryEntry(entry: InsertSuspensionHistory): Promise<SuspensionHistory>;
   getSuspensionHistory(userId: string, limit?: number): Promise<SuspensionHistory[]>;
@@ -2213,6 +2214,19 @@ export class DatabaseStorage implements IStorage {
       clicksUsedThisMonth: 0,
       clicksResetDate: nextReset,
     });
+  }
+
+  async getUsersWithExpiredGracePeriod(): Promise<User[]> {
+    const now = new Date();
+    return db
+      .select()
+      .from(users)
+      .where(
+        and(
+          isNull(users.suspendedAt),
+          sql`${users.gracePeriodEndsAt} IS NOT NULL AND ${users.gracePeriodEndsAt} < ${now.toISOString()}`
+        )
+      );
   }
 
   // ==========================================

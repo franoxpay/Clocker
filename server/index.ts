@@ -12,6 +12,7 @@ import { startDomainMonitor } from "./domainMonitor";
 import { startSubscriptionReminder } from "./subscriptionReminder";
 import { getRedisClient } from "./redis";
 import { startBackupScheduler } from "./scripts/backupScheduler";
+import { startLimitEnforcer } from "./limitEnforcer";
 
 const app = express();
 app.set('trust proxy', true);
@@ -466,6 +467,7 @@ async function reconcileStaleSubscriptions() {
   startDomainMonitor();
   startSubscriptionReminder();
   startBackupScheduler();
+  startLimitEnforcer();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

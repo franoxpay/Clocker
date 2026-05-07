@@ -14,6 +14,7 @@ import { registerNotificationRoutes } from "./routes/notifications.routes";
 import { registerAffiliateRoutes } from "./routes/affiliate.routes";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
+import { handleClickOverage, SUSPENDED_PAGE_URL } from "./limitEnforcer";
 import { z } from "zod";
 import { startOfLocalDay, endOfLocalDay } from "./timezone";
 import {
@@ -1124,6 +1125,35 @@ export async function registerRoutes(
   registerNotificationRoutes(app);
   registerAffiliateRoutes(app);
   registerAdminRoutes(app, () => { adminSettingsCache = null; });
+
+  // ==========================================
+  // SUSPENDED PAGE (lightweight, no auth, no React)
+  // ==========================================
+  app.get("/suspended", (_req: Request, res: Response) => {
+    res.set("Content-Type", "text/html; charset=utf-8");
+    res.set("Cache-Control", "no-cache");
+    res.status(200).send(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conta Suspensa</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,-apple-system,sans-serif;background:#f5f5f5;display:flex;justify-content:center;align-items:center;min-height:100vh}
+    .box{background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:48px 40px;text-align:center;max-width:480px;width:90%}
+    h1{font-size:1.4rem;color:#111;margin-bottom:12px}
+    p{color:#555;line-height:1.6}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Conta temporariamente suspensa</h1>
+    <p>Regularize sua assinatura para reativar o acesso.</p>
+  </div>
+</body>
+</html>`);
+  });
 
   // ==========================================
   // ANTI-BOT CHALLENGE ROUTES
@@ -3433,43 +3463,34 @@ export async function registerRoutes(
 
       // Now check if user is suspended (after potential reset/unsuspend)
       if (currentOwner.suspendedAt) {
-        console.log(`[Cloak] User ${currentOwner.id} is suspended - returning 404`);
-        return res.status(404).send("Not found");
+        console.log(`[Cloak] User ${currentOwner.id} is suspended — redirecting to /suspended`);
+        return res.redirect(302, SUSPENDED_PAGE_URL);
       }
 
-      // Grace period no longer used — kept for legacy graceful handling if still set
+      // Grace period: expired → redirect to /suspended; active → allow clicks through
       if (currentOwner.gracePeriodEndsAt && new Date() > currentOwner.gracePeriodEndsAt) {
-        console.log(`[Cloak] User ${currentOwner.id} legacy grace period expired — returning 404`);
-        return res.status(404).send("Not found");
+        console.log(`[Cloak] User ${currentOwner.id} grace period expired — redirecting to /suspended`);
+        return res.redirect(302, SUSPENDED_PAGE_URL);
       }
 
       // Check clicks limit (only for non-unlimited plans)
+      // 0–100%: normal. 100–120%: tolerance zone (log only). >120%: trigger auto-upgrade or grace.
       if (!planForLimits.isUnlimited) {
         const clicksLimit = planForLimits.maxClicks;
-        
-        if (clicksUsed >= clicksLimit) {
-          // User has exceeded their click limit
-          if (!currentOwner.gracePeriodEndsAt) {
-            // Start grace period (48 hours)
-            console.log(`[Cloak] User ${currentOwner.id} exceeded clicks limit - starting grace period`);
-            await storage.startGracePeriod(currentOwner.id);
-            
-            // Send email notification about plan limit
-            if (currentOwner.email) {
-              sendPlanLimitEmail(
-                currentOwner.email, 
-                'clicks', 
-                clicksUsed, 
-                clicksLimit, 
-                planForLimits.name, 
-                currentOwner.id
-              ).catch(err => {
-                console.error('[Cloak] Failed to send plan limit email:', err);
-              });
-            }
+        const toleranceLimit = Math.ceil(clicksLimit * 1.2);
+
+        if (clicksUsed > toleranceLimit) {
+          // Above 120% — fire-and-forget overage handler (attempts auto-upgrade, then grace period)
+          if (!currentOwner.gracePeriodEndsAt && !currentOwner.suspendedAt) {
+            console.log(`[Cloak] User ${currentOwner.id} exceeded 120% tolerance (${clicksUsed}/${toleranceLimit}) — initiating overage handling`);
+            handleClickOverage(currentOwner.id, clicksUsed, planForLimits).catch((err: any) =>
+              console.error('[Cloak] handleClickOverage error:', err.message)
+            );
           }
-          // During grace period, continue processing clicks
-          // (The check above handles expired grace periods)
+          // Clicks still proceed during grace period; blocked only when grace expires (above)
+        } else if (clicksUsed > clicksLimit) {
+          // 100–120% tolerance zone — log warning only, no action
+          console.log(`[Cloak] User ${currentOwner.id} in tolerance zone (${clicksUsed}/${clicksLimit} — ${Math.round((clicksUsed / clicksLimit) * 100)}%)`);
         }
       }
 
@@ -4077,9 +4098,10 @@ export async function registerRoutes(
       }
 
       const isSuspended = owner.suspendedAt !== null;
-      if (isSuspended) {
-        console.log(`[Cloak] User suspended: ${offer.userId}`);
-        return res.status(404).send("Not found");
+      const graceExpired = owner.gracePeriodEndsAt !== null && new Date() > owner.gracePeriodEndsAt;
+      if (isSuspended || graceExpired) {
+        console.log(`[Cloak /:slug] User ${offer.userId} is suspended — redirecting to /suspended`);
+        return res.redirect(302, SUSPENDED_PAGE_URL);
       }
 
       // Block if subscription is not active — return 404 immediately
@@ -4097,12 +4119,21 @@ export async function registerRoutes(
       }
 
       if (!plan.isUnlimited) {
-        const userOffers = await storage.getOffersByUserId(offer.userId);
-        const totalClicks = userOffers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
-        
-        if (totalClicks >= plan.maxClicks) {
-          console.log(`[Cloak] User over click limit: ${offer.userId} (${totalClicks}/${plan.maxClicks})`);
-          return res.redirect(302, offer.whitePageUrl);
+        const clicksUsedSlug = owner.clicksUsedThisMonth || 0;
+        const clicksLimitSlug = plan.maxClicks;
+        const toleranceLimitSlug = Math.ceil(clicksLimitSlug * 1.2);
+
+        if (clicksUsedSlug > toleranceLimitSlug) {
+          // Above 120% — fire-and-forget overage handler
+          if (!owner.gracePeriodEndsAt && !owner.suspendedAt) {
+            console.log(`[Cloak /:slug] User ${offer.userId} exceeded 120% tolerance (${clicksUsedSlug}/${toleranceLimitSlug}) — initiating overage handling`);
+            handleClickOverage(owner.id, clicksUsedSlug, plan).catch((err: any) =>
+              console.error('[Cloak /:slug] handleClickOverage error:', err.message)
+            );
+          }
+        } else if (clicksUsedSlug > clicksLimitSlug) {
+          // 100–120% tolerance zone — log only
+          console.log(`[Cloak /:slug] User ${offer.userId} in tolerance zone (${clicksUsedSlug}/${clicksLimitSlug})`);
         }
       }
 

@@ -1,0 +1,232 @@
+Você vai atuar como engenheiro sênior responsável pelo sistema de billing, limites e suspensão do SaaS Cleryon.
+
+Antes de alterar qualquer coisa:
+1. Analise o projeto inteiro relacionado a:
+- planos;
+- subscriptions;
+- Stripe;
+- limites de clicks;
+- redirects;
+- grace period;
+- suspensão;
+- webhook Stripe;
+- billing;
+- cloaker;
+- redirect routes;
+- usuários;
+- status da assinatura.
+
+2. Entenda como o sistema funciona HOJE antes de modificar.
+3. NÃO reescrever o sistema inteiro.
+4. NÃO fazer mudanças destrutivas.
+5. NÃO alterar a lógica anti-bot.
+6. NÃO alterar challenge system.
+7. NÃO alterar DNS/domínios.
+8. NÃO alterar backup.
+9. NÃO alterar autenticação.
+
+Contexto importante do produto:
+- O sistema é um SaaS de cloaking/redirect.
+- Usuários possuem limites mensais de clicks conforme o plano.
+- Somente tráfego real (black page) conta como click consumido.
+- O sistema já possui Stripe integrado parcialmente.
+- O sistema já possui:
+  - planos;
+  - subscriptions;
+  - webhooks;
+  - grace period;
+  - redirects;
+  - suspensão parcial.
+- Existem 6 planos oficiais:
+  - Free
+  - Plano Básico
+  - Plano Avançado
+  - Plano Pré-Escala
+  - Plano Escala
+  - Plano Ilimitado
+
+Objetivo:
+Implementar um sistema profissional de:
+- tolerância de uso;
+- auto-upgrade inteligente;
+- cobrança excedente;
+- grace period;
+- suspensão automática;
+- página de conta suspensa.
+
+REGRAS FINAIS DE NEGÓCIO
+
+1. Cada plano possui limite mensal de clicks.
+
+2. O usuário pode ultrapassar até 20% do limite sem upgrade imediato.
+
+Exemplo:
+Plano Básico:
+30.000 clicks
+
+Tolerância:
+36.000 clicks
+
+Até 36k:
+- continua funcionando normalmente;
+- apenas registrar aviso interno se necessário.
+
+3. Quando ultrapassar os 20%:
+- registrar excedente;
+- iniciar cobrança de clicks extras;
+- iniciar tentativa de auto-upgrade para o próximo plano compatível.
+
+4. O auto-upgrade deve:
+- acontecer apenas para o próximo plano acima;
+- nunca pular múltiplos planos;
+- nunca fazer downgrade automático.
+
+5. Ordem oficial dos planos:
+- Plano Básico
+- Plano Avançado
+- Plano Pré-Escala
+- Plano Escala
+- Plano Ilimitado
+
+6. Plano Free:
+- não participa de auto-upgrade automático.
+
+7. Plano Ilimitado:
+- nunca cobra excedente;
+- nunca faz upgrade.
+
+8. Se o pagamento falhar:
+- iniciar grace period de 3 dias;
+- manter redirects funcionando normalmente durante esses 3 dias;
+- registrar status grace_period;
+- enviar notificações/email;
+- mostrar aviso no painel.
+
+9. Após 3 dias sem regularização:
+- marcar usuário como suspended;
+- bloquear funcionalidades;
+- impedir uso do sistema;
+- redirects NÃO devem retornar 404;
+- redirects devem enviar para página de conta suspensa.
+
+10. Criar rota simples:
+GET /suspended
+
+Essa página deve:
+- ser extremamente leve;
+- HTML simples;
+- sem React;
+- sem auth;
+- sem dependência pesada;
+- sem stack trace;
+- sem dados técnicos.
+
+Texto simples:
+"Conta temporariamente suspensa. Regularize sua assinatura para reativar o acesso."
+
+11. Quando usuário suspended acessar redirect:
+- redirecionar para /suspended.
+
+12. Quando pagamento for regularizado:
+- remover grace period;
+- remover suspensão;
+- restaurar redirects automaticamente;
+- restaurar acesso ao painel.
+
+13. NÃO deletar:
+- offers;
+- domains;
+- analytics;
+- dados;
+- campanhas.
+
+Suspensão deve apenas bloquear uso.
+
+14. Criar status claros:
+- active
+- grace_period
+- suspended
+- canceled
+
+15. Adicionar logs claros:
+- limite atingido;
+- tolerância atingida;
+- auto-upgrade iniciado;
+- cobrança iniciada;
+- falha de pagamento;
+- grace period iniciado;
+- usuário suspenso;
+- usuário reativado.
+
+16. Validar Stripe:
+- verificar subscriptions;
+- verificar webhooks;
+- verificar sincronização;
+- verificar invoice.payment_failed;
+- verificar invoice.payment_succeeded;
+- verificar customer.subscription.updated.
+
+17. NÃO assumir que o Stripe atual está perfeito.
+Auditar antes.
+
+18. Se precisar criar:
+- tabelas;
+- campos;
+- enums;
+- status;
+- logs;
+- tracking de excedente;
+faça migrations seguras.
+
+19. Não quebrar usuários existentes.
+
+20. Não alterar frontend desnecessariamente.
+Só adicionar o necessário para:
+- avisos;
+- suspensão;
+- status.
+
+21. Antes de implementar:
+me mostre rapidamente:
+- como o sistema funciona hoje;
+- riscos encontrados;
+- estratégia de implementação;
+- possíveis impactos.
+
+22. Depois implemente.
+
+23. Testar:
+- usuário abaixo do limite;
+- usuário acima de 100%;
+- usuário acima de 120%;
+- upgrade automático;
+- falha de pagamento;
+- grace period;
+- suspensão;
+- reativação;
+- redirects funcionando;
+- redirects indo para /suspended;
+- plano ilimitado;
+- plano free.
+
+Critérios de aceite:
+- tolerância de 20% funcionando;
+- auto-upgrade funcionando;
+- suspensão funcionando;
+- redirects indo para /suspended;
+- reativação automática funcionando;
+- nenhum dado deletado;
+- plano ilimitado ignorando excedente;
+- plano free sem auto-upgrade;
+- logs claros;
+- Stripe sincronizado corretamente.
+
+No final me entregue:
+- análise do sistema atual;
+- arquivos alterados;
+- migrations criadas;
+- lógica do cálculo;
+- lógica do auto-upgrade;
+- lógica da suspensão;
+- riscos restantes;
+- como testar tudo manualmente.
