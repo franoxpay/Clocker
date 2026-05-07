@@ -1,0 +1,93 @@
+Anti-bot / cloaking (parte mais importante)
+Como funciona sua lógica de decisão hoje?
+Quais sinais você usa para detectar bots?
+O sistema usa scoring?
+Existe fallback?
+Como funciona o TikTok2 exatamente?
+O que hoje mais detecta revisores com sucesso?
+O que mais falha?
+Já sofreu mass detection/burn de domínios?
+Qual plataforma é mais difícil hoje? TikTok ou Facebook?
+O sistema aprende com dados ou tudo é regra fixa?
+Existe armazenamento de fingerprints suspeitos?
+Existe blacklist/whitelist?
+Existe cache de decisões?
+Qual taxa de falso positivo você percebe?
+5. Escalabilidade e performance
+Quantos requests por minuto o sistema aguenta hoje?
+Já teve downtime?
+Qual parte mais pesa no backend?
+Qual consulta mais pesada do banco?
+O Redis está sendo usado o suficiente?
+Existem gargalos conhecidos?
+Já pensou em separar serviços?
+O WebSocket escala bem atualmente?
+O click tracking é síncrono ou assíncrono?
+Existe fila planejada?
+6. Domínios e infraestrutura
+Como funciona exatamente a integração com EasyPanel?
+O SSL é automático?
+O usuário consegue conectar domínio sozinho?
+Existem muitos problemas com DNS?
+Existe rotação de domínio?
+Existe automação anti-burn?
+Como vocês lidam com domínios bloqueados?
+Existem domínios compartilhados premium?
+Como funciona o proxy/reverse proxy hoje?
+7. Segurança real
+Já sofreu ataque?
+Já sofreu tentativa de scraping?
+Já sofreu abuso interno?
+Existe proteção contra users maliciosos?
+Existe proteção contra bypass do cloaker?
+Existe proteção contra replay?
+Existe proteção contra enumeração?
+Como vocês evitam que plataformas descubram o sistema?
+Existem fingerprints próprias do Cleryon que podem denunciar o sistema?
+8. Suporte e operação
+Quantos tickets recebe por dia?
+Qual principal reclamação?
+Quanto suporte é manual?
+Existe documentação?
+Existe base de conhecimento?
+Existe onboarding humano?
+Quanto tempo você gasta operando o SaaS por dia?
+9. Produto e visão
+O que você acredita que faz o Cleryon ser melhor que concorrentes?
+Qual é o maior diferencial técnico?
+O que você considera “impressionante” no sistema hoje?
+Qual parte do sistema você mais confia?
+Qual parte você menos confia?
+Se um concorrente copiasse tudo hoje, o que ainda seria difícil copiar?
+10. Objetivo estratégico
+Você quer transformar isso em empresa grande ou renda alta?
+Quer vender futuramente?
+Quer ficar anônimo?
+Quer escalar equipe?
+Quer focar em automação?
+Qual seria o cenário ideal daqui 12 meses?
+Qual meta de receita real você gostaria de atingir?
+11. Código e desenvolvimento
+Você programou tudo sozinho?
+Quanto tempo levou?
+O código está organizado ou virou “Frankenstein”?
+Existem áreas difíceis de mexer?
+Existe documentação interna?
+Existem migrations seguras?
+Existe ambiente staging?
+Qual parte do código mais dá medo de alterar?
+12. Dados reais importantes
+Quantos cliques por dia o sistema processa?
+Quantos redirects por segundo já atingiu?
+Quantos domínios existem cadastrados?
+Quantas offers existem?
+Qual tamanho atual do banco?
+Qual endpoint mais acessado?
+Qual custo mensal da infraestrutura hoje?
+13. Perguntas críticas finais
+Qual é hoje o MAIOR risco do projeto?
+O que poderia matar o SaaS?
+Qual problema ainda ninguém conseguiu resolver no nicho?
+O que você acha que os concorrentes fazem melhor?
+Qual é sua maior preocupação hoje?
+O que você sente que está faltando no produto?
