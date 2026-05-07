@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { tiktok2Telemetry, passwordResetTokens } from "@shared/schema";
 import { verifyDomainDNS } from "./domainUtils";
+import { resetConsecutiveFailures } from "./domainMonitor";
 import { registerAdminRoutes, seedDefaultEmailTemplates } from "./routes/admin.routes";
 import { registerNotificationRoutes } from "./routes/notifications.routes";
 import { registerAffiliateRoutes } from "./routes/affiliate.routes";
@@ -2318,16 +2319,23 @@ export async function registerRoutes(
       }
 
       const dnsResult = await verifyDomainDNS(domain.subdomain);
-      
+
       const updated = await storage.updateDomain(domainId, {
         isVerified: dnsResult.verified,
+        isActive: dnsResult.verified ? true : domain.isActive,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
         sslStatus: dnsResult.verified ? "active" : "pending",
       });
 
+      if (dnsResult.verified) {
+        // Reset automatic monitor's failure counter so a successful manual check
+        // immediately clears any accumulated strike count.
+        resetConsecutiveFailures("user", domainId);
+      }
+
       if (!dnsResult.verified) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           message: dnsResult.error || "DNS verification failed",
           domain: updated
         });

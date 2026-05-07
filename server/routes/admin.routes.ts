@@ -6,6 +6,7 @@ import { isAdmin, isAuthenticated } from "../replitAuth";
 import { getStripeClient, isStripeConfigured } from "../stripeClient";
 import { sendDomainRemovedEmail } from "../email";
 import { verifyDomainDNS } from "../domainUtils";
+import { resetConsecutiveFailures } from "../domainMonitor";
 
 const DEFAULT_EMAIL_TEMPLATES = {
   welcome: {
@@ -1199,16 +1200,20 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       }
       
       const dnsResult = await verifyDomainDNS(domain.subdomain);
-      
+
       const updated = await storage.updateSharedDomain(domainId, {
         isVerified: dnsResult.verified,
-        isActive: dnsResult.verified,
+        isActive: dnsResult.verified ? true : domain.isActive,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
         sslStatus: dnsResult.verified ? "active" : "pending",
       });
-      
-      res.json({ 
+
+      if (dnsResult.verified) {
+        resetConsecutiveFailures("shared", domainId);
+      }
+
+      res.json({
         verified: dnsResult.verified,
         error: dnsResult.error || null,
         domain: updated
@@ -1363,16 +1368,20 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       }
       
       const dnsResult = await verifyDomainDNS(domain.subdomain);
-      
+
       const updated = await storage.updateDomain(domainId, {
         isVerified: dnsResult.verified,
-        isActive: dnsResult.verified,
+        isActive: dnsResult.verified ? true : domain.isActive,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
         sslStatus: dnsResult.verified ? "active" : "pending",
       });
-      
-      res.json({ 
+
+      if (dnsResult.verified) {
+        resetConsecutiveFailures("user", domainId);
+      }
+
+      res.json({
         verified: dnsResult.verified,
         error: dnsResult.error || null,
         domain: updated

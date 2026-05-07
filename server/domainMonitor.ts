@@ -4,7 +4,8 @@ import { sendDomainInactiveEmail, sendSharedDomainInactiveEmail } from "./email"
 
 const MONITOR_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const NOTIFICATION_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
-const EXPECTED_CNAME_TARGET = (process.env.CNAME_TARGET || "clerion.app").trim();
+
+const OFFICIAL_CNAME = (process.env.CNAME_TARGET || "clerion.app").trim().toLowerCase().replace(/\.$/, "");
 
 // ──────────────────────────────────────────────────────────────
 // RETRY & THRESHOLD CONFIGURATION
@@ -15,8 +16,9 @@ const DNS_MAX_RETRIES = 3;
 const DNS_RETRY_DELAY_MS = 2000; // 2 s between retries
 
 // Require this many CONSECUTIVE failed monitoring CYCLES before deactivating.
-// Each cycle is MONITOR_INTERVAL_MS (5 min), so 2 = 10 minutes of sustained failure.
-const CONSECUTIVE_FAILURES_TO_DEACTIVATE = 2;
+// Each cycle is MONITOR_INTERVAL_MS (5 min), so 3 = 15 minutes of sustained failure.
+// Rule: 1st fail → log error, keep status. 2nd fail → log alert, keep status. 3rd fail → mark inactive.
+const CONSECUTIVE_FAILURES_TO_DEACTIVATE = 3;
 
 // HTTP health check timeout (ms) — used as last resort when all DNS attempts fail
 const HTTP_CHECK_TIMEOUT_MS = 5000;
@@ -38,6 +40,16 @@ const TRANSIENT_DNS_ERRORS = new Set([
 // Counters reset to 0 immediately when a domain is verified OK.
 // ──────────────────────────────────────────────────────────────
 const consecutiveFailures = new Map<string, number>();
+
+// ──────────────────────────────────────────────────────────────
+// EXPORTED: reset failure counter for a domain
+// Call this from manual verify endpoints so a successful manual
+// check immediately clears the automatic monitor's strike count.
+// ──────────────────────────────────────────────────────────────
+export function resetConsecutiveFailures(domainType: "user" | "shared", domainId: number): void {
+  const key = `${domainType}:${domainId}`;
+  consecutiveFailures.delete(key);
+}
 
 // ──────────────────────────────────────────────────────────────
 // FALLBACK DNS RESOLVERS
@@ -66,6 +78,10 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function normalizeCname(record: string): string {
+  return record.trim().toLowerCase().replace(/\.$/, "");
+}
+
 function incrementFailure(key: string): number {
   const count = (consecutiveFailures.get(key) ?? 0) + 1;
   consecutiveFailures.set(key, count);
@@ -87,16 +103,16 @@ async function checkCNAMEWithResolver(
   try {
     const cnameRecords = await (resolver as any).resolveCname(subdomain);
     if (cnameRecords && cnameRecords.length > 0) {
-      const pointsToUs = cnameRecords.some((r: string) =>
-        r.toLowerCase() === EXPECTED_CNAME_TARGET ||
-        r.toLowerCase().endsWith(`.${EXPECTED_CNAME_TARGET}`)
-      );
+      const pointsToUs = cnameRecords.some((r: string) => {
+        const normalized = normalizeCname(r);
+        return normalized === OFFICIAL_CNAME || normalized.endsWith(`.${OFFICIAL_CNAME}`);
+      });
       if (pointsToUs) {
         return { verified: true };
       }
       return {
         verified: false,
-        error: `CNAME points to '${cnameRecords[0]}' instead of '${EXPECTED_CNAME_TARGET}'`,
+        error: `CNAME points to '${cnameRecords[0]}' instead of '${OFFICIAL_CNAME}'`,
         transient: false,
       };
     }
@@ -125,10 +141,8 @@ async function httpHealthCheck(subdomain: string): Promise<boolean> {
       redirect: "follow",
     });
     clearTimeout(timeout);
-    // Any response (even 4xx) means the server is reachable
     return response.status < 500;
   } catch {
-    // Network error or timeout — not reachable
     return false;
   }
 }
@@ -149,7 +163,7 @@ async function verifyDomainDNS(
   console.log(`[DOMAIN MONITOR] Checking DNS for: ${subdomain}`);
 
   let lastError = "DNS check failed";
-  let allTransient = true; // becomes false if any permanent failure is seen
+  let allTransient = true;
 
   for (const { name, resolver } of DNS_RESOLVERS) {
     for (let attempt = 1; attempt <= DNS_MAX_RETRIES; attempt++) {
@@ -168,7 +182,6 @@ async function verifyDomainDNS(
         allTransient = false;
       }
 
-      // Permanent failure on this resolver — no point retrying it, move to next
       if (!result.transient) {
         console.log(`[DOMAIN MONITOR] Permanent DNS failure via ${name} for ${subdomain}: ${lastError}`);
         break;
@@ -197,6 +210,11 @@ async function verifyDomainDNS(
 
 // ──────────────────────────────────────────────────────────────
 // MAIN CHECK LOOP
+// Failure tolerance:
+//   1st fail → log error, keep current status (no deactivation)
+//   2nd fail → log alert, keep current status (no deactivation)
+//   3rd fail → deactivate + notify
+//   Any pass → reset counter, restore if needed
 // ──────────────────────────────────────────────────────────────
 
 async function checkAllDomains() {
@@ -237,17 +255,21 @@ async function checkAllDomains() {
           }
         } else {
           const failures = incrementFailure(key);
-          console.log(`[DOMAIN MONITOR] ✗ Domain failed: ${domain.subdomain} — ${result.error} (consecutive failures: ${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE})`);
 
-          // Always update error info so admin can see the trend
-          await storage.updateDomain(domain.id, {
-            lastCheckedAt: now,
-            lastVerificationError: `[${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} failures] ${result.error}`,
-          });
-
-          // Only deactivate after threshold is reached
-          if (failures >= CONSECUTIVE_FAILURES_TO_DEACTIVATE) {
-            console.log(`[DOMAIN MONITOR] Deactivating domain after ${failures} consecutive failures: ${domain.subdomain}`);
+          if (failures === 1) {
+            console.log(`[DOMAIN MONITOR] ⚠ Domain check failed (1/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} — keeping active): ${domain.subdomain} — ${result.error}`);
+            await storage.updateDomain(domain.id, {
+              lastCheckedAt: now,
+              lastVerificationError: `[1/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} falhas] ${result.error}`,
+            });
+          } else if (failures === 2) {
+            console.log(`[DOMAIN MONITOR] ⚠ Domain check failed (2/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} — ALERT, keeping active): ${domain.subdomain} — ${result.error}`);
+            await storage.updateDomain(domain.id, {
+              lastCheckedAt: now,
+              lastVerificationError: `[2/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} falhas] ${result.error}`,
+            });
+          } else if (failures >= CONSECUTIVE_FAILURES_TO_DEACTIVATE) {
+            console.log(`[DOMAIN MONITOR] ✗ Deactivating domain after ${failures} consecutive failures: ${domain.subdomain}`);
 
             await storage.updateDomain(domain.id, {
               isActive: false,
@@ -272,8 +294,8 @@ async function checkAllDomains() {
                     type: "domain_inactive",
                     titlePt: "Domínio Inativo Detectado",
                     titleEn: "Inactive Domain Detected",
-                    messagePt: `Olá ${firstName}, o domínio ${domain.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema, verifique suas ofertas a fim de evitar erros de redirecionamento, loops ou tráfego inválido.`,
-                    messageEn: `Hello ${firstName}, the domain ${domain.subdomain} configured in your account was identified as inactive during automatic system checks. Please check your offers to avoid redirection errors, loops, or invalid traffic.`,
+                    messagePt: `Olá ${firstName}, o domínio ${domain.subdomain} configurado em sua conta foi identificado como inativo durante as verificações automáticas do sistema. Verifique o apontamento CNAME para clerion.app no seu provedor de DNS.`,
+                    messageEn: `Hello ${firstName}, the domain ${domain.subdomain} configured in your account was identified as inactive during automatic system checks. Please verify the CNAME pointing to clerion.app at your DNS provider.`,
                   });
                   if (owner.email) {
                     sendDomainInactiveEmail(owner.email, domain.subdomain, domain.userId).catch(err => {
@@ -295,6 +317,8 @@ async function checkAllDomains() {
     }
 
     // ── SHARED DOMAINS ────────────────────────────────────────
+    // Shared domains have higher tolerance — they serve many users.
+    // Never deactivate them on transient errors.
     for (const domain of sharedDomains) {
       const key = `shared:${domain.id}`;
       try {
@@ -316,15 +340,19 @@ async function checkAllDomains() {
           }
         } else {
           const failures = incrementFailure(key);
-          console.log(`[DOMAIN MONITOR] ✗ Shared domain failed: ${domain.subdomain} — ${result.error} (consecutive failures: ${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE})`);
 
-          await storage.updateSharedDomain(domain.id, {
-            lastCheckedAt: now,
-            lastVerificationError: `[${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} failures] ${result.error}`,
-          });
-
-          if (failures >= CONSECUTIVE_FAILURES_TO_DEACTIVATE) {
-            console.log(`[DOMAIN MONITOR] Deactivating shared domain after ${failures} consecutive failures: ${domain.subdomain}`);
+          // For shared domains: only deactivate on permanent (non-transient) errors
+          // AND after threshold is met. Transient errors never deactivate.
+          if (failures < CONSECUTIVE_FAILURES_TO_DEACTIVATE || result.allTransient) {
+            const label = failures < CONSECUTIVE_FAILURES_TO_DEACTIVATE ? `${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE}` : `${failures}`;
+            const severity = failures === 1 ? "⚠" : "⚠⚠";
+            console.log(`[DOMAIN MONITOR] ${severity} Shared domain failed (${label} — keeping active): ${domain.subdomain} — ${result.error}`);
+            await storage.updateSharedDomain(domain.id, {
+              lastCheckedAt: now,
+              lastVerificationError: `[${failures}/${CONSECUTIVE_FAILURES_TO_DEACTIVATE} falhas] ${result.error}`,
+            });
+          } else {
+            console.log(`[DOMAIN MONITOR] ✗ Deactivating shared domain after ${failures} consecutive failures: ${domain.subdomain}`);
 
             await storage.updateSharedDomain(domain.id, {
               isActive: false,

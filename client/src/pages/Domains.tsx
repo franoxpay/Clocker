@@ -85,7 +85,7 @@ export default function Domains() {
   const [activatingSharedId, setActivatingSharedId] = useState<number | null>(null);
   const [deactivatingSharedId, setDeactivatingSharedId] = useState<number | null>(null);
   
-  const platformDomain = window.location.hostname;
+  const CNAME_TARGET = "clerion.app";
 
   const { data: domains = [], isLoading } = useQuery<Domain[]>({
     queryKey: ["/api/domains"],
@@ -684,7 +684,7 @@ export default function Domains() {
                   {language === "pt-BR" ? "Apontar Para (Destino):" : "Point To (Target):"}
                 </Label>
                 <div className="mt-1 p-2 bg-muted rounded-md font-mono text-sm break-all">
-                  {platformDomain}
+                  {CNAME_TARGET}
                 </div>
               </div>
             </div>
