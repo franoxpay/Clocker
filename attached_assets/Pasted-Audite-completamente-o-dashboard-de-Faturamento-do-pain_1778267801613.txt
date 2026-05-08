@@ -1,0 +1,82 @@
+Audite completamente o dashboard de Faturamento do painel admin antes de implementar mudanças.
+
+Problema visível:
+O MRR está aparecendo como R$ 1.198.500,00, valor provavelmente incorreto para 5 assinaturas ativas.
+Quero descobrir a causa real antes de corrigir.
+
+Analise:
+
+1. Frontend
+- página de faturamento admin;
+- componentes de cards;
+- gráfico de novos usuários;
+- gráfico distribuição por status;
+- tabela de assinantes;
+- tabela de pagamentos;
+- formatação de moeda;
+- se valores vêm em centavos ou reais.
+
+2. Backend
+Mapear endpoints usados pela página:
+- stats de faturamento;
+- assinantes;
+- pagamentos;
+- MRR;
+- receita total;
+- status de assinatura.
+
+3. Banco
+Verificar:
+- campo de preço dos planos;
+- se está salvo em reais ou centavos;
+- usuários ativos;
+- subscriptionStatus;
+- plano associado;
+- dados Stripe;
+- pagamentos reais;
+- force-payment/manual activation.
+
+4. Stripe
+Verificar se o dashboard mistura:
+- usuários ativados manualmente;
+- assinaturas reais Stripe;
+- pagamentos reais;
+- planos sem pagamento.
+
+5. Diagnosticar bugs concretos:
+- MRR multiplicado por 100;
+- receita total incorreta;
+- assinaturas ativas contando usuários manuais;
+- pagamentos ausentes;
+- gráficos vazios;
+- filtros de período quebrados;
+- status errado;
+- trial incorreto;
+- suspensos incorretos.
+
+6. Validar fórmula correta:
+MRR deve ser soma mensal recorrente de assinaturas ativas reais.
+Receita total deve ser soma de pagamentos efetivamente recebidos, não soma de planos atribuídos manualmente.
+
+7. Verificar se “Assinaturas Ativas” deve contar:
+- somente Stripe active;
+OU
+- active manual também, mas marcado separadamente.
+
+8. Verificar se “Receita Total” vem:
+- Stripe charges;
+- banco;
+- estimativa;
+- soma de planos.
+
+9. Não implementar ainda.
+Primeiro entregue diagnóstico.
+
+No final me entregue:
+- arquivos analisados;
+- endpoints usados;
+- causa real do MRR absurdo;
+- causa de receita total;
+- dados que estão em centavos/reais;
+- inconsistências encontradas;
+- recomendações de correção em ordem de prioridade.
