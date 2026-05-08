@@ -402,7 +402,17 @@ export interface IStorage {
   }>;
   
   // Email logs
-  getEmailLogs(page: number, limit: number, type?: string): Promise<{ logs: EmailLog[]; total: number }>;
+  getEmailLogs(page: number, limit: number, filters?: {
+    type?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    order?: string;
+    userId?: string;
+  }): Promise<{ logs: EmailLog[]; total: number }>;
+  getEmailLogById(id: number): Promise<EmailLog | undefined>;
+  getEmailLogsByUserId(userId: string, limit?: number): Promise<EmailLog[]>;
   getEmailStats(): Promise<{
     totalSent: number;
     totalFailed: number;
@@ -2923,25 +2933,61 @@ export class DatabaseStorage implements IStorage {
   }
 // ================== EMAIL LOGS ==================
 
-  async getEmailLogs(page: number, limit: number, type?: string): Promise<{ logs: EmailLog[]; total: number }> {
+  async getEmailLogs(page: number, limit: number, filters?: {
+    type?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    order?: string;
+    userId?: string;
+  }): Promise<{ logs: EmailLog[]; total: number }> {
     const offset = (page - 1) * limit;
-    
-    let query = db.select().from(emailLogs);
-    let countQuery = db.select({ count: sql<number>`count(*)` }).from(emailLogs);
-    
-    if (type && type !== 'all') {
-      query = query.where(eq(emailLogs.type, type)) as any;
-      countQuery = countQuery.where(eq(emailLogs.type, type)) as any;
+    const conditions: any[] = [];
+
+    if (filters?.type && filters.type !== 'all') {
+      conditions.push(eq(emailLogs.type, filters.type));
     }
-    
-    const logs = await query
-      .orderBy(desc(emailLogs.createdAt))
-      .limit(limit)
-      .offset(offset);
-    
-    const [{ count }] = await countQuery;
-    
+    if (filters?.status && filters.status !== 'all') {
+      conditions.push(eq(emailLogs.status, filters.status));
+    }
+    if (filters?.userId) {
+      conditions.push(eq(emailLogs.userId as any, filters.userId));
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(emailLogs.createdAt, new Date(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      conditions.push(lte(emailLogs.createdAt, end));
+    }
+    if (filters?.search) {
+      const s = `%${filters.search}%`;
+      conditions.push(sql`(${emailLogs.toEmail} ILIKE ${s} OR ${emailLogs.subject} ILIKE ${s})`);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const orderClause = filters?.order === 'oldest' ? emailLogs.createdAt : desc(emailLogs.createdAt);
+
+    const [logs, [{ count }]] = await Promise.all([
+      db.select().from(emailLogs).where(whereClause).orderBy(orderClause).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)` }).from(emailLogs).where(whereClause),
+    ]);
+
     return { logs, total: Number(count) };
+  }
+
+  async getEmailLogById(id: number): Promise<EmailLog | undefined> {
+    const [log] = await db.select().from(emailLogs).where(eq(emailLogs.id, id)).limit(1);
+    return log;
+  }
+
+  async getEmailLogsByUserId(userId: string, limit = 50): Promise<EmailLog[]> {
+    return db.select().from(emailLogs)
+      .where(eq(emailLogs.userId as any, userId))
+      .orderBy(desc(emailLogs.createdAt))
+      .limit(limit);
   }
 
   async getEmailStats(): Promise<{

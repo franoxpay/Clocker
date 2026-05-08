@@ -4,7 +4,7 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { isAdmin, isAuthenticated } from "../replitAuth";
 import { getStripeClient, isStripeConfigured } from "../stripeClient";
-import { sendDomainRemovedEmail, sendEmail } from "../email";
+import { sendDomainRemovedEmail, sendEmail, sendTemplatedEmail } from "../email";
 import { verifyDomainDNS } from "../domainUtils";
 import { resetConsecutiveFailures } from "../domainMonitor";
 import { toSafeUser, toSafeUsers } from "../lib/safeUser";
@@ -2042,13 +2042,73 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 25;
-      const type = req.query.type as string | undefined;
-
-      const result = await storage.getEmailLogs(page, limit, type);
+      const result = await storage.getEmailLogs(page, limit, {
+        type: req.query.type as string | undefined,
+        status: req.query.status as string | undefined,
+        startDate: req.query.startDate as string | undefined,
+        endDate: req.query.endDate as string | undefined,
+        search: req.query.search as string | undefined,
+        order: req.query.order as string | undefined,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching email logs:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/users/:id/emails", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const emails = await storage.getEmailLogsByUserId(req.params.id, 50);
+      res.json(emails);
+    } catch (error) {
+      console.error("Error fetching user email logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/emails/:id/retry", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const emailId = parseInt(req.params.id);
+      if (isNaN(emailId)) return res.status(400).json({ message: "Invalid email ID" });
+
+      const log = await storage.getEmailLogById(emailId);
+      if (!log) return res.status(404).json({ message: "Email log not found" });
+
+      const user = log.userId ? await storage.getUser(log.userId) : null;
+      const meta = (log.metadata as Record<string, any>) || {};
+      const retryCount = (meta.retryCount || 0) + 1;
+
+      const variables: Record<string, string> = {
+        firstName: user?.firstName || meta.firstName || 'Cliente',
+        name: user?.firstName || meta.firstName || 'Cliente',
+        email: log.toEmail,
+        planName: meta.planName || meta.plan || 'seu plano',
+        domain: meta.domainName || meta.domain || '',
+        limitType: meta.limitType || 'clicks',
+        currentUsage: String(meta.currentUsage || meta.usage || ''),
+        limit: String(meta.limit || ''),
+        endDate: meta.endDate || '',
+        nextRenewalDate: meta.nextRenewalDate || '',
+        reason: meta.reason || '',
+        subscriptionStatus: user?.subscriptionStatus || '',
+      };
+
+      await sendTemplatedEmail(log.type as any, {
+        to: log.toEmail,
+        userId: log.userId || undefined,
+        locale: 'pt',
+        variables,
+        fallbackSubject: log.subject,
+        fallbackHtml: `<p>${log.subject}</p>`,
+        metadata: { ...meta, retryCount, retriedFromId: emailId, isRetry: true },
+      });
+
+      console.log(`[ADMIN] Email ${emailId} retried (attempt #${retryCount})`);
+      res.json({ success: true, retryCount });
+    } catch (error: any) {
+      console.error("Error retrying email:", error);
+      res.status(500).json({ message: error.message || "Internal server error" });
     }
   });
 

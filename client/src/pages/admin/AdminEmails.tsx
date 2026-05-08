@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,53 +9,22 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
-  Mail,
-  CheckCircle,
-  XCircle,
-  Clock,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  FileText,
-  Edit,
-  Loader2,
-  Users,
-  Search,
-  Plus,
-  AlertCircle,
-  TrendingDown,
+  Mail, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, Send,
+  FileText, Edit, Loader2, Users, Search, Plus, AlertCircle, TrendingDown,
+  RotateCcw, Eye, Filter, SortDesc, SortAsc, X, Code2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
@@ -78,25 +47,16 @@ const EMAIL_TYPE_GROUPS = [
   {
     label: "Assinatura",
     types: [
-      "subscription",
-      "subscription_cancelled",
-      "subscription_renewed",
-      "payment_failed",
-      "subscription_expiring_3days",
-      "subscription_expired_today",
-      "subscription_expired_2days",
-      "subscription_expired_7days",
+      "subscription", "subscription_cancelled", "subscription_renewed",
+      "payment_failed", "subscription_expiring_3days", "subscription_expired_today",
+      "subscription_expired_2days", "subscription_expired_7days",
     ],
   },
   {
     label: "Domínios",
     types: [
-      "domain_inactive",
-      "shared_domain_inactive",
-      "domain_removed",
-      "domain_removed_policy",
-      "domain_removed_inactive",
-      "domain_removed_admin",
+      "domain_inactive", "shared_domain_inactive", "domain_removed",
+      "domain_removed_policy", "domain_removed_inactive", "domain_removed_admin",
     ],
   },
   {
@@ -151,36 +111,121 @@ const TYPE_BADGE_VARIANTS: Record<string, "default" | "secondary" | "destructive
   plan_limit: "outline",
 };
 
+const TEMPLATE_VARIABLES: Record<string, string[]> = {
+  welcome: ["{{firstName}}", "{{email}}"],
+  password_reset: ["{{firstName}}", "{{email}}"],
+  account_suspended: ["{{firstName}}", "{{email}}", "{{reason}}"],
+  notification: ["{{firstName}}", "{{email}}"],
+  subscription: ["{{firstName}}", "{{email}}", "{{planName}}"],
+  subscription_cancelled: ["{{firstName}}", "{{email}}", "{{planName}}", "{{endDate}}"],
+  subscription_renewed: ["{{firstName}}", "{{email}}", "{{planName}}", "{{nextRenewalDate}}"],
+  payment_failed: ["{{firstName}}", "{{email}}", "{{planName}}"],
+  subscription_expiring_3days: ["{{firstName}}", "{{email}}", "{{planName}}", "{{endDate}}"],
+  subscription_expired_today: ["{{firstName}}", "{{email}}", "{{planName}}"],
+  subscription_expired_2days: ["{{firstName}}", "{{email}}", "{{planName}}"],
+  subscription_expired_7days: ["{{firstName}}", "{{email}}", "{{planName}}"],
+  domain_inactive: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  shared_domain_inactive: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  domain_removed: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  domain_removed_policy: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  domain_removed_inactive: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  domain_removed_admin: ["{{firstName}}", "{{email}}", "{{domain}}"],
+  plan_limit: ["{{firstName}}", "{{email}}", "{{planName}}", "{{limitType}}", "{{currentUsage}}", "{{limit}}"],
+};
+
+const PREVIEW_VARS: Record<string, string> = {
+  firstName: "João",
+  name: "João Silva",
+  email: "joao@exemplo.com",
+  planName: "Plano Escala",
+  domain: "meu.dominio.com",
+  limitType: "cliques",
+  currentUsage: "15.240",
+  limit: "10.000",
+  endDate: "15/06/2026",
+  nextRenewalDate: "01/07/2026",
+  reason: "período de carência expirado",
+  subscriptionStatus: "ativo",
+  date: new Date().toLocaleDateString("pt-BR"),
+  currentUsagePct: "152%",
+};
+
+function applyPreviewVars(html: string): string {
+  return html.replace(/\{\{(\w+)\}\}/g, (_, key) => PREVIEW_VARS[key] ?? `{{${key}}}`);
+}
+
 export default function AdminEmails() {
   const { language } = useLanguage();
   const { toast } = useToast();
+  const isPt = language === "pt-BR";
+
   const [page, setPage] = useState(1);
   const [filterType, setFilterType] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [orderDir, setOrderDir] = useState("newest");
   const [activeTab, setActiveTab] = useState("history");
+
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [showTemplateDialog, setShowTemplateDialog] = useState(false);
+  const [templateEditorLang, setTemplateEditorLang] = useState<"pt" | "en">("pt");
+  const [templateTab, setTemplateTab] = useState<"edit" | "preview">("edit");
+
   const [showTestDialog, setShowTestDialog] = useState(false);
   const [selectedTemplateType, setSelectedTemplateType] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [testLocale, setTestLocale] = useState<"pt" | "en">("pt");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [userSearch, setUserSearch] = useState("");
-  const limit = 20;
+  const [retryingId, setRetryingId] = useState<number | null>(null);
 
-  const isPt = language === "pt-BR";
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  const limit = 20;
 
   const getTypeLabel = (type: string) => TYPE_LABELS[type] || type;
   const getTypeBadgeVariant = (type: string) => TYPE_BADGE_VARIANTS[type] || "default";
+
+  const handleSearchChange = useCallback((val: string) => {
+    setSearchQuery(val);
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      setDebouncedSearch(val);
+      setPage(1);
+    }, 400);
+  }, []);
+
+  const filtersActive =
+    filterType !== "all" || filterStatus !== "all" ||
+    startDate !== "" || endDate !== "" || debouncedSearch !== "";
+
+  const clearFilters = () => {
+    setFilterType("all");
+    setFilterStatus("all");
+    setStartDate("");
+    setEndDate("");
+    setSearchQuery("");
+    setDebouncedSearch("");
+    setPage(1);
+  };
 
   const { data: stats, isLoading: statsLoading } = useQuery<EmailStats>({
     queryKey: ["/api/admin/emails/stats"],
   });
 
   const { data: emailsData, isLoading: emailsLoading } = useQuery<{ logs: EmailLog[]; total: number }>({
-    queryKey: ["/api/admin/emails", page, filterType],
+    queryKey: ["/api/admin/emails", page, filterType, filterStatus, startDate, endDate, debouncedSearch, orderDir],
     queryFn: async () => {
       const params = new URLSearchParams({ page: page.toString(), limit: limit.toString() });
       if (filterType !== "all") params.append("type", filterType);
+      if (filterStatus !== "all") params.append("status", filterStatus);
+      if (startDate) params.append("startDate", startDate);
+      if (endDate) params.append("endDate", endDate);
+      if (debouncedSearch) params.append("search", debouncedSearch);
+      params.append("order", orderDir);
       const response = await fetch(`/api/admin/emails?${params}`);
       if (!response.ok) throw new Error("Failed to fetch emails");
       return response.json();
@@ -208,10 +253,7 @@ export default function AdminEmails() {
     mutationFn: async () => apiRequest("POST", "/api/admin/emails/templates/seed", {}),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/templates"] });
-      toast({
-        title: isPt ? "Templates Criados" : "Templates Created",
-        description: `${data.seeded?.length || 0} templates criados`,
-      });
+      toast({ title: isPt ? "Templates Criados" : "Templates Created", description: `${data.seeded?.length || 0} templates criados` });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -233,24 +275,12 @@ export default function AdminEmails() {
   });
 
   const sendTestMutation = useMutation({
-    mutationFn: async ({
-      templateType,
-      targetEmail,
-      locale,
-      targetUserId,
-    }: {
-      templateType: string;
-      targetEmail: string;
-      locale: "pt" | "en";
-      targetUserId?: string;
+    mutationFn: async ({ templateType, targetEmail, locale, targetUserId }: {
+      templateType: string; targetEmail: string; locale: "pt" | "en"; targetUserId?: string;
     }) => apiRequest("POST", "/api/admin/emails/send-test", { templateType, targetEmail, locale, targetUserId }),
     onSuccess: () => {
       setShowTestDialog(false);
-      setTestEmail("");
-      setSelectedTemplateType("");
-      setTestLocale("pt");
-      setSelectedUserId("");
-      setUserSearch("");
+      setTestEmail(""); setSelectedTemplateType(""); setTestLocale("pt"); setSelectedUserId(""); setUserSearch("");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/emails"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/stats"] });
       toast({ title: isPt ? "E-mail de teste enviado" : "Test email sent" });
@@ -260,34 +290,42 @@ export default function AdminEmails() {
     },
   });
 
+  const retryMutation = useMutation({
+    mutationFn: async (emailId: number) => {
+      setRetryingId(emailId);
+      return apiRequest("POST", `/api/admin/emails/${emailId}/retry`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/emails"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/emails/stats"] });
+      toast({ title: isPt ? "E-mail reenviado" : "Email resent" });
+      setRetryingId(null);
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      setRetryingId(null);
+    },
+  });
+
   const totalPages = emailsData ? Math.ceil(emailsData.total / limit) : 1;
+  const failureRate = stats && stats.totalSent + stats.totalFailed > 0
+    ? Math.round((stats.totalFailed / (stats.totalSent + stats.totalFailed)) * 100)
+    : 0;
 
-  const failureRate =
-    stats && stats.totalSent + stats.totalFailed > 0
-      ? Math.round((stats.totalFailed / (stats.totalSent + stats.totalFailed)) * 100)
-      : 0;
-
-  const formatDate = (date: string | Date) => {
-    const d = new Date(date);
-    return format(d, "dd/MM/yyyy HH:mm", { locale: isPt ? ptBR : enUS });
-  };
+  const formatDate = (date: string | Date) =>
+    format(new Date(date), "dd/MM/yyyy HH:mm", { locale: isPt ? ptBR : enUS });
 
   const handleEditTemplate = (template: EmailTemplate) => {
     setEditingTemplate(template);
+    setTemplateEditorLang("pt");
+    setTemplateTab("edit");
     setShowTemplateDialog(true);
   };
 
   const handleNewTemplate = (type: string) => {
-    setEditingTemplate({
-      id: 0,
-      type,
-      subjectPt: "",
-      subjectEn: "",
-      htmlPt: "",
-      htmlEn: "",
-      description: null,
-      updatedAt: new Date(),
-    });
+    setEditingTemplate({ id: 0, type, subjectPt: "", subjectEn: "", htmlPt: "", htmlEn: "", description: null, updatedAt: new Date() });
+    setTemplateEditorLang("pt");
+    setTemplateTab("edit");
     setShowTemplateDialog(true);
   };
 
@@ -305,35 +343,34 @@ export default function AdminEmails() {
 
   const handleSendTest = () => {
     if (!selectedTemplateType || !testEmail) return;
-    sendTestMutation.mutate({
-      templateType: selectedTemplateType,
-      targetEmail: testEmail,
-      locale: testLocale,
-      targetUserId: selectedUserId || undefined,
-    });
-  };
-
-  const handleSelectUser = (user: { id: string; email: string; firstName: string | null }) => {
-    setSelectedUserId(user.id);
-    setTestEmail(user.email);
-    setUserSearch("");
+    sendTestMutation.mutate({ templateType: selectedTemplateType, targetEmail: testEmail, locale: testLocale, targetUserId: selectedUserId || undefined });
   };
 
   const existingTemplateTypes = templates?.map((t) => t.type) || [];
 
+  const currentHtml = editingTemplate ? (templateEditorLang === "pt" ? editingTemplate.htmlPt : editingTemplate.htmlEn) : "";
+  const previewHtml = applyPreviewVars(currentHtml);
+
+  const getRetryCount = (email: EmailLog) => {
+    const meta = email.metadata as Record<string, any> | null;
+    return meta?.retryCount ?? 0;
+  };
+
+  const isRetry = (email: EmailLog) => {
+    const meta = email.metadata as Record<string, any> | null;
+    return !!meta?.isRetry;
+  };
+
   return (
     <TooltipProvider>
       <div className="p-6 space-y-6">
-        {/* ── Cabeçalho ───────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold" data-testid="text-page-title">
               {isPt ? "E-mails" : "Emails"}
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {isPt
-                ? "Histórico de envios e gerenciamento de templates"
-                : "Send history and template management"}
+              {isPt ? "Histórico de envios e gerenciamento de templates" : "Send history and template management"}
             </p>
           </div>
           <Button onClick={() => setShowTestDialog(true)} data-testid="button-send-test-email">
@@ -342,7 +379,6 @@ export default function AdminEmails() {
           </Button>
         </div>
 
-        {/* ── Cards de Estatísticas ────────────────────────────────────── */}
         <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardContent className="pt-6">
@@ -352,18 +388,13 @@ export default function AdminEmails() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{isPt ? "Total Enviados" : "Total Sent"}</p>
-                  {statsLoading ? (
-                    <Skeleton className="h-7 w-16" />
-                  ) : (
-                    <p className="text-2xl font-bold" data-testid="text-total-sent">
-                      {stats?.totalSent ?? 0}
-                    </p>
+                  {statsLoading ? <Skeleton className="h-7 w-16" /> : (
+                    <p className="text-2xl font-bold" data-testid="text-total-sent">{stats?.totalSent ?? 0}</p>
                   )}
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -372,18 +403,13 @@ export default function AdminEmails() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{isPt ? "Com Falha" : "Failed"}</p>
-                  {statsLoading ? (
-                    <Skeleton className="h-7 w-16" />
-                  ) : (
-                    <p className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-total-failed">
-                      {stats?.totalFailed ?? 0}
-                    </p>
+                  {statsLoading ? <Skeleton className="h-7 w-16" /> : (
+                    <p className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-total-failed">{stats?.totalFailed ?? 0}</p>
                   )}
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -392,55 +418,23 @@ export default function AdminEmails() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{isPt ? "Últimas 24h" : "Last 24h"}</p>
-                  {statsLoading ? (
-                    <Skeleton className="h-7 w-16" />
-                  ) : (
-                    <p className="text-2xl font-bold" data-testid="text-last-24h">
-                      {stats?.last24Hours ?? 0}
-                    </p>
+                  {statsLoading ? <Skeleton className="h-7 w-16" /> : (
+                    <p className="text-2xl font-bold" data-testid="text-last-24h">{stats?.last24Hours ?? 0}</p>
                   )}
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div
-                  className={`p-2 rounded-lg ${
-                    failureRate >= 30
-                      ? "bg-red-100 dark:bg-red-900/30"
-                      : failureRate >= 10
-                      ? "bg-yellow-100 dark:bg-yellow-900/30"
-                      : "bg-green-100 dark:bg-green-900/30"
-                  }`}
-                >
-                  <TrendingDown
-                    className={`w-5 h-5 ${
-                      failureRate >= 30
-                        ? "text-red-600 dark:text-red-400"
-                        : failureRate >= 10
-                        ? "text-yellow-600 dark:text-yellow-400"
-                        : "text-green-600 dark:text-green-400"
-                    }`}
-                  />
+                <div className={`p-2 rounded-lg ${failureRate >= 30 ? "bg-red-100 dark:bg-red-900/30" : failureRate >= 10 ? "bg-yellow-100 dark:bg-yellow-900/30" : "bg-green-100 dark:bg-green-900/30"}`}>
+                  <TrendingDown className={`w-5 h-5 ${failureRate >= 30 ? "text-red-600 dark:text-red-400" : failureRate >= 10 ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400"}`} />
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">{isPt ? "Taxa de Falha" : "Failure Rate"}</p>
-                  {statsLoading ? (
-                    <Skeleton className="h-7 w-16" />
-                  ) : (
-                    <p
-                      className={`text-2xl font-bold ${
-                        failureRate >= 30
-                          ? "text-red-600 dark:text-red-400"
-                          : failureRate >= 10
-                          ? "text-yellow-600 dark:text-yellow-400"
-                          : ""
-                      }`}
-                      data-testid="text-failure-rate"
-                    >
+                  {statsLoading ? <Skeleton className="h-7 w-16" /> : (
+                    <p className={`text-2xl font-bold ${failureRate >= 30 ? "text-red-600 dark:text-red-400" : failureRate >= 10 ? "text-yellow-600 dark:text-yellow-400" : ""}`} data-testid="text-failure-rate">
                       {failureRate}%
                     </p>
                   )}
@@ -450,7 +444,6 @@ export default function AdminEmails() {
           </Card>
         </div>
 
-        {/* ── Tabs ─────────────────────────────────────────────────────── */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
             <TabsTrigger value="history" data-testid="tab-history">
@@ -459,51 +452,114 @@ export default function AdminEmails() {
             </TabsTrigger>
             <TabsTrigger value="templates" data-testid="tab-templates">
               <FileText className="w-4 h-4 mr-2" />
-              {isPt ? "Templates" : "Templates"}
+              Templates
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Histórico ─────────────────────────────────────────────── */}
           <TabsContent value="history" className="mt-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
-                <CardTitle className="text-base">{isPt ? "Histórico de Envios" : "Send History"}</CardTitle>
-                <Select
-                  value={filterType}
-                  onValueChange={(value) => {
-                    setFilterType(value);
-                    setPage(1);
-                  }}
-                >
-                  <SelectTrigger className="w-56" data-testid="select-email-type-filter">
-                    <SelectValue placeholder={isPt ? "Todos os tipos" : "All types"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">{isPt ? "Todos os tipos" : "All types"}</SelectItem>
-                    {EMAIL_TYPE_GROUPS.map((group) => (
-                      <SelectGroup key={group.label}>
-                        <SelectLabel>{group.label}</SelectLabel>
-                        {group.types.map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {getTypeLabel(type)}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <CardTitle className="text-base">{isPt ? "Histórico de Envios" : "Send History"}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    {filtersActive && (
+                      <Button variant="ghost" size="sm" onClick={clearFilters} data-testid="button-clear-filters">
+                        <X className="w-3.5 h-3.5 mr-1" />
+                        {isPt ? "Limpar" : "Clear"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOrderDir(orderDir === "newest" ? "oldest" : "newest")}
+                      data-testid="button-toggle-order"
+                    >
+                      {orderDir === "newest"
+                        ? <><SortDesc className="w-3.5 h-3.5 mr-1" />{isPt ? "Mais recentes" : "Newest"}</>
+                        : <><SortAsc className="w-3.5 h-3.5 mr-1" />{isPt ? "Mais antigos" : "Oldest"}</>
+                      }
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <div className="relative flex-1 min-w-[180px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      placeholder={isPt ? "Buscar por email ou assunto…" : "Search by email or subject…"}
+                      className="pl-8 h-8 text-sm"
+                      data-testid="input-email-search"
+                    />
+                  </div>
+
+                  <Select value={filterType} onValueChange={(v) => { setFilterType(v); setPage(1); }}>
+                    <SelectTrigger className="w-44 h-8 text-sm" data-testid="select-email-type-filter">
+                      <Filter className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                      <SelectValue placeholder={isPt ? "Tipo" : "Type"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{isPt ? "Todos os tipos" : "All types"}</SelectItem>
+                      {EMAIL_TYPE_GROUPS.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel>{group.label}</SelectLabel>
+                          {group.types.map((type) => (
+                            <SelectItem key={type} value={type}>{getTypeLabel(type)}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={filterStatus} onValueChange={(v) => { setFilterStatus(v); setPage(1); }}>
+                    <SelectTrigger className="w-32 h-8 text-sm" data-testid="select-email-status-filter">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">{isPt ? "Todos" : "All"}</SelectItem>
+                      <SelectItem value="sent">{isPt ? "Enviados" : "Sent"}</SelectItem>
+                      <SelectItem value="failed">{isPt ? "Falhas" : "Failed"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                    className="w-36 h-8 text-sm"
+                    title={isPt ? "Data inicial" : "Start date"}
+                    data-testid="input-start-date"
+                  />
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                    className="w-36 h-8 text-sm"
+                    title={isPt ? "Data final" : "End date"}
+                    data-testid="input-end-date"
+                  />
+                </div>
               </CardHeader>
+
               <CardContent>
                 {emailsLoading ? (
                   <div className="space-y-2">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
+                    {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
                   </div>
                 ) : emailsData?.logs?.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Mail className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm">{isPt ? "Nenhum e-mail encontrado" : "No emails found"}</p>
+                  <div className="text-center py-14 text-muted-foreground">
+                    <Mail className="w-10 h-10 mx-auto mb-3 opacity-25" />
+                    <p className="text-sm font-medium mb-1">
+                      {filtersActive
+                        ? (isPt ? "Nenhum e-mail encontrado para estes filtros" : "No emails found for these filters")
+                        : (isPt ? "Nenhum e-mail enviado ainda" : "No emails sent yet")}
+                    </p>
+                    {filtersActive && (
+                      <Button variant="link" size="sm" onClick={clearFilters} className="text-xs mt-1">
+                        {isPt ? "Limpar filtros" : "Clear filters"}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -513,14 +569,29 @@ export default function AdminEmails() {
                           <TableHead>{isPt ? "Destinatário" : "Recipient"}</TableHead>
                           <TableHead>{isPt ? "Assunto" : "Subject"}</TableHead>
                           <TableHead>{isPt ? "Tipo" : "Type"}</TableHead>
-                          <TableHead>{isPt ? "Status" : "Status"}</TableHead>
+                          <TableHead>Status</TableHead>
                           <TableHead>{isPt ? "Data" : "Date"}</TableHead>
+                          <TableHead className="w-[90px]">{isPt ? "Ações" : "Actions"}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {emailsData?.logs?.map((email) => (
                           <TableRow key={email.id} data-testid={`row-email-${email.id}`}>
-                            <TableCell className="font-medium text-sm">{email.toEmail}</TableCell>
+                            <TableCell className="font-medium text-sm">
+                              <div className="flex items-center gap-1">
+                                {email.toEmail}
+                                {isRetry(email) && (
+                                  <Tooltip>
+                                    <TooltipTrigger>
+                                      <RotateCcw className="w-3 h-3 text-muted-foreground" />
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="text-xs">
+                                      {isPt ? `Reenvio #${getRetryCount(email)}` : `Retry #${getRetryCount(email)}`}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
                               {email.subject}
                             </TableCell>
@@ -541,9 +612,7 @@ export default function AdminEmails() {
                                     <Badge variant="destructive" className="text-xs gap-1 cursor-help">
                                       <XCircle className="w-3 h-3" />
                                       {isPt ? "Falha" : "Failed"}
-                                      {(email as any).errorMessage && (
-                                        <AlertCircle className="w-3 h-3 ml-0.5" />
-                                      )}
+                                      {(email as any).errorMessage && <AlertCircle className="w-3 h-3 ml-0.5" />}
                                     </Badge>
                                   </TooltipTrigger>
                                   {(email as any).errorMessage && (
@@ -558,6 +627,28 @@ export default function AdminEmails() {
                             <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                               {formatDate(email.createdAt)}
                             </TableCell>
+                            <TableCell>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => retryMutation.mutate(email.id)}
+                                    disabled={retryingId === email.id}
+                                    data-testid={`button-retry-email-${email.id}`}
+                                  >
+                                    {retryingId === email.id
+                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      : <RotateCcw className="w-3.5 h-3.5" />
+                                    }
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="text-xs">
+                                  {isPt ? "Reenviar" : "Resend"}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -567,27 +658,13 @@ export default function AdminEmails() {
                       <div className="flex items-center justify-between mt-4 pt-4 border-t">
                         <p className="text-sm text-muted-foreground">
                           {isPt ? "Página" : "Page"} {page} {isPt ? "de" : "of"} {totalPages}
-                          <span className="ml-2 text-xs">
-                            ({emailsData?.total ?? 0} {isPt ? "no total" : "total"})
-                          </span>
+                          <span className="ml-2 text-xs">({emailsData?.total ?? 0} {isPt ? "no total" : "total"})</span>
                         </p>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPage((p) => Math.max(1, p - 1))}
-                            disabled={page === 1}
-                            data-testid="button-prev-page"
-                          >
+                          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} data-testid="button-prev-page">
                             <ChevronLeft className="w-4 h-4" />
                           </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                            disabled={page === totalPages}
-                            data-testid="button-next-page"
-                          >
+                          <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} data-testid="button-next-page">
                             <ChevronRight className="w-4 h-4" />
                           </Button>
                         </div>
@@ -599,49 +676,40 @@ export default function AdminEmails() {
             </Card>
           </TabsContent>
 
-          {/* ── Templates ─────────────────────────────────────────────── */}
           <TabsContent value="templates" className="mt-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
                 <div>
                   <CardTitle className="text-base">{isPt ? "Templates de E-mail" : "Email Templates"}</CardTitle>
                   <CardDescription className="mt-1 text-xs">
-                    {isPt
-                      ? "Variáveis: {{name}}, {{firstName}}, {{email}}, {{planName}}, {{domain}}, {{limitType}}, {{currentUsage}}, {{limit}}"
-                      : "Variables: {{name}}, {{firstName}}, {{email}}, {{planName}}, {{domain}}, {{limitType}}, {{currentUsage}}, {{limit}}"}
+                    {isPt ? "Templates editados aqui afetam os e-mails automáticos reais." : "Templates edited here affect real automatic emails."}
                   </CardDescription>
                 </div>
                 {templates && templates.length < EMAIL_TYPES.length && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => seedTemplatesMutation.mutate()}
-                    disabled={seedTemplatesMutation.isPending}
-                    data-testid="button-seed-templates"
-                  >
-                    {seedTemplatesMutation.isPending ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="w-4 h-4 mr-2" />
-                    )}
+                  <Button variant="outline" size="sm" onClick={() => seedTemplatesMutation.mutate()} disabled={seedTemplatesMutation.isPending} data-testid="button-seed-templates">
+                    {seedTemplatesMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
                     {isPt ? "Criar Templates Padrão" : "Create Default Templates"}
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
                 {templatesLoading ? (
-                  <div className="space-y-2">
-                    {[...Array(5)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
+                  <div className="space-y-2">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+                ) : templates && templates.length === 0 ? (
+                  <div className="text-center py-14 text-muted-foreground">
+                    <FileText className="w-10 h-10 mx-auto mb-3 opacity-25" />
+                    <p className="text-sm font-medium mb-1">{isPt ? "Nenhum template criado ainda" : "No templates created yet"}</p>
+                    <p className="text-xs mb-4">{isPt ? "Clique em \"Criar Templates Padrão\" para começar" : "Click \"Create Default Templates\" to get started"}</p>
+                    <Button size="sm" onClick={() => seedTemplatesMutation.mutate()} disabled={seedTemplatesMutation.isPending}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      {isPt ? "Criar Templates Padrão" : "Create Default Templates"}
+                    </Button>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     {EMAIL_TYPE_GROUPS.map((group) => (
                       <div key={group.label}>
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                          {group.label}
-                        </p>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{group.label}</p>
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -658,16 +726,10 @@ export default function AdminEmails() {
                               return (
                                 <TableRow key={type} data-testid={`row-template-${type}`}>
                                   <TableCell>
-                                    <Badge variant={getTypeBadgeVariant(type)} className="text-xs">
-                                      {getTypeLabel(type)}
-                                    </Badge>
+                                    <Badge variant={getTypeBadgeVariant(type)} className="text-xs">{getTypeLabel(type)}</Badge>
                                   </TableCell>
                                   <TableCell className="max-w-[220px] truncate text-sm">
-                                    {template?.subjectPt || (
-                                      <span className="text-muted-foreground italic text-xs">
-                                        {isPt ? "sem template" : "no template"}
-                                      </span>
-                                    )}
+                                    {template?.subjectPt || <span className="text-muted-foreground italic text-xs">{isPt ? "sem template" : "no template"}</span>}
                                   </TableCell>
                                   <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">
                                     {template?.description || "—"}
@@ -677,22 +739,12 @@ export default function AdminEmails() {
                                   </TableCell>
                                   <TableCell>
                                     {template ? (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleEditTemplate(template)}
-                                        data-testid={`button-edit-template-${type}`}
-                                      >
+                                      <Button variant="outline" size="sm" onClick={() => handleEditTemplate(template)} data-testid={`button-edit-template-${type}`}>
                                         <Edit className="w-3.5 h-3.5 mr-1" />
                                         {isPt ? "Editar" : "Edit"}
                                       </Button>
                                     ) : (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleNewTemplate(type)}
-                                        data-testid={`button-create-template-${type}`}
-                                      >
+                                      <Button variant="outline" size="sm" onClick={() => handleNewTemplate(type)} data-testid={`button-create-template-${type}`}>
                                         <Plus className="w-3.5 h-3.5 mr-1" />
                                         {isPt ? "Criar" : "Create"}
                                       </Button>
@@ -712,46 +764,34 @@ export default function AdminEmails() {
           </TabsContent>
         </Tabs>
 
-        {/* ── Dialog: Editar / Criar Template ──────────────────────────── */}
+        {/* ── Dialog: Editar / Criar Template ───────────────────────────── */}
         <Dialog open={showTemplateDialog} onOpenChange={setShowTemplateDialog}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-5xl max-h-[92vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingTemplate?.id
-                  ? isPt
-                    ? "Editar Template"
-                    : "Edit Template"
-                  : isPt
-                  ? "Criar Template"
-                  : "Create Template"}{" "}
-                — {getTypeLabel(editingTemplate?.type || "")}
+                  ? (isPt ? "Editar Template" : "Edit Template")
+                  : (isPt ? "Criar Template" : "Create Template")
+                } — {getTypeLabel(editingTemplate?.type || "")}
               </DialogTitle>
               <DialogDescription className="text-xs">
-                {isPt
-                  ? "Variáveis disponíveis: {{name}}, {{firstName}}, {{email}}, {{planName}}, {{domain}}, {{limitType}}, {{currentUsage}}, {{limit}}"
-                  : "Available variables: {{name}}, {{firstName}}, {{email}}, {{planName}}, {{domain}}, {{limitType}}, {{currentUsage}}, {{limit}}"}
+                {isPt ? "Templates editados aqui afetam os e-mails automáticos enviados aos usuários." : "Templates edited here affect real automated emails sent to users."}
               </DialogDescription>
             </DialogHeader>
+
             {editingTemplate && (
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>{isPt ? "Assunto (PT)" : "Subject (PT)"}</Label>
-                    <Input
-                      value={editingTemplate.subjectPt}
-                      onChange={(e) => setEditingTemplate({ ...editingTemplate, subjectPt: e.target.value })}
-                      data-testid="input-subject-pt"
-                    />
+                    <Input value={editingTemplate.subjectPt} onChange={(e) => setEditingTemplate({ ...editingTemplate, subjectPt: e.target.value })} data-testid="input-subject-pt" />
                   </div>
                   <div className="space-y-2">
                     <Label>{isPt ? "Assunto (EN)" : "Subject (EN)"}</Label>
-                    <Input
-                      value={editingTemplate.subjectEn}
-                      onChange={(e) => setEditingTemplate({ ...editingTemplate, subjectEn: e.target.value })}
-                      data-testid="input-subject-en"
-                    />
+                    <Input value={editingTemplate.subjectEn} onChange={(e) => setEditingTemplate({ ...editingTemplate, subjectEn: e.target.value })} data-testid="input-subject-en" />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>{isPt ? "Descrição interna" : "Internal description"}</Label>
                   <Input
@@ -761,30 +801,112 @@ export default function AdminEmails() {
                     data-testid="input-description"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>{isPt ? "HTML (Português)" : "HTML (Portuguese)"}</Label>
-                    <Textarea
-                      value={editingTemplate.htmlPt}
-                      onChange={(e) => setEditingTemplate({ ...editingTemplate, htmlPt: e.target.value })}
-                      rows={14}
-                      className="font-mono text-xs"
-                      data-testid="textarea-html-pt"
-                    />
+
+                {/* Available variables */}
+                {TEMPLATE_VARIABLES[editingTemplate.type] && (
+                  <div className="rounded-md border bg-muted/30 p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Code2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      <p className="text-xs font-medium text-muted-foreground">{isPt ? "Variáveis disponíveis para este tipo:" : "Available variables for this type:"}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {TEMPLATE_VARIABLES[editingTemplate.type].map((v) => (
+                        <code key={v} className="text-xs bg-background border rounded px-1.5 py-0.5 text-primary font-mono">{v}</code>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>{isPt ? "HTML (Inglês)" : "HTML (English)"}</Label>
-                    <Textarea
-                      value={editingTemplate.htmlEn}
-                      onChange={(e) => setEditingTemplate({ ...editingTemplate, htmlEn: e.target.value })}
-                      rows={14}
-                      className="font-mono text-xs"
-                      data-testid="textarea-html-en"
-                    />
+                )}
+
+                {/* Language + edit/preview tabs */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <Button
+                        variant={templateEditorLang === "pt" ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setTemplateEditorLang("pt")}
+                        data-testid="button-lang-pt"
+                      >
+                        PT
+                      </Button>
+                      <Button
+                        variant={templateEditorLang === "en" ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setTemplateEditorLang("en")}
+                        data-testid="button-lang-en"
+                      >
+                        EN
+                      </Button>
+                    </div>
+                    <div className="flex gap-1 ml-auto">
+                      <Button
+                        variant={templateTab === "edit" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setTemplateTab("edit")}
+                        data-testid="button-tab-edit"
+                      >
+                        <Edit className="w-3 h-3 mr-1" />
+                        {isPt ? "Editar" : "Edit"}
+                      </Button>
+                      <Button
+                        variant={templateTab === "preview" ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setTemplateTab("preview")}
+                        data-testid="button-tab-preview"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Preview
+                      </Button>
+                    </div>
                   </div>
+
+                  {templateTab === "edit" ? (
+                    <Textarea
+                      value={templateEditorLang === "pt" ? editingTemplate.htmlPt : editingTemplate.htmlEn}
+                      onChange={(e) =>
+                        setEditingTemplate(
+                          templateEditorLang === "pt"
+                            ? { ...editingTemplate, htmlPt: e.target.value }
+                            : { ...editingTemplate, htmlEn: e.target.value }
+                        )
+                      }
+                      rows={16}
+                      className="font-mono text-xs"
+                      data-testid={`textarea-html-${templateEditorLang}`}
+                    />
+                  ) : (
+                    <div className="border rounded-md overflow-hidden" style={{ height: 420 }}>
+                      {currentHtml ? (
+                        <iframe
+                          sandbox="allow-same-origin"
+                          srcDoc={previewHtml}
+                          className="w-full h-full bg-white"
+                          title="Email preview"
+                          data-testid="iframe-email-preview"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                          <div className="text-center">
+                            <Eye className="w-8 h-8 mx-auto mb-2 opacity-25" />
+                            <p>{isPt ? "Adicione HTML para ver o preview" : "Add HTML to see the preview"}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {templateTab === "preview"
+                      ? (isPt ? "Preview com dados fictícios. As variáveis {{...}} são substituídas automaticamente." : "Preview with sample data. Variables {{...}} are replaced automatically.")
+                      : (isPt ? "HTML completo do e-mail. Use as variáveis acima para personalizar." : "Full email HTML. Use the variables above to personalize.")}
+                  </p>
                 </div>
               </div>
             )}
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setShowTemplateDialog(false)}>
                 {isPt ? "Cancelar" : "Cancel"}
@@ -803,9 +925,7 @@ export default function AdminEmails() {
             <DialogHeader>
               <DialogTitle>{isPt ? "Enviar E-mail de Teste" : "Send Test Email"}</DialogTitle>
               <DialogDescription>
-                {isPt
-                  ? "Escolha o template e o destinatário para enviar um teste"
-                  : "Choose the template and recipient to send a test"}
+                {isPt ? "O e-mail de teste aparece no histórico (email_logs)" : "Test emails appear in the send history (email_logs)"}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -823,9 +943,7 @@ export default function AdminEmails() {
                         <SelectGroup key={group.label}>
                           <SelectLabel>{group.label}</SelectLabel>
                           {groupTypes.map((type) => (
-                            <SelectItem key={type} value={type}>
-                              {getTypeLabel(type)}
-                            </SelectItem>
+                            <SelectItem key={type} value={type}>{getTypeLabel(type)}</SelectItem>
                           ))}
                         </SelectGroup>
                       );
@@ -833,9 +951,7 @@ export default function AdminEmails() {
                   </SelectContent>
                 </Select>
                 {existingTemplateTypes.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {isPt ? "Crie um template primeiro na aba Templates" : "Create a template first in the Templates tab"}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{isPt ? "Crie um template primeiro na aba Templates" : "Create a template first in the Templates tab"}</p>
                 )}
               </div>
 
@@ -860,7 +976,7 @@ export default function AdminEmails() {
                       <div
                         key={user.id}
                         className="px-3 py-2 hover:bg-accent cursor-pointer text-sm border-b last:border-b-0"
-                        onClick={() => handleSelectUser(user)}
+                        onClick={() => { setSelectedUserId(user.id); setTestEmail(user.email); setUserSearch(""); }}
                         data-testid={`button-select-user-${user.id}`}
                       >
                         <div className="font-medium">{user.email}</div>
@@ -869,11 +985,8 @@ export default function AdminEmails() {
                     ))}
                   </div>
                 )}
-                {selectedUserId && (
-                  <p className="text-xs text-muted-foreground">
-                    {isPt ? "Selecionado: " : "Selected: "}
-                    <span className="font-medium text-foreground">{testEmail}</span>
-                  </p>
+                {userSearch && filteredUsers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">{isPt ? "Nenhum usuário encontrado" : "No users found"}</p>
                 )}
               </div>
 
@@ -882,17 +995,14 @@ export default function AdminEmails() {
                 <Input
                   type="email"
                   value={testEmail}
-                  onChange={(e) => {
-                    setTestEmail(e.target.value);
-                    setSelectedUserId("");
-                  }}
+                  onChange={(e) => { setTestEmail(e.target.value); setSelectedUserId(""); }}
                   placeholder="email@example.com"
                   data-testid="input-test-email"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {isPt
-                    ? "Selecione um usuário acima ou digite manualmente"
-                    : "Select a user above or type manually"}
+                  {selectedUserId
+                    ? (isPt ? `Usuário selecionado: ${testEmail}` : `Selected user: ${testEmail}`)
+                    : (isPt ? "Selecione um usuário acima ou digite manualmente" : "Select a user above or type manually")}
                 </p>
               </div>
 

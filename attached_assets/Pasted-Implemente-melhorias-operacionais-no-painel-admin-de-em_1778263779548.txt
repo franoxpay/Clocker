@@ -1,0 +1,190 @@
+Implemente melhorias operacionais no painel admin de emails.
+
+Objetivo:
+Transformar o painel de emails em uma central operacional profissional.
+
+Importante:
+- NÃO reescrever o sistema atual;
+- evoluir o que já existe;
+- manter performance;
+- não quebrar envios atuais.
+
+Faça exatamente isto:
+
+━━━━━━━━━━━━━━━━━━━
+1. Melhorar filtros/logs
+━━━━━━━━━━━━━━━━━━━
+
+Adicionar no endpoint GET /api/admin/emails:
+
+- filtro por status:
+  - sent
+  - failed
+
+- filtro por data:
+  - startDate
+  - endDate
+
+- busca por:
+  - recipient email
+  - subject
+
+- ordenação por:
+  - newest
+  - oldest
+
+Frontend:
+- adicionar filtros visuais;
+- busca;
+- date range.
+
+━━━━━━━━━━━━━━━━━━━
+2. Histórico por usuário
+━━━━━━━━━━━━━━━━━━━
+
+Na página de detalhes do usuário:
+(confg-admin/users/:id)
+
+Adicionar seção/tab:
+Emails
+
+Mostrar:
+- últimos emails enviados;
+- status;
+- assunto;
+- tipo;
+- data;
+- erro se falhou.
+
+Adicionar link:
+“Ver email completo”
+
+━━━━━━━━━━━━━━━━━━━
+3. Retry/Reenviar
+━━━━━━━━━━━━━━━━━━━
+
+Adicionar botão:
+“Reenviar”
+
+Disponível para:
+- emails failed
+- emails sent
+
+O retry deve:
+- reutilizar o tipo/template original;
+- reutilizar metadata original;
+- gerar novo log;
+- não sobrescrever o log antigo.
+
+Adicionar:
+retryCount
+retriedFromId (opcional)
+
+━━━━━━━━━━━━━━━━━━━
+4. Preview real de template
+━━━━━━━━━━━━━━━━━━━
+
+Hoje o admin edita HTML bruto.
+
+Adicionar:
+- aba Preview;
+- renderização real do HTML;
+- usar iframe sandboxed;
+- aplicar placeholders fake automaticamente.
+
+Exemplo:
+{{firstName}} → João
+{{planName}} → Plano Escala
+
+━━━━━━━━━━━━━━━━━━━
+5. Variáveis disponíveis
+━━━━━━━━━━━━━━━━━━━
+
+Mostrar no editor:
+“Variáveis disponíveis”
+
+Exemplo:
+- {{firstName}}
+- {{planName}}
+- {{reason}}
+- {{nextRenewalDate}}
+
+Baseado no tipo do template.
+
+━━━━━━━━━━━━━━━━━━━
+6. Melhorar logs
+━━━━━━━━━━━━━━━━━━━
+
+Adicionar:
+- retryCount
+- resentFromId
+- providerResponse se existir
+- processingTimeMs
+
+Sem salvar payloads sensíveis.
+
+━━━━━━━━━━━━━━━━━━━
+7. Empty states
+━━━━━━━━━━━━━━━━━━━
+
+Adicionar mensagens amigáveis:
+- sem emails;
+- sem falhas;
+- sem templates;
+- busca vazia.
+
+━━━━━━━━━━━━━━━━━━━
+8. Segurança
+━━━━━━━━━━━━━━━━━━━
+
+- não expor tokens;
+- não expor links de reset;
+- não expor HTML perigoso fora do sandbox;
+- validar retry apenas para admins.
+
+━━━━━━━━━━━━━━━━━━━
+9. Não alterar
+━━━━━━━━━━━━━━━━━━━
+
+- Stripe;
+- billing;
+- cloaker;
+- domains;
+- auth.
+
+━━━━━━━━━━━━━━━━━━━
+10. Testar
+━━━━━━━━━━━━━━━━━━━
+
+- filtro por status;
+- filtro por data;
+- busca;
+- preview;
+- retry de failed;
+- retry de sent;
+- histórico do usuário;
+- placeholders renderizados;
+- logs novos;
+- email inexistente;
+- template quebrado.
+
+━━━━━━━━━━━━━━━━━━━
+Critérios de aceite
+━━━━━━━━━━━━━━━━━━━
+
+- painel de emails fica operacional;
+- preview funciona;
+- retry funciona;
+- histórico por usuário funciona;
+- filtros funcionam;
+- logs melhores;
+- sem vazamento sensível;
+- UI integrada ao admin.
+
+No final me entregue:
+- arquivos alterados;
+- endpoints alterados;
+- campos novos;
+- screenshots/descrição;
+- como testou;
+- riscos restantes.

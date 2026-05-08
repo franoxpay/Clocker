@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -19,8 +20,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, UserCog, Copy, CheckCircle2, XCircle, Clock, Globe, Zap,
-  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail,
+  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail, RotateCcw, Loader2,
 } from "lucide-react";
+import {
+  Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
+import type { EmailLog } from "@shared/schema";
 
 interface UserDetailData {
   profile: {
@@ -746,6 +751,169 @@ function AffiliateTab({ data, lang }: { data: UserDetailData; lang: string }) {
   );
 }
 
+const EMAIL_TYPE_LABELS: Record<string, string> = {
+  welcome: "Boas-vindas",
+  password_reset: "Redefinição de Senha",
+  account_suspended: "Conta Suspensa",
+  notification: "Notificação",
+  subscription: "Assinatura Confirmada",
+  subscription_cancelled: "Assinatura Cancelada",
+  subscription_renewed: "Assinatura Renovada",
+  payment_failed: "Pagamento Falhou",
+  subscription_expiring_3days: "Assinatura vence em 3 dias",
+  subscription_expired_today: "Assinatura expirou hoje",
+  subscription_expired_2days: "Conta pausada (2 dias)",
+  subscription_expired_7days: "1 semana sem assinatura",
+  domain_inactive: "Domínio Inativo",
+  shared_domain_inactive: "Dom. Compartilhado Inativo",
+  domain_removed: "Domínio Removido",
+  domain_removed_policy: "Domínio Removido (Política)",
+  domain_removed_inactive: "Domínio Removido (Inativo)",
+  domain_removed_admin: "Domínio Removido (Admin)",
+  plan_limit: "Limite do Plano",
+};
+
+function EmailsTab({ userId, lang }: { userId: string; lang: string }) {
+  const [retryingId, setRetryingId] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const { data: emails, isLoading } = useQuery<EmailLog[]>({
+    queryKey: [`/api/admin/users/${userId}/emails`],
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: async (emailId: number) => {
+      setRetryingId(emailId);
+      return apiRequest("POST", `/api/admin/emails/${emailId}/retry`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${userId}/emails`] });
+      toast({ title: lang === "pt-BR" ? "E-mail reenviado" : "Email resent" });
+      setRetryingId(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err?.message, variant: "destructive" });
+      setRetryingId(null);
+    },
+  });
+
+  const fmt = (d: string | Date) =>
+    new Date(d).toLocaleString(lang === "pt-BR" ? "pt-BR" : "en-US", {
+      day: "2-digit", month: "2-digit", year: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    });
+
+  if (isLoading) return (
+    <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12" />)}</div>
+  );
+
+  if (!emails || emails.length === 0) return (
+    <Card>
+      <CardContent className="py-12 text-center">
+        <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+        <p className="text-muted-foreground text-sm">
+          {lang === "pt-BR" ? "Nenhum e-mail enviado para este usuário" : "No emails sent to this user"}
+        </p>
+      </CardContent>
+    </Card>
+  );
+
+  return (
+    <TooltipProvider>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            {lang === "pt-BR" ? "Histórico de E-mails" : "Email History"}
+          </CardTitle>
+          <CardDescription>
+            {lang === "pt-BR" ? `${emails.length} e-mails enviados` : `${emails.length} emails sent`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{lang === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                <TableHead>{lang === "pt-BR" ? "Assunto" : "Subject"}</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>{lang === "pt-BR" ? "Data" : "Date"}</TableHead>
+                <TableHead className="w-[60px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {emails.map((email) => {
+                const meta = email.metadata as Record<string, any> | null;
+                const isRetryEmail = !!meta?.isRetry;
+                return (
+                  <TableRow key={email.id} data-testid={`row-user-email-${email.id}`}>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs whitespace-nowrap">
+                        {EMAIL_TYPE_LABELS[email.type] || email.type}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm max-w-[180px] truncate">
+                      <span title={email.subject}>{email.subject}</span>
+                    </TableCell>
+                    <TableCell>
+                      {email.status === "sent" ? (
+                        <Badge variant="outline" className="text-green-600 border-green-600 text-xs gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {lang === "pt-BR" ? "Enviado" : "Sent"}
+                          {isRetryEmail && <span className="text-muted-foreground ml-0.5">(retry)</span>}
+                        </Badge>
+                      ) : (
+                        <UITooltip>
+                          <TooltipTrigger>
+                            <Badge variant="destructive" className="text-xs gap-1 cursor-help">
+                              <XCircle className="w-3 h-3" />
+                              {lang === "pt-BR" ? "Falha" : "Failed"}
+                            </Badge>
+                          </TooltipTrigger>
+                          {(email as any).errorMessage && (
+                            <TooltipContent side="top" className="max-w-xs text-xs">
+                              <p>{(email as any).errorMessage}</p>
+                            </TooltipContent>
+                          )}
+                        </UITooltip>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                      {fmt(email.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => retryMutation.mutate(email.id)}
+                            disabled={retryingId === email.id}
+                            data-testid={`button-retry-user-email-${email.id}`}
+                          >
+                            {retryingId === email.id
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <RotateCcw className="w-3.5 h-3.5" />
+                            }
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left" className="text-xs">
+                          {lang === "pt-BR" ? "Reenviar" : "Resend"}
+                        </TooltipContent>
+                      </UITooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </TooltipProvider>
+  );
+}
+
 function DetailSkeleton() {
   return (
     <div className="p-6 space-y-6">
@@ -865,6 +1033,10 @@ export default function AdminUserDetail() {
           </TabsTrigger>
           <TabsTrigger value="activity" data-testid="tab-activity">{language === "pt-BR" ? "Atividade" : "Activity"}</TabsTrigger>
           <TabsTrigger value="affiliate" data-testid="tab-affiliate">{language === "pt-BR" ? "Afiliado" : "Affiliate"}</TabsTrigger>
+          <TabsTrigger value="emails" data-testid="tab-emails">
+            <Mail className="h-3.5 w-3.5 mr-1.5" />
+            {language === "pt-BR" ? "E-mails" : "Emails"}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -884,6 +1056,9 @@ export default function AdminUserDetail() {
         </TabsContent>
         <TabsContent value="affiliate" className="mt-4">
           <AffiliateTab data={data} lang={language} />
+        </TabsContent>
+        <TabsContent value="emails" className="mt-4">
+          <EmailsTab userId={p.id} lang={language} />
         </TabsContent>
       </Tabs>
     </div>
