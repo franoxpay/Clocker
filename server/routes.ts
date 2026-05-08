@@ -3464,11 +3464,17 @@ export async function registerRoutes(
           // Found valid shared domain, get offer by slug and sharedDomainId
           offer = await storage.getOfferBySlugAndSharedDomain(slug, sharedDomain.id);
         } else {
-          // Fallback: try to find offer by slug only (for testing/development)
-          console.log(`[Cloak] Domain not found or invalid, trying fallback lookup for slug: ${slug}`);
-          offer = await storage.getOfferBySlug(slug);
-          if (offer && offer.domainId) {
-            domain = await storage.getDomain(offer.domainId);
+          // BUG #4 FIX: In production, never fall back to a slug-only lookup when the domain
+          // is inactive/invalid — that would allow offers to remain reachable even after their
+          // domain is deactivated.  Only allow the loose fallback in local development.
+          if (process.env.NODE_ENV !== 'production') {
+            console.log(`[Cloak] DEV FALLBACK — Domain not found or invalid, trying slug-only lookup for: ${slug}`);
+            offer = await storage.getOfferBySlug(slug);
+            if (offer && offer.domainId) {
+              domain = await storage.getDomain(offer.domainId);
+            }
+          } else {
+            console.log(`[Cloak] Domain not found or inactive for slug ${slug} — returning 404 (production)`);
           }
         }
       }
@@ -3808,8 +3814,8 @@ export async function registerRoutes(
         }
       }
 
-      // Determine redirect type
-      const shouldRedirectToBlack = paramsValid && deviceAllowed && countryAllowed;
+      // Determine redirect type — BUG #1 FIX: include !isBotDetected in decision
+      const shouldRedirectToBlack = !isBotDetected && paramsValid && deviceAllowed && countryAllowed;
       const redirectType = shouldRedirectToBlack ? "black" : "white";
       const targetUrl = shouldRedirectToBlack ? selectBlackPageUrl(offer) : offer.whitePageUrl;
 
@@ -3844,6 +3850,7 @@ export async function registerRoutes(
             adset: offer.platform === "tiktok" ? (fixedQuery.adset || rawQuery.adset || null) : null,
             failReason: failReason || (() => {
               const parts: string[] = [];
+              if (isBotDetected) parts.push(`bot_detected`);
               if (!deviceAllowed) parts.push(`device_blocked:${deviceType}`);
               if (!countryAllowed) parts.push(`country_blocked:${country}`);
               return parts.join(';') || 'unknown';
@@ -4229,26 +4236,95 @@ export async function registerRoutes(
       let failReason = "";
       let isBotDetected2 = false;
 
-      // Datacenter/Hosting IP detection for /:slug route
-      const ipAnalysis2 = await analyzeIP(ip);
-      if (ipAnalysis2.isDatacenter) {
+      // ── BOT DETECTION (standardized — matches /r/:slug) ──────────────────
+
+      // 0. Rate limiting — same thresholds as /r/:slug (BUG #2 FIX)
+      const rateLimitResult2 = checkIPRateLimit(ip);
+      if (rateLimitResult2.isRateLimited) {
         isBotDetected2 = true;
-        failReason = `datacenter_ip:${ipAnalysis2.isp.substring(0, 30)}`;
-        console.log(`[Cloak /:slug] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis2.isp} AS: ${ipAnalysis2.as}`);
-      }
-      if (ipAnalysis2.isProxy) {
-        isBotDetected2 = true;
-        failReason = `proxy_ip:${ipAnalysis2.isp.substring(0, 30)}`;
-        console.log(`[Cloak /:slug] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis2.isp}`);
+        failReason = `rate_limited:${rateLimitResult2.clickCount}_clicks_per_minute`;
+        console.log(`[Cloak /:slug] BOT DETECTED - Rate limited: ${ip} - ${rateLimitResult2.clickCount} clicks in window`);
       }
 
-      // Detect Facebook internal app HTTP client (background requests, not real users)
-      // Pattern: "Facebook/[version] CFNetwork/[version] Darwin/[version]"
+      // 0b. Datacenter/proxy IP detection
+      if (!isBotDetected2) {
+        const ipAnalysis2 = await analyzeIP(ip);
+        if (ipAnalysis2.isDatacenter) {
+          isBotDetected2 = true;
+          failReason = `datacenter_ip:${ipAnalysis2.isp.substring(0, 30)}`;
+          console.log(`[Cloak /:slug] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis2.isp} AS: ${ipAnalysis2.as}`);
+        } else if (ipAnalysis2.isProxy) {
+          isBotDetected2 = true;
+          failReason = `proxy_ip:${ipAnalysis2.isp.substring(0, 30)}`;
+          console.log(`[Cloak /:slug] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis2.isp}`);
+        }
+      }
+
+      // 1. Known bot User-Agent patterns
+      const botUAPatterns2 = [
+        'thirdLandingPageFeInfra', 'TikTokBot', 'bytespider', 'Bytespider',
+        'PetalBot', 'Googlebot', 'bingbot', 'facebookexternalhit',
+        'Twitterbot', 'LinkedInBot', 'Slackbot', 'WhatsApp',
+        'TelegramBot', 'HeadlessChrome', 'PhantomJS', 'Puppeteer', 'Playwright',
+      ];
+      const userAgentLower2 = userAgent.toLowerCase();
+      if (!isBotDetected2) {
+        for (const pattern of botUAPatterns2) {
+          if (userAgent.includes(pattern) || userAgentLower2.includes(pattern.toLowerCase())) {
+            isBotDetected2 = true;
+            failReason = `bot_detected:${pattern}`;
+            console.log(`[Cloak /:slug] BOT DETECTED - Pattern: ${pattern} - UA: ${userAgent.substring(0, 100)}`);
+            break;
+          }
+        }
+      }
+
+      // 2. Facebook internal app HTTP client (background, not a real browser)
       if (!isBotDetected2 && /^Facebook\/\d+/.test(userAgent) && userAgent.includes('CFNetwork')) {
         isBotDetected2 = true;
         failReason = `bot_detected:facebook_internal_app`;
         console.log(`[Cloak /:slug] BOT DETECTED - Facebook internal app HTTP client - UA: ${userAgent.substring(0, 100)}`);
       }
+
+      // 3. Fake Chrome version (bots may report versions that don't exist yet)
+      if (!isBotDetected2) {
+        const chromeMatch2 = userAgent.match(/Chrome\/(\d+)\./);
+        if (chromeMatch2) {
+          const chromeVer2 = parseInt(chromeMatch2[1], 10);
+          if (chromeVer2 > 135) {
+            isBotDetected2 = true;
+            failReason = `fake_chrome_version:${chromeVer2}`;
+            console.log(`[Cloak /:slug] BOT DETECTED - Fake Chrome version: ${chromeVer2}`);
+          }
+        }
+      }
+
+      // 4. User-Agent typo ("Bulid" instead of "Build") — known bot fingerprint
+      if (!isBotDetected2 && userAgent.includes('Bulid')) {
+        isBotDetected2 = true;
+        failReason = 'ua_typo:Bulid';
+        console.log(`[Cloak /:slug] BOT DETECTED - User-Agent typo: "Bulid"`);
+      }
+
+      // 5. Unresolved TikTok macros in ttclid (template URLs not expanded)
+      const ttclid2ForMacro = fixedQuery2.ttclid || rawQuery2.ttclid;
+      const cname2ForMacro  = fixedQuery2.cname  || rawQuery2.cname;
+      if (!isBotDetected2 && ttclid2ForMacro) {
+        const unresolvedMacros2 = [
+          '__CLICKID__', '__CID__', '__AID__', '__AID_NAME__',
+          '__CAMPAIGN_NAME__', '__CAMPAIGN_ID__', '__DOMAIN__', '__PLACEMENT__',
+          '{{clickid}}', '{{campaign_name}}', '${CLICKID}', '${CAMPAIGN}',
+        ];
+        for (const macro of unresolvedMacros2) {
+          if (ttclid2ForMacro.includes(macro) || (cname2ForMacro && cname2ForMacro.includes(macro))) {
+            isBotDetected2 = true;
+            failReason = `unresolved_macro:${macro}`;
+            console.log(`[Cloak /:slug] BOT DETECTED - Unresolved macro: ${macro}`);
+            break;
+          }
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────
 
       if (offer.platform === "tiktok" && !isBotDetected2) {
         // ==========================================

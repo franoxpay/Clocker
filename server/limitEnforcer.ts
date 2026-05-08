@@ -26,8 +26,13 @@ const OVERAGE_THRESHOLD_FACTOR = 1.2;
 const GRACE_PERIOD_HOURS = 72;
 
 // Main app domain for redirecting suspended users
-const MAIN_APP_DOMAIN = (process.env.MAIN_DOMAIN || "clerion.app").trim().toLowerCase();
-export const SUSPENDED_PAGE_URL = `https://${MAIN_APP_DOMAIN}/suspended`;
+// MAIN_DOMAIN may be a comma-separated list (e.g. "clerion.app,easypanel.host") — always use only the first valid entry
+function getPrimaryDomain(): string {
+  const raw = process.env.MAIN_DOMAIN || "clerion.app";
+  const first = raw.split(",").map(d => d.trim().toLowerCase()).filter(Boolean)[0];
+  return first || "clerion.app";
+}
+export const SUSPENDED_PAGE_URL = `https://${getPrimaryDomain()}/suspended`;
 
 // ============================================================
 // STATUS COMPUTATION

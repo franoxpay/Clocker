@@ -1,0 +1,168 @@
+Corrigir TODOS os bugs encontrados na auditoria do cloaker Facebook antes da produção.
+
+IMPORTANTE:
+- NÃO alterar lógica de offers, Stripe, billing, emails ou admin.
+- Foco somente no fluxo de redirect/cloaking.
+- Manter compatibilidade com o funcionamento atual.
+- Não remover nenhuma proteção existente.
+- No final rodar testes novamente.
+
+BUG #1 — CRÍTICO
+/r/:slug ignora isBotDetected na decisão final.
+
+Hoje:
+/r/:slug:
+const shouldRedirectToBlack =
+  paramsValid && deviceAllowed && countryAllowed;
+
+Correto deve ser:
+const shouldRedirectToBlack =
+  !isBotDetected &&
+  paramsValid &&
+  deviceAllowed &&
+  countryAllowed;
+
+Impacto atual:
+Bots com parâmetros válidos vão para BLACK.
+
+Corrigir sem alterar o restante do fluxo.
+
+--------------------------------------------------
+
+BUG #2 — Rate limiting ausente no /:slug
+
+A função:
+checkIPRateLimit()
+
+só roda em /r/:slug.
+
+Aplicar exatamente a mesma proteção também na rota:
+ /:slug
+
+Mantendo:
+- mesmos thresholds;
+- mesma janela;
+- mesma lógica de logs;
+- mesma lógica de bot detection.
+
+--------------------------------------------------
+
+BUG #3 — URL /suspended quebrada
+
+MAIN_DOMAIN no env contém:
+clerion.app,easypanel.host
+
+Hoje gera:
+https://clerion.app,easypanel.host/suspended
+
+Isso é inválido.
+
+Corrigir de forma resiliente:
+- usar somente o primeiro domínio válido;
+- trim;
+- ignorar entradas vazias;
+- nunca gerar vírgula no host.
+
+Exemplo:
+MAIN_DOMAIN=clerion.app,easypanel.host
+
+resultado:
+https://clerion.app/suspended
+
+Ideal:
+criar helper centralizado:
+getPrimaryDomain()
+
+e reutilizar no sistema.
+
+--------------------------------------------------
+
+BUG #4 — Fallback inseguro no /r/:slug
+
+Hoje:
+quando domínio compartilhado está inativo,
+/r/:slug cai em getOfferBySlug(slug)
+e continua acessível.
+
+Em produção isso NÃO pode acontecer.
+
+Corrigir:
+- se domínio custom/shared estiver inativo:
+  → retornar 404 imediatamente;
+  → NÃO fazer fallback global por slug.
+
+Fallback global por slug deve existir SOMENTE:
+- localhost/dev;
+- ambiente explicitamente development.
+
+Nunca em produção.
+
+--------------------------------------------------
+
+PADRONIZAÇÃO EXTRA
+
+Hoje existe assimetria entre:
+- /r/:slug
+- /:slug
+
+Padronizar:
+- mesma bot detection;
+- mesmo rate limit;
+- mesma lógica de decisão;
+- mesmos logs;
+- mesma proteção de bots;
+- mesma validação de parâmetros.
+
+Criar helper compartilhado se necessário.
+
+--------------------------------------------------
+
+TESTES OBRIGATÓRIOS
+
+Testar novamente:
+
+1. Usuário humano válido
+→ BLACK
+
+2. Googlebot
+→ WHITE
+
+3. facebookexternalhit
+→ WHITE
+
+4. Facebook CFNetwork
+→ WHITE
+
+5. Fake Chrome version
+→ WHITE
+
+6. UA typo Bulid
+→ WHITE
+
+7. Rate limit > 15 req
+→ WHITE
+
+8. País bloqueado
+→ WHITE
+
+9. Device bloqueado
+→ WHITE
+
+10. Usuário suspenso
+→ /suspended funcionando corretamente
+
+11. Domínio inativo
+→ 404 em TODAS as rotas
+
+12. Offer ativa normal
+→ continua funcionando
+
+--------------------------------------------------
+
+No final entregar:
+
+- arquivos alterados;
+- diff da lógica antiga vs nova;
+- confirmação dos testes;
+- resultado dos redirects;
+- confirmação de que bots NÃO chegam mais na BLACK page.
