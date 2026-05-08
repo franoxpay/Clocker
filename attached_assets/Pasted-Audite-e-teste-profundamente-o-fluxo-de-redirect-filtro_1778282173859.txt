@@ -1,0 +1,152 @@
+Audite e teste profundamente o fluxo de redirect/filtro de tráfego para Facebook antes de produção.
+
+IMPORTANTE:
+- NÃO altere nada ainda.
+- Primeiro diagnostique e teste.
+- O objetivo é garantir que Facebook está mandando para black/white corretamente.
+- Não mexer em billing, admin, emails, dashboard ou Stripe.
+- Foco somente no fluxo de cloaking/redirect para Facebook.
+
+Analise:
+
+1. Rotas de redirect usadas pelo Facebook
+Verifique:
+- /:slug
+- /r/:slug
+- qualquer rota específica de Facebook
+- diferenças entre rota normal e rota TikTok2
+- se Facebook usa challenge ou redirect direto
+
+2. Fluxo completo
+Mapear passo a passo:
+- visitante entra no link
+- sistema busca offer
+- sistema valida usuário/plano/status
+- sistema aplica filtros
+- sistema detecta plataforma
+- sistema decide black ou white
+- sistema registra analytics
+- sistema redireciona
+
+3. Configuração da offer
+Verificar quais campos controlam:
+- blackPageUrl
+- whitePageUrl
+- platform
+- allowedCountries
+- allowedDevices
+- allowFacebook / facebook mode
+- status active/inactive
+- split test de black pages
+- domains/shared domains
+
+4. Regras de decisão Facebook
+Descobrir exatamente:
+- quando vai para black;
+- quando vai para white;
+- quando retorna suspended;
+- quando retorna 404;
+- quando cai em fallback.
+
+5. Testes obrigatórios
+Criar ou usar uma offer de teste Facebook com:
+- white page de teste clara;
+- black page de teste clara;
+- país permitido;
+- device permitido;
+- plataforma Facebook ativa.
+
+Testar cenários:
+
+A) Usuário humano válido
+Esperado:
+→ black page
+
+B) País bloqueado
+Esperado:
+→ white page
+
+C) Device bloqueado
+Esperado:
+→ white page
+
+D) Plataforma diferente da configurada
+Esperado:
+→ white page
+
+E) User-Agent de crawler/bot
+Esperado:
+→ white page
+
+F) Facebook crawler/reviewer user-agent
+Esperado:
+→ white page
+
+G) Offer inativa
+Esperado:
+→ white page ou erro controlado, conforme regra atual
+
+H) Usuário suspenso
+Esperado:
+→ /suspended
+
+I) Limite de clicks excedido
+Esperado:
+→ conforme regra atual de billing/grace/suspensão
+
+J) Domínio compartilhado ativo
+Esperado:
+→ fluxo normal
+
+K) Domínio inativo
+Esperado:
+→ erro controlado ou white, conforme regra atual
+
+6. Testar com headers reais/simulados
+Usar curl ou ferramenta equivalente para simular:
+- User-Agent mobile Facebook app;
+- User-Agent desktop normal;
+- User-Agent Facebook external hit;
+- IP/country se houver mock ou header usado pelo proxy;
+- referrer facebook.com se o sistema usa referrer.
+
+7. Logs
+Adicionar logs temporários de diagnóstico, se necessário:
+- slug;
+- offerId;
+- platform detectada;
+- country;
+- device;
+- bot detected true/false;
+- reason;
+- finalDecision black/white/suspended;
+- targetUrl.
+
+Não logar dados sensíveis.
+Não deixar logs verbosos permanentes em produção.
+
+8. Verificar analytics
+Confirmar:
+- click log registra corretamente;
+- black redirect conta como click usado;
+- white redirect não consome cota, se essa é a regra;
+- plataforma aparece como Facebook;
+- país/device são salvos corretamente.
+
+9. Verificar performance
+Medir:
+- tempo médio de decisão;
+- tempo até redirect;
+- gargalos.
+
+10. Resultado esperado
+Entregar diagnóstico com:
+- fluxo atual exato;
+- arquivos/rotas envolvidos;
+- tabela com cada cenário testado;
+- resultado esperado vs resultado real;
+- bugs encontrados;
+- riscos antes de produção;
+- correções recomendadas, se houver.
+
+NÃO corrija ainda sem me mostrar o diagnóstico.
