@@ -127,6 +127,7 @@ interface NavItem {
   path: string;
   icon: React.ElementType;
   label: string;
+  badge?: { text: string; color: "yellow" | "red" };
 }
 
 function NavGroup({
@@ -159,7 +160,19 @@ function NavGroup({
                 <SidebarMenuButton asChild isActive={isActive}>
                   <Link href={item.path} data-testid={`nav-${item.key}`}>
                     <item.icon className="w-4 h-4 shrink-0" />
-                    <span>{t(item.label)}</span>
+                    <span className="flex-1">{t(item.label)}</span>
+                    {item.badge && (
+                      <span
+                        className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                          item.badge.color === "red"
+                            ? "bg-red-500/20 text-red-500"
+                            : "bg-yellow-500/20 text-yellow-500"
+                        }`}
+                        data-testid={`badge-nav-${item.key}`}
+                      >
+                        {item.badge.text}
+                      </span>
+                    )}
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -194,6 +207,27 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     enabled: !!user && !isAdmin,
     refetchInterval: 60000,
   });
+
+  const { data: healthSummary } = useQuery<{
+    status: "ok" | "degraded" | "critical";
+    services: Record<string, string>;
+  }>({
+    queryKey: ["/api/internal/health/summary"],
+    enabled: !!user && isAdmin,
+    refetchInterval: 60000,
+    retry: false,
+  });
+
+  const healthBadge = healthSummary && healthSummary.status !== "ok"
+    ? {
+        text: healthSummary.status === "critical" ? "!" : "~",
+        color: (healthSummary.status === "critical" ? "red" : "yellow") as "red" | "yellow",
+      }
+    : undefined;
+
+  const adminOverviewItemsWithBadge = adminOverviewItems.map((item) =>
+    item.key === "monitoring" && healthBadge ? { ...item, badge: healthBadge } : item
+  );
 
   // ── Derived values ────────────────────────────────────────────────────
   const planName = user?.planId ? (PLAN_NAMES[user.planId] ?? null) : null;
@@ -302,7 +336,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             {/* Admin — 3 semantic groups */}
             <NavGroup
               label={isPt ? "Visão Geral" : "Overview"}
-              items={adminOverviewItems}
+              items={adminOverviewItemsWithBadge}
               isAdmin={true}
               location={location}
               t={t}
