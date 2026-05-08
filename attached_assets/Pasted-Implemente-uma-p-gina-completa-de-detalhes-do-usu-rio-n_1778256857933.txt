@@ -1,0 +1,156 @@
+Implemente uma página completa de detalhes do usuário no painel admin.
+
+Objetivo:
+Quando o admin clicar em um usuário na listagem, abrir uma página completa com todas as informações operacionais importantes do usuário.
+
+Rota:
+/confg-admin/users/:id
+
+Importante:
+- NÃO usar modal gigante;
+- criar página real;
+- manter performance;
+- não fazer queries desnecessárias;
+- não expor dados sensíveis.
+
+Faça exatamente isto:
+
+1. Criar endpoint backend:
+GET /api/admin/users/:id/details
+
+2. O endpoint deve retornar:
+━━━━━━━━━━━━━━━━━━━
+Perfil
+━━━━━━━━━━━━━━━━━━━
+- id
+- email
+- firstName
+- lastName
+- createdAt
+- updatedAt
+- lastLoginAt (se existir)
+- subscriptionStatus
+- plan
+- click usage
+- click limit
+- isAdmin
+- isImpersonating (se aplicável)
+- suspension status
+- gracePeriodEndsAt
+
+━━━━━━━━━━━━━━━━━━━
+Billing
+━━━━━━━━━━━━━━━━━━━
+- stripeCustomerId
+- stripeSubscriptionId
+- plano atual
+- status Stripe
+- renew date
+- últimos pagamentos
+- auto-upgrades
+- grace history
+- suspension history
+
+━━━━━━━━━━━━━━━━━━━
+Domínios
+━━━━━━━━━━━━━━━━━━━
+- lista de domínios
+- status
+- shared/custom
+- DNS status
+- createdAt
+
+━━━━━━━━━━━━━━━━━━━
+Offers
+━━━━━━━━━━━━━━━━━━━
+- offers
+- status
+- clicks
+- conversões se existir
+- createdAt
+
+━━━━━━━━━━━━━━━━━━━
+Atividade
+━━━━━━━━━━━━━━━━━━━
+- último acesso
+- websocket online/offline
+- últimos IPs se existir
+- user agent se existir
+
+━━━━━━━━━━━━━━━━━━━
+Afiliado/Comissões
+━━━━━━━━━━━━━━━━━━━
+- referral code
+- referred users
+- comissão total
+- comissão pendente
+- histórico se existir
+
+3. Criar frontend completo:
+- tabs;
+- cards;
+- layout limpo;
+- dark mode compatível;
+- loading states;
+- erro amigável.
+
+4. Tabs sugeridas:
+- Overview
+- Billing
+- Domains
+- Offers
+- Activity
+- Affiliate
+
+5. Na listagem admin:
+clicar na linha do usuário deve abrir essa página.
+
+6. Adicionar botão:
+"Entrar como usuário"
+
+7. Adicionar botão:
+"Voltar para usuários"
+
+8. Não expor:
+- password
+- tokens
+- secrets
+- recovery data
+
+9. Evitar N+1 query.
+10. Fazer queries agrupadas/otimizadas.
+
+11. Adicionar loading skeletons.
+
+12. Adicionar empty states.
+
+13. Não alterar billing logic.
+14. Não alterar Stripe.
+15. Não alterar cloaker.
+
+16. Testar:
+- usuário free;
+- usuário pago;
+- usuário suspenso;
+- usuário com muitos domains;
+- usuário com muitas offers;
+- usuário afiliado;
+- usuário sem dados;
+- impersonação pela página.
+
+Critérios de aceite:
+- página carrega rápido;
+- tabs funcionam;
+- dados corretos;
+- sem dados sensíveis;
+- layout integrado ao admin;
+- impersonação funcionando pela página;
+- queries otimizadas.
+
+No final me entregue:
+- arquivos criados;
+- endpoints criados;
+- estrutura da página;
+- dados exibidos;
+- como testou;
+- riscos restantes.

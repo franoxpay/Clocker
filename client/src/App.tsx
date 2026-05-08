@@ -28,6 +28,7 @@ import Logs from "@/pages/Logs";
 import Subscription from "@/pages/Subscription";
 import Settings from "@/pages/Settings";
 import AdminUsers from "@/pages/admin/AdminUsers";
+import AdminUserDetail from "@/pages/admin/AdminUserDetail";
 import AdminPlans from "@/pages/admin/AdminPlans";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminMonitoring from "@/pages/admin/AdminMonitoring";
@@ -77,6 +78,7 @@ function AdminRoutes() {
         <Switch>
           <Route path="/confg-admin" component={AdminDashboard} />
           <Route path="/confg-admin/dashboard" component={AdminDashboard} />
+          <Route path="/confg-admin/users/:id" component={AdminUserDetail} />
           <Route path="/confg-admin/users" component={AdminUsers} />
           <Route path="/confg-admin/plans" component={AdminPlans} />
           <Route path="/confg-admin/billing" component={AdminBilling} />

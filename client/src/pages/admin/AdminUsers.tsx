@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +88,7 @@ interface UsersResponse {
 export default function AdminUsers() {
   const { t, language } = useLanguage();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -316,7 +318,12 @@ export default function AdminUsers() {
                 </TableHeader>
                 <TableBody>
                   {data.users.map((user) => (
-                    <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                    <TableRow
+                      key={user.id}
+                      data-testid={`row-user-${user.id}`}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/confg-admin/users/${user.id}`)}
+                    >
                       <TableCell>
                         <div className="font-medium">{user.email}</div>
                         {user.isAdmin && (
@@ -368,7 +375,11 @@ export default function AdminUsers() {
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>

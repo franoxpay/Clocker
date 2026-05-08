@@ -543,6 +543,81 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
     }
   });
 
+  app.get("/api/admin/users/:id/details", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = req.params.id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const [
+        plan,
+        domains,
+        sharedDomains,
+        offers,
+        suspHistory,
+        couponUsage,
+        commissionsEarned,
+        commissionsReferred,
+        affiliateCoupons,
+        clickHistory,
+      ] = await Promise.all([
+        user.planId ? storage.getPlan(user.planId) : Promise.resolve(null),
+        storage.getDomainsByUserId(userId),
+        storage.getUserSharedDomains(userId),
+        storage.getOffersByUserId(userId),
+        storage.getSuspensionHistory(userId, 20),
+        storage.getCouponUsageByUserId(userId),
+        storage.getCommissionsByAffiliateId(userId),
+        storage.getCommissionsByReferredUserId(userId),
+        storage.getCouponsByAffiliateId(userId),
+        storage.getClickLogsByPeriod(userId, 30),
+      ]);
+
+      let couponUsedDetails = null;
+      if (couponUsage) {
+        const coupon = await storage.getCoupon(couponUsage.couponId);
+        couponUsedDetails = { usage: couponUsage, coupon };
+      }
+
+      const lifetimeClicks = offers.reduce((sum, o) => sum + (o.totalClicks || 0), 0);
+      const lifetimeBlack = offers.reduce((sum, o) => sum + (o.blackClicks || 0), 0);
+      const lifetimeWhite = offers.reduce((sum, o) => sum + (o.whiteClicks || 0), 0);
+
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      const isAdminUser = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
+      const isSubscriptionActive = ["active", "trialing"].includes(user.subscriptionStatus ?? "");
+      const isTrialing = !!(user.trialEndsAt && new Date(user.trialEndsAt) > new Date());
+      const isSuspended = user.suspendedAt !== null;
+
+      const { password, ...safeUser } = user;
+
+      res.json({
+        profile: { ...safeUser, isAdminUser, isSubscriptionActive, isTrialing, isSuspended },
+        plan,
+        clickStats: {
+          thisMonth: user.clicksUsedThisMonth,
+          lifetime: lifetimeClicks,
+          lifetimeBlack,
+          lifetimeWhite,
+        },
+        clickHistory,
+        domains,
+        sharedDomains,
+        offers,
+        suspensionHistory: suspHistory,
+        couponUsed: couponUsedDetails,
+        commissionsEarned,
+        commissionsReferred,
+        affiliateCoupons,
+      });
+    } catch (error) {
+      console.error("Error fetching user details:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.post("/api/admin/users/:id/suspend", isAdmin, async (req: Request, res: Response) => {
     try {
       const userId = req.params.id;
