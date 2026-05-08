@@ -78,6 +78,8 @@ interface BillingMetrics {
   ltv: number;
   inadimplenciaRate: number;
   totalRevenue: number;
+  manualUsersCount: number;
+  manualPlansValue: number;
 }
 
 interface Subscriber {
@@ -345,17 +347,24 @@ export default function AdminBilling() {
         </div>
       </div>
 
-      {/* ── ROW 2 — Financials ────────────────────────────────────────────── */}
+      {/* ── ROW 2 — Financials (Stripe-only) ─────────────────────────────── */}
       <div>
-        <SectionLabel>{pt ? "Financeiro" : "Financials"}</SectionLabel>
+        <div className="flex items-center gap-2 mb-2">
+          <SectionLabel>{pt ? "Financeiro — Somente Stripe Real" : "Financials — Stripe Only"}</SectionLabel>
+          {!metricsLoading && (metrics?.activeStripeSubscriptions ?? 0) === 0 && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-yellow-600 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded leading-none">
+              {pt ? "Sem assinaturas Stripe" : "No Stripe subscriptions"}
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
           <StatCard
             label="MRR"
             value={formatCurrency(metrics?.mrr)}
             icon={TrendingUp}
-            iconColor="text-green-500"
-            sub={pt ? "Receita mensal estimada" : "Est. monthly revenue"}
-            tooltip={pt ? "Soma dos planos ativos convertida de centavos para reais." : "Sum of active plan prices converted from cents to reais."}
+            iconColor={(metrics?.activeStripeSubscriptions ?? 0) > 0 ? "text-green-500" : "text-muted-foreground"}
+            sub={(metrics?.activeStripeSubscriptions ?? 0) === 0 && !metricsLoading ? (pt ? "Nenhuma assinatura Stripe" : "No Stripe subscription") : (pt ? "Receita mensal recorrente" : "Monthly recurring revenue")}
+            tooltip={pt ? "Somente planos com stripeSubscriptionId real e status active/trialing/past_due." : "Only plans with a real stripeSubscriptionId and status active/trialing/past_due."}
             loading={metricsLoading}
             testId="text-mrr"
           />
@@ -363,9 +372,9 @@ export default function AdminBilling() {
             label="ARR"
             value={formatCurrency(metrics?.arr)}
             icon={BarChart3}
-            iconColor="text-green-600"
+            iconColor={(metrics?.activeStripeSubscriptions ?? 0) > 0 ? "text-green-600" : "text-muted-foreground"}
             sub="MRR × 12"
-            tooltip={pt ? "Receita anual recorrente estimada." : "Estimated annual recurring revenue."}
+            tooltip={pt ? "Receita anual recorrente estimada — somente Stripe." : "Estimated annual recurring revenue — Stripe only."}
             loading={metricsLoading}
             testId="text-arr"
           />
@@ -384,8 +393,8 @@ export default function AdminBilling() {
             value={formatCurrency(metrics?.avgTicket)}
             icon={Wallet}
             iconColor="text-foreground"
-            sub="MRR / ativos"
-            tooltip={pt ? "MRR dividido pelo número de assinantes ativos." : "MRR divided by active subscription count."}
+            sub={pt ? "MRR / assinantes Stripe" : "MRR / Stripe subs"}
+            tooltip={pt ? "MRR dividido pelo número de assinaturas Stripe ativas — não inclui manuais." : "MRR divided by active Stripe subscription count — excludes manual activations."}
             loading={metricsLoading}
             testId="text-avg-ticket"
           />
@@ -395,7 +404,7 @@ export default function AdminBilling() {
             icon={TrendingUp}
             iconColor="text-foreground"
             sub={pt ? "Ticket × 12 meses" : "Ticket × 12 months"}
-            tooltip={pt ? "LTV estimado sem churn = Ticket Médio × 12." : "Estimated LTV without churn = Avg Ticket × 12."}
+            tooltip={pt ? "LTV estimado sem churn = Ticket Médio Stripe × 12." : "Estimated LTV without churn = Stripe Avg Ticket × 12."}
             loading={metricsLoading}
             testId="text-ltv"
           />
@@ -405,13 +414,36 @@ export default function AdminBilling() {
             icon={Percent}
             iconColor={(metrics?.inadimplenciaRate ?? 0) > 10 ? "text-red-500" : "text-foreground"}
             sub={`${metrics?.gracePeriodCount ?? 0} ${pt ? "em grace period" : "in grace period"}`}
-            tooltip={pt ? "% de ativos em grace period (pagamento falhado, aguardando retry Stripe)." : "% of active subscribers in grace period (failed payment, awaiting Stripe retry)."}
+            tooltip={pt ? "% de assinantes Stripe em grace period (pagamento falhado, aguardando retry)." : "% of Stripe subscribers in grace period (failed payment, awaiting retry)."}
             loading={metricsLoading}
             testId="text-inadimplencia"
             alert={(metrics?.gracePeriodCount ?? 0) > 0}
           />
         </div>
       </div>
+
+      {/* ── Manual users notice ───────────────────────────────────────────── */}
+      {!metricsLoading && (metrics?.manualUsersCount ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/5 px-4 py-3">
+          <Wrench className="h-4 w-4 text-yellow-600 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-yellow-700">
+              {pt
+                ? `${metrics!.manualUsersCount} usuário${metrics!.manualUsersCount > 1 ? "s" : ""} ativado${metrics!.manualUsersCount > 1 ? "s" : ""} manualmente`
+                : `${metrics!.manualUsersCount} manually activated user${metrics!.manualUsersCount > 1 ? "s" : ""}`}
+              {" · "}
+              <span className="font-semibold">{formatCurrency(metrics!.manualPlansValue)}</span>
+              {" "}
+              {pt ? "em planos" : "in plan value"}
+            </p>
+            <p className="text-xs text-yellow-600/80 mt-0.5">
+              {pt
+                ? "Não contabilizado no faturamento recorrente (MRR / ARR / LTV). Aparecem apenas na tabela abaixo."
+                : "Not counted in recurring billing metrics (MRR / ARR / LTV). Visible only in the table below."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── ROW 3 — Growth + Coverage ─────────────────────────────────────── */}
       <div>

@@ -1099,11 +1099,12 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         }
       }
       
-      const activeCount = metrics.subscriptionsActive;
-      const avgTicket = activeCount > 0 ? metrics.mrr / activeCount : 0;
+      // Financial metrics use ONLY Stripe subscriptions as denominator
+      const stripeCount = metrics.activeStripeSubscriptions;
+      const avgTicket = stripeCount > 0 ? metrics.mrr / stripeCount : 0;
       const ltv = avgTicket * 12;
       const inadimplentes = metrics.gracePeriodCount;
-      const inadimplenciaRate = activeCount > 0 ? (inadimplentes / activeCount) * 100 : 0;
+      const inadimplenciaRate = stripeCount > 0 ? (inadimplentes / stripeCount) * 100 : 0;
 
       res.json({
         subscriptionsActive: metrics.subscriptionsActive,
@@ -1121,6 +1122,8 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         ltv,
         inadimplenciaRate,
         totalRevenue,
+        manualUsersCount: metrics.manualUsersCount,
+        manualPlansValue: metrics.manualPlansValue,
       });
     } catch (error) {
       console.error("Error fetching billing metrics:", error);

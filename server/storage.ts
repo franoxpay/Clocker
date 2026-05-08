@@ -254,6 +254,8 @@ export interface IStorage {
     mrr: number;
     arr: number;
     totalRevenue: number;
+    manualUsersCount: number;
+    manualPlansValue: number;
   }>;
 
   getSubscribersWithPagination(
@@ -1959,16 +1961,39 @@ export class DatabaseStorage implements IStorage {
       })
       .from(users);
 
-    // plans.price is stored in centavos — divide by 100 to get reais
-    const mrrResult = await db
+    // MRR: SOMENTE usuários com stripeSubscriptionId real e status active/trialing/past_due
+    const stripeMrrResult = await db
       .select({
         mrrCents: sql<number>`COALESCE(SUM(${plans.price}), 0)`,
       })
       .from(users)
       .innerJoin(plans, eq(users.planId, plans.id))
-      .where(eq(users.subscriptionStatus, 'active'));
+      .where(
+        and(
+          sql`${users.stripeSubscriptionId} IS NOT NULL`,
+          sql`${users.subscriptionStatus} IN ('active', 'trialing', 'past_due')`
+        )
+      );
 
-    const mrrReais = Number(mrrResult[0]?.mrrCents || 0) / 100;
+    const stripeMrrReais = Number(stripeMrrResult[0]?.mrrCents || 0) / 100;
+
+    // Usuários manuais: active + stripeSubscriptionId IS NULL
+    const manualResult = await db
+      .select({
+        count: sql<number>`COUNT(*)`,
+        totalCents: sql<number>`COALESCE(SUM(${plans.price}), 0)`,
+      })
+      .from(users)
+      .leftJoin(plans, eq(users.planId, plans.id))
+      .where(
+        and(
+          sql`${users.stripeSubscriptionId} IS NULL`,
+          sql`${users.subscriptionStatus} = 'active'`
+        )
+      );
+
+    const manualUsersCount = Number(manualResult[0]?.count || 0);
+    const manualPlansValue = Number(manualResult[0]?.totalCents || 0) / 100;
 
     return {
       subscriptionsActive: Number(stats?.active || 0),
@@ -1980,9 +2005,11 @@ export class DatabaseStorage implements IStorage {
       gracePeriodCount: Number(stats?.gracePeriod || 0),
       usersToday: Number(stats?.usersToday || 0),
       usersThisMonth: Number(stats?.usersThisMonth || 0),
-      mrr: mrrReais,
-      arr: mrrReais * 12,
+      mrr: stripeMrrReais,
+      arr: stripeMrrReais * 12,
       totalRevenue: 0,
+      manualUsersCount,
+      manualPlansValue,
     };
   }
 

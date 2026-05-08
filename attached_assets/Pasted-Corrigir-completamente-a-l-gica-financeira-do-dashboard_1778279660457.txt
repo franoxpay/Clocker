@@ -1,0 +1,154 @@
+Corrigir completamente a lógica financeira do dashboard de faturamento.
+
+PROBLEMA CRÍTICO:
+
+O sistema está incluindo usuários MANUAIS nas métricas financeiras recorrentes.
+
+Isso gera MRR, ARR, Ticket Médio e LTV completamente falsos.
+
+Usuário manual:
+
+* NÃO possui assinatura Stripe;
+* NÃO gera receita recorrente;
+* NÃO deve contar em métricas SaaS financeiras.
+
+Hoje:
+5 usuários manuais com planos altos
+→ dashboard mostra ~R$12k MRR fictício
+
+Isso está ERRADO.
+
+━━━━━━━━━━━━━━━━━━━
+REGRA CORRETA
+━━━━━━━━━━━━━━━━━━━
+
+Usuário conta como receita recorrente SOMENTE SE:
+
+stripeSubscriptionId != null
+E subscriptionStatus IN:
+
+* active
+* trialing
+* past_due
+
+Usuários manuais:
+
+* NÃO entram no MRR
+* NÃO entram no ARR
+* NÃO entram no LTV
+* NÃO entram no Ticket Médio
+* NÃO entram na Receita Recorrente
+
+Eles devem aparecer APENAS:
+
+* na tabela;
+* no card "Manuais";
+* na cobertura Stripe.
+
+━━━━━━━━━━━━━━━━━━━
+CORREÇÕES NECESSÁRIAS
+━━━━━━━━━━━━━━━━━━━
+
+server/storage.ts
+função:
+getBillingMetrics()
+
+Separar completamente:
+
+1. Métricas Stripe reais
+2. Métricas manuais
+3. Métricas gerais
+
+━━━━━━━━━━━━━━━━━━━
+MÉTRICAS FINANCEIRAS
+━━━━━━━━━━━━━━━━━━━
+
+MRR:
+SOMENTE Stripe ativo
+
+ARR:
+MRR × 12
+
+Ticket Médio:
+MRR Stripe / assinaturas Stripe
+
+LTV:
+somente Stripe
+
+Receita Recorrente:
+somente Stripe
+
+━━━━━━━━━━━━━━━━━━━
+USUÁRIOS MANUAIS
+━━━━━━━━━━━━━━━━━━━
+
+Criar seção separada:
+
+manualUsersCount
+manualPlansValue
+
+Mas deixar MUITO claro no frontend:
+
+"Não contabilizado no faturamento"
+
+━━━━━━━━━━━━━━━━━━━
+FRONTEND
+━━━━━━━━━━━━━━━━━━━
+
+AdminBilling.tsx
+
+Adicionar:
+
+* badge "Stripe Real"
+* badge "Manual / Não contabilizado"
+
+Cards financeiros:
+se não houver Stripe ativo:
+mostrar:
+"R$ 0,00"
+
+e subtítulo:
+"Nenhuma assinatura Stripe ativa"
+
+NÃO mostrar valores fictícios.
+
+━━━━━━━━━━━━━━━━━━━
+VALIDAÇÃO
+━━━━━━━━━━━━━━━━━━━
+
+Com os dados atuais:
+Stripe subscriptions = 0
+Manual users = 5
+
+Resultado esperado:
+
+MRR = R$0
+ARR = R$0
+Ticket Médio = R$0
+LTV = R$0
+
+Cobertura Stripe = 0%
+
+Manual Users:
+5 usuários
+Valor manual total exibido separado
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANTE
+━━━━━━━━━━━━━━━━━━━
+
+Não remover usuários.
+Não alterar subscriptions.
+Não mexer em planos.
+Não alterar Stripe.
+
+Apenas corrigir os cálculos financeiros para refletirem receita REAL.
+
+No final:
+mostrar relatório completo:
+
+* queries alteradas;
+* cálculos antigos vs novos;
+* exemplo com dados reais;
+* quais métricas usam Stripe;
+* quais métricas usam manual.
