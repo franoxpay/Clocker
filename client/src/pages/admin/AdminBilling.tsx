@@ -29,22 +29,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { Plan } from "@shared/schema";
 import {
-  Wallet,
   Users,
-  UserPlus,
   UserX,
   Clock,
   DollarSign,
   TrendingUp,
   ChevronLeft,
   ChevronRight,
-  Calendar,
   AlertCircle,
   Info,
   CreditCard,
   Wrench,
   BarChart3,
   Percent,
+  UserPlus,
+  Calendar,
+  Wallet,
 } from "lucide-react";
 import {
   LineChart,
@@ -127,53 +127,74 @@ interface ChartData {
 
 const PIE_COLORS = ["#10B981", "#6B7280", "#3B82F6", "#EF4444"];
 
-function MetricCard({
-  title,
+// ── Compact stat card ─────────────────────────────────────────────────────────
+function StatCard({
+  label,
   value,
   icon: Icon,
-  color,
+  iconColor,
+  sub,
   tooltip,
   loading,
   testId,
+  alert,
 }: {
-  title: string;
+  label: string;
   value: string | number;
   icon: React.ElementType;
-  color: string;
+  iconColor: string;
+  sub?: string;
   tooltip?: string;
   loading?: boolean;
   testId?: string;
+  alert?: boolean;
 }) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <div className="flex items-center gap-1.5">
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
-          {tooltip && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[220px] text-xs">
-                  {tooltip}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-        <Icon className={`h-4 w-4 ${color}`} />
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <Skeleton className="h-8 w-24" />
-        ) : (
-          <div className={`text-2xl font-bold ${color}`} data-testid={testId}>
-            {value}
+  const card = (
+    <Card className={`transition-colors hover:bg-muted/30 ${alert ? "border-yellow-500/40" : ""}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1 mb-1.5">
+              <p className="text-xs text-muted-foreground font-medium leading-none truncate">{label}</p>
+            </div>
+            {loading ? (
+              <Skeleton className="h-6 w-20 mt-1" />
+            ) : (
+              <>
+                <p className={`text-xl font-semibold leading-none tracking-tight ${iconColor}`} data-testid={testId}>
+                  {value}
+                </p>
+                {sub && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-none">{sub}</p>
+                )}
+              </>
+            )}
           </div>
-        )}
+          <div className={`p-1.5 rounded-md bg-muted/40 shrink-0`}>
+            <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+          </div>
+        </div>
       </CardContent>
     </Card>
+  );
+
+  if (!tooltip) return card;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{card}</TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[230px] text-xs leading-relaxed">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// ── Section label ─────────────────────────────────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 select-none">
+      {children}
+    </p>
   );
 }
 
@@ -210,275 +231,227 @@ export default function AdminBilling() {
     queryKey: ["/api/admin/billing/subscriptions-chart", chartPeriod],
   });
 
-  const totalSubscribersPages = subscribersData ? Math.ceil(subscribersData.total / subscribersLimit) : 1;
+  const totalSubscribersPages = subscribersData
+    ? Math.ceil(subscribersData.total / subscribersLimit)
+    : 1;
 
-  const formatCurrency = (value: number | undefined | null) => {
-    if (value == null || isNaN(value)) return "R$ 0,00";
+  const formatCurrency = (v: number | undefined | null) => {
+    if (v == null || isNaN(v)) return "R$ 0";
     return new Intl.NumberFormat(pt ? "pt-BR" : "en-US", {
       style: "currency",
       currency: "BRL",
-    }).format(value);
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(v);
   };
 
-  const formatDate = (dateStr: string | null) => {
-    if (!dateStr) return "-";
-    return format(new Date(dateStr), "dd/MM/yyyy", { locale });
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    return format(new Date(d), "dd/MM/yy", { locale });
   };
 
-  const formatPercent = (value: number | undefined | null) => {
-    if (value == null || isNaN(value)) return "0%";
-    return `${value.toFixed(1)}%`;
+  const formatPercent = (v: number | undefined | null) => {
+    if (v == null || isNaN(v)) return "0%";
+    return `${v.toFixed(1)}%`;
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return <Badge className="bg-green-500/10 text-green-500 border-green-500/20">{pt ? "Ativo" : "Active"}</Badge>;
-      case "trialing":
-        return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20">Trial</Badge>;
-      case "past_due":
-        return <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">{pt ? "Inadimplente" : "Past Due"}</Badge>;
-      case "canceled":
-        return <Badge className="bg-red-500/10 text-red-500 border-red-500/20">{pt ? "Cancelado" : "Canceled"}</Badge>;
-      case "unpaid":
-        return <Badge variant="destructive">{pt ? "Não Pago" : "Unpaid"}</Badge>;
-      case "inactive":
-        return <Badge variant="secondary">{pt ? "Inativo" : "Inactive"}</Badge>;
-      case "suspended":
-        return <Badge variant="destructive">{pt ? "Suspenso" : "Suspended"}</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  const coveragePct =
+    metrics && metrics.subscriptionsActive > 0
+      ? Math.round((metrics.activeStripeSubscriptions / metrics.subscriptionsActive) * 100)
+      : 0;
+
+  // ── Status badge ────────────────────────────────────────────────────────────
+  const statusBadge = (s: string) => {
+    const map: Record<string, { label: string; cls: string }> = {
+      active:    { label: pt ? "Ativo" : "Active",       cls: "bg-green-500/10 text-green-600 border-green-500/20" },
+      trialing:  { label: "Trial",                        cls: "bg-blue-500/10 text-blue-600 border-blue-500/20" },
+      past_due:  { label: pt ? "Inadimplente" : "Past Due", cls: "bg-yellow-500/10 text-yellow-700 border-yellow-500/20" },
+      canceled:  { label: pt ? "Cancelado" : "Canceled", cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+      unpaid:    { label: pt ? "Não Pago" : "Unpaid",    cls: "bg-red-500/10 text-red-600 border-red-500/20" },
+      inactive:  { label: pt ? "Inativo" : "Inactive",   cls: "bg-muted text-muted-foreground border-transparent" },
+      suspended: { label: pt ? "Suspenso" : "Suspended", cls: "bg-red-500/10 text-red-500 border-red-500/20" },
+    };
+    const m = map[s] ?? { label: s, cls: "bg-muted text-muted-foreground" };
+    return <Badge className={`text-[10px] px-1.5 py-0 leading-none h-4 border font-medium ${m.cls}`}>{m.label}</Badge>;
   };
 
-  const getTypeBadge = (sub: Subscriber) => {
+  // ── Type badge ──────────────────────────────────────────────────────────────
+  const typeBadge = (sub: Subscriber) => {
     if (sub.isStripeSubscription) {
       return (
-        <Badge className="bg-green-500/10 text-green-600 border-green-500/20 gap-1">
-          <CreditCard className="h-3 w-3" />
+        <Badge className="text-[10px] px-1.5 py-0 h-4 border font-medium bg-green-500/10 text-green-700 border-green-500/20 gap-1 leading-none">
+          <CreditCard className="h-2.5 w-2.5" />
           Stripe
         </Badge>
       );
     }
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 gap-1 cursor-help">
-              <Wrench className="h-3 w-3" />
-              {pt ? "Manual" : "Manual"}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-[220px] text-xs">
-            {pt
-              ? "Usuário ativado sem assinatura recorrente Stripe. Não há cobrança automática."
-              : "User activated without a Stripe recurring subscription. No automatic billing."}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge className="text-[10px] px-1.5 py-0 h-4 border font-medium bg-yellow-500/10 text-yellow-700 border-yellow-500/20 gap-1 leading-none cursor-help">
+            <Wrench className="h-2.5 w-2.5" />
+            {pt ? "Manual" : "Manual"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[220px] text-xs">
+          {pt
+            ? "Ativado manualmente pelo admin — sem assinatura Stripe recorrente."
+            : "Manually activated — no Stripe recurring subscription."}
+        </TooltipContent>
+      </Tooltip>
     );
   };
 
-  const pieData = metrics ? [
-    { name: pt ? "Ativos" : "Active", value: metrics.subscriptionsActive },
-    { name: pt ? "Inativos" : "Inactive", value: metrics.subscriptionsInactive },
-    { name: "Trial", value: metrics.subscriptionsTrial },
-    { name: pt ? "Suspensos" : "Suspended", value: metrics.subscriptionsSuspended },
-  ].filter(d => d.value > 0) : [];
+  const pieData = metrics
+    ? [
+        { name: pt ? "Ativos" : "Active",    value: metrics.subscriptionsActive },
+        { name: pt ? "Inativos" : "Inactive", value: metrics.subscriptionsInactive },
+        { name: "Trial",                       value: metrics.subscriptionsTrial },
+        { name: pt ? "Suspensos" : "Suspended", value: metrics.subscriptionsSuspended },
+      ].filter((d) => d.value > 0)
+    : [];
 
   return (
-    <div className="space-y-6">
+    <TooltipProvider>
+    <div className="space-y-5 max-w-[1400px]">
 
-      {/* ROW 1 — Subscription counts */}
+      {/* ── ROW 1 — Subscriptions ─────────────────────────────────────────── */}
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          {pt ? "Assinaturas" : "Subscriptions"}
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <MetricCard
-            title={pt ? "Ativos" : "Active"}
-            value={metrics?.subscriptionsActive ?? 0}
-            icon={Users}
-            color="text-green-500"
-            loading={metricsLoading}
-            testId="text-active-subs"
-          />
-          <MetricCard
-            title={pt ? "Inativos" : "Inactive"}
-            value={metrics?.subscriptionsInactive ?? 0}
-            icon={UserX}
-            color="text-muted-foreground"
-            loading={metricsLoading}
-            testId="text-inactive-subs"
-          />
-          <MetricCard
-            title="Trial"
-            value={metrics?.subscriptionsTrial ?? 0}
-            icon={Clock}
-            color="text-blue-500"
-            loading={metricsLoading}
-            testId="text-trial-subs"
-          />
-          <MetricCard
-            title={pt ? "Suspensos" : "Suspended"}
-            value={metrics?.subscriptionsSuspended ?? 0}
-            icon={UserX}
-            color="text-red-500"
-            loading={metricsLoading}
-            testId="text-suspended-subs"
-          />
-          <MetricCard
-            title="Stripe"
+        <SectionLabel>{pt ? "Assinaturas" : "Subscriptions"}</SectionLabel>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+          <StatCard label={pt ? "Ativos" : "Active"}       value={metrics?.subscriptionsActive ?? 0} icon={Users}    iconColor="text-green-500"          loading={metricsLoading} testId="text-active-subs"   />
+          <StatCard label={pt ? "Inativos" : "Inactive"}   value={metrics?.subscriptionsInactive ?? 0} icon={UserX} iconColor="text-muted-foreground"   loading={metricsLoading} testId="text-inactive-subs" />
+          <StatCard label="Trial"                           value={metrics?.subscriptionsTrial ?? 0} icon={Clock}    iconColor="text-blue-500"            loading={metricsLoading} testId="text-trial-subs"   />
+          <StatCard label={pt ? "Suspensos" : "Suspended"} value={metrics?.subscriptionsSuspended ?? 0} icon={UserX} iconColor="text-red-500"           loading={metricsLoading} testId="text-suspended-subs" />
+          <StatCard
+            label="Stripe"
             value={metrics?.activeStripeSubscriptions ?? 0}
             icon={CreditCard}
-            color="text-green-600"
-            tooltip={pt ? "Assinaturas ativas com stripe_subscription_id — cobrança automática real." : "Active subscriptions with Stripe ID — real automatic billing."}
+            iconColor="text-green-600"
+            tooltip={pt ? "Assinaturas ativas com Stripe Subscription ID — cobrança automática real." : "Active subscriptions with a Stripe Subscription ID — real automatic billing."}
             loading={metricsLoading}
             testId="text-stripe-subs"
           />
-          <MetricCard
-            title={pt ? "Manuais" : "Manual"}
+          <StatCard
+            label={pt ? "Manual" : "Manual"}
             value={metrics?.activeManualSubscriptions ?? 0}
             icon={Wrench}
-            color="text-yellow-600"
-            tooltip={pt ? "Assinaturas ativas ativadas manualmente pelo admin — sem cobrança automática." : "Active subscriptions manually activated by admin — no automatic billing."}
+            iconColor="text-yellow-600"
+            tooltip={pt ? "Ativações manuais via admin — sem cobrança Stripe recorrente." : "Manual activations by admin — no Stripe automatic billing."}
             loading={metricsLoading}
             testId="text-manual-subs"
+            alert={(metrics?.activeManualSubscriptions ?? 0) > 0}
           />
         </div>
       </div>
 
-      {/* ROW 2 — Financial metrics */}
+      {/* ── ROW 2 — Financials ────────────────────────────────────────────── */}
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-          {pt ? "Financeiro" : "Financials"}
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <MetricCard
-            title="MRR"
+        <SectionLabel>{pt ? "Financeiro" : "Financials"}</SectionLabel>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+          <StatCard
+            label="MRR"
             value={formatCurrency(metrics?.mrr)}
             icon={TrendingUp}
-            color="text-green-500"
-            tooltip={pt
-              ? "Receita mensal recorrente estimada: soma dos planos ativos, convertida de centavos para reais."
-              : "Estimated monthly recurring revenue: sum of active plans, converted from cents to reais."}
+            iconColor="text-green-500"
+            sub={pt ? "Receita mensal estimada" : "Est. monthly revenue"}
+            tooltip={pt ? "Soma dos planos ativos convertida de centavos para reais." : "Sum of active plan prices converted from cents to reais."}
             loading={metricsLoading}
             testId="text-mrr"
           />
-          <MetricCard
-            title="ARR"
+          <StatCard
+            label="ARR"
             value={formatCurrency(metrics?.arr)}
             icon={BarChart3}
-            color="text-green-600"
-            tooltip={pt ? "Receita anual recorrente estimada (MRR × 12)." : "Estimated annual recurring revenue (MRR × 12)."}
+            iconColor="text-green-600"
+            sub="MRR × 12"
+            tooltip={pt ? "Receita anual recorrente estimada." : "Estimated annual recurring revenue."}
             loading={metricsLoading}
             testId="text-arr"
           />
-          <MetricCard
-            title={pt ? "Receita Total" : "Total Revenue"}
+          <StatCard
+            label={pt ? "Receita Total" : "Total Revenue"}
             value={formatCurrency(metrics?.totalRevenue)}
             icon={DollarSign}
-            color="text-foreground"
-            tooltip={pt
-              ? "Soma real de charges pagos no Stripe (status: succeeded). Inclui pagamentos avulsos."
-              : "Real sum of succeeded Stripe charges. Includes one-time payments."}
+            iconColor="text-foreground"
+            sub={pt ? "Charges Stripe pagos" : "Stripe succeeded charges"}
+            tooltip={pt ? "Soma real de todas as cobranças com status succeeded no Stripe." : "Real sum of all Stripe charges with succeeded status."}
             loading={metricsLoading}
             testId="text-total-revenue"
           />
-          <MetricCard
-            title={pt ? "Ticket Médio" : "Avg Ticket"}
+          <StatCard
+            label={pt ? "Ticket Médio" : "Avg Ticket"}
             value={formatCurrency(metrics?.avgTicket)}
             icon={Wallet}
-            color="text-foreground"
-            tooltip={pt ? "MRR dividido pelo número de assinaturas ativas." : "MRR divided by active subscriptions count."}
+            iconColor="text-foreground"
+            sub="MRR / ativos"
+            tooltip={pt ? "MRR dividido pelo número de assinantes ativos." : "MRR divided by active subscription count."}
             loading={metricsLoading}
             testId="text-avg-ticket"
           />
-          <MetricCard
-            title="LTV"
+          <StatCard
+            label="LTV"
             value={formatCurrency(metrics?.ltv)}
             icon={TrendingUp}
-            color="text-foreground"
-            tooltip={pt ? "LTV estimado = Ticket Médio × 12 meses." : "Estimated LTV = Avg Ticket × 12 months."}
+            iconColor="text-foreground"
+            sub={pt ? "Ticket × 12 meses" : "Ticket × 12 months"}
+            tooltip={pt ? "LTV estimado sem churn = Ticket Médio × 12." : "Estimated LTV without churn = Avg Ticket × 12."}
             loading={metricsLoading}
             testId="text-ltv"
           />
-          <MetricCard
-            title={pt ? "Inadimplência" : "Past Due Rate"}
+          <StatCard
+            label={pt ? "Inadimplência" : "Past Due Rate"}
             value={formatPercent(metrics?.inadimplenciaRate)}
             icon={Percent}
-            color={metrics?.inadimplenciaRate && metrics.inadimplenciaRate > 10 ? "text-red-500" : "text-foreground"}
-            tooltip={pt
-              ? "Percentual de assinantes em grace period (pagamento falhado / aguardando nova tentativa)."
-              : "Percentage of subscribers in grace period (failed payment / awaiting retry)."}
+            iconColor={(metrics?.inadimplenciaRate ?? 0) > 10 ? "text-red-500" : "text-foreground"}
+            sub={`${metrics?.gracePeriodCount ?? 0} ${pt ? "em grace period" : "in grace period"}`}
+            tooltip={pt ? "% de ativos em grace period (pagamento falhado, aguardando retry Stripe)." : "% of active subscribers in grace period (failed payment, awaiting Stripe retry)."}
             loading={metricsLoading}
             testId="text-inadimplencia"
+            alert={(metrics?.gracePeriodCount ?? 0) > 0}
           />
         </div>
       </div>
 
-      {/* ROW 3 — New users counts */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          title={pt ? "Usuários Hoje" : "Users Today"}
-          value={metrics?.usersToday ?? 0}
-          icon={UserPlus}
-          color="text-foreground"
-          loading={metricsLoading}
-          testId="text-users-today"
-        />
-        <MetricCard
-          title={pt ? "Usuários Este Mês" : "Users This Month"}
-          value={metrics?.usersThisMonth ?? 0}
-          icon={Calendar}
-          color="text-foreground"
-          loading={metricsLoading}
-          testId="text-users-month"
-        />
-        <MetricCard
-          title={pt ? "Em Grace Period" : "In Grace Period"}
-          value={metrics?.gracePeriodCount ?? 0}
-          icon={AlertCircle}
-          color={metrics?.gracePeriodCount && metrics.gracePeriodCount > 0 ? "text-yellow-600" : "text-muted-foreground"}
-          tooltip={pt
-            ? "Usuários em grace period: pagamento falhou, aguardando nova tentativa no Stripe (72h)."
-            : "Users in grace period: payment failed, awaiting Stripe retry (72h)."}
-          loading={metricsLoading}
-          testId="text-grace-period"
-        />
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {pt ? "Cobertura Stripe" : "Stripe Coverage"}
-            </CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {metricsLoading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold" data-testid="text-stripe-coverage">
-                {metrics && metrics.subscriptionsActive > 0
-                  ? `${Math.round((metrics.activeStripeSubscriptions / metrics.subscriptionsActive) * 100)}%`
-                  : "—"}
-              </div>
-            )}
-            {!metricsLoading && metrics && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {metrics.activeStripeSubscriptions}/{metrics.subscriptionsActive} {pt ? "com sub. Stripe" : "w/ Stripe sub"}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+      {/* ── ROW 3 — Growth + Coverage ─────────────────────────────────────── */}
+      <div>
+        <SectionLabel>{pt ? "Crescimento & Cobertura" : "Growth & Coverage"}</SectionLabel>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <StatCard label={pt ? "Novos Hoje" : "New Today"}         value={metrics?.usersToday ?? 0}     icon={UserPlus}  iconColor="text-foreground" loading={metricsLoading} testId="text-users-today" />
+          <StatCard label={pt ? "Novos Este Mês" : "New This Month"} value={metrics?.usersThisMonth ?? 0} icon={Calendar}  iconColor="text-foreground" loading={metricsLoading} testId="text-users-month" />
+          <StatCard
+            label={pt ? "Em Grace Period" : "In Grace Period"}
+            value={metrics?.gracePeriodCount ?? 0}
+            icon={AlertCircle}
+            iconColor={(metrics?.gracePeriodCount ?? 0) > 0 ? "text-yellow-600" : "text-muted-foreground"}
+            tooltip={pt ? "Usuários com pagamento falhado aguardando nova tentativa do Stripe (72h)." : "Users with failed payment awaiting Stripe retry (72h)."}
+            loading={metricsLoading}
+            testId="text-grace-period"
+            alert={(metrics?.gracePeriodCount ?? 0) > 0}
+          />
+          <StatCard
+            label={pt ? "Cobertura Stripe" : "Stripe Coverage"}
+            value={metricsLoading ? "—" : `${coveragePct}%`}
+            icon={CreditCard}
+            iconColor="text-foreground"
+            sub={`${metrics?.activeStripeSubscriptions ?? 0}/${metrics?.subscriptionsActive ?? 0} ${pt ? "com sub Stripe" : "w/ Stripe sub"}`}
+            tooltip={pt ? "Percentual de assinantes ativos com uma subscription Stripe real." : "Percentage of active subscribers with a real Stripe subscription."}
+            loading={metricsLoading}
+            testId="text-stripe-coverage"
+          />
+        </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle>{pt ? "Novos Usuários" : "New Users"}</CardTitle>
+      {/* ── ROW 4 — Charts ────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Line chart — wider */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 py-3 px-4">
+            <CardTitle className="text-sm font-semibold">
+              {pt ? "Novos Usuários" : "New Users"}
+            </CardTitle>
             <Select value={chartPeriod} onValueChange={(v) => setChartPeriod(v as "7d" | "30d" | "1y")}>
-              <SelectTrigger className="w-24">
+              <SelectTrigger className="h-7 w-20 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -488,20 +461,23 @@ export default function AdminBilling() {
               </SelectContent>
             </Select>
           </CardHeader>
-          <CardContent>
-            <div className="h-[280px]">
+          <CardContent className="px-4 pb-4 pt-0">
+            <div className="h-[180px]">
               {chartData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                  {pt ? "Sem dados para o período" : "No data for this period"}
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <BarChart3 className="h-8 w-8 mb-2 opacity-20" />
+                  <p className="text-xs">{pt ? "Sem dados para o período" : "No data for this period"}</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                    <YAxis tick={{ fontSize: 11 }} className="text-muted-foreground" />
-                    <RechartsTooltip />
-                    <Line type="monotone" dataKey="count" stroke="#10B981" strokeWidth={2} dot={false} />
+                  <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <RechartsTooltip
+                      contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
+                    />
+                    <Line type="monotone" dataKey="count" stroke="#10B981" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -509,15 +485,19 @@ export default function AdminBilling() {
           </CardContent>
         </Card>
 
+        {/* Donut chart */}
         <Card>
-          <CardHeader>
-            <CardTitle>{pt ? "Distribuição por Status" : "Distribution by Status"}</CardTitle>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm font-semibold">
+              {pt ? "Distribuição" : "Distribution"}
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[280px]">
+          <CardContent className="px-4 pb-4 pt-0">
+            <div className="h-[180px]">
               {pieData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                  {pt ? "Sem assinantes" : "No subscribers"}
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                  <Users className="h-8 w-8 mb-2 opacity-20" />
+                  <p className="text-xs">{pt ? "Sem assinantes" : "No subscribers"}</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
@@ -525,19 +505,21 @@ export default function AdminBilling() {
                     <Pie
                       data={pieData}
                       cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={95}
+                      cy="42%"
+                      innerRadius={40}
+                      outerRadius={65}
                       paddingAngle={2}
                       dataKey="value"
-                      label={({ name, value }) => `${name}: ${value}`}
-                      labelLine={false}
                     >
-                      {pieData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                      {pieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Legend />
+                    <Legend
+                      iconSize={8}
+                      wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+                      formatter={(value) => <span className="text-muted-foreground">{value}</span>}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               )}
@@ -546,28 +528,38 @@ export default function AdminBilling() {
         </Card>
       </div>
 
-      {/* Tabs — Subscribers + Payments */}
-      <Tabs defaultValue="subscribers" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="subscribers" data-testid="tab-subscribers">
-            {pt ? "Assinantes" : "Subscribers"}
-          </TabsTrigger>
-          <TabsTrigger value="payments" data-testid="tab-payments">
-            {pt ? "Pagamentos Stripe" : "Stripe Payments"}
-          </TabsTrigger>
-        </TabsList>
+      {/* ── ROW 5 — Subscribers + Payments ───────────────────────────────── */}
+      <Tabs defaultValue="subscribers" className="space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <TabsList className="h-8">
+            <TabsTrigger value="subscribers" className="text-xs h-7 px-3" data-testid="tab-subscribers">
+              {pt ? "Assinantes" : "Subscribers"}
+              {subscribersData && (
+                <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 h-4">
+                  {subscribersData.total}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs h-7 px-3" data-testid="tab-payments">
+              {pt ? "Pagamentos" : "Payments"}
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="subscribers">
+        {/* ── Subscribers ──────────────────────────────────────────────── */}
+        <TabsContent value="subscribers" className="mt-0">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
-              <CardTitle>{pt ? "Lista de Assinantes" : "Subscribers List"}</CardTitle>
-              <div className="flex items-center gap-2 flex-wrap">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap py-3 px-4">
+              <CardTitle className="text-sm font-semibold">
+                {pt ? "Lista de Assinantes" : "Subscribers"}
+              </CardTitle>
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setSubscribersPage(1); }}>
-                  <SelectTrigger className="w-36" data-testid="select-status-filter">
+                  <SelectTrigger className="h-7 w-32 text-xs" data-testid="select-status-filter">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{pt ? "Todos os status" : "All statuses"}</SelectItem>
+                    <SelectItem value="all">{pt ? "Todos" : "All"}</SelectItem>
                     <SelectItem value="active">{pt ? "Ativo" : "Active"}</SelectItem>
                     <SelectItem value="inactive">{pt ? "Inativo" : "Inactive"}</SelectItem>
                     <SelectItem value="trial">Trial</SelectItem>
@@ -575,20 +567,20 @@ export default function AdminBilling() {
                   </SelectContent>
                 </Select>
                 <Select value={planFilter} onValueChange={(v) => { setPlanFilter(v); setSubscribersPage(1); }}>
-                  <SelectTrigger className="w-36" data-testid="select-plan-filter">
+                  <SelectTrigger className="h-7 w-32 text-xs" data-testid="select-plan-filter">
                     <SelectValue placeholder={pt ? "Plano" : "Plan"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">{pt ? "Todos os planos" : "All plans"}</SelectItem>
+                    <SelectItem value="all">{pt ? "Todos" : "All plans"}</SelectItem>
                     {plans.map((plan) => (
-                      <SelectItem key={plan.id} value={String(plan.id)}>
+                      <SelectItem key={plan.id} value={String(plan.id)} className="text-xs">
                         {pt ? plan.name : plan.nameEn}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={String(subscribersLimit)} onValueChange={(v) => { setSubscribersLimit(Number(v)); setSubscribersPage(1); }}>
-                  <SelectTrigger className="w-20">
+                  <SelectTrigger className="h-7 w-16 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -599,80 +591,84 @@ export default function AdminBilling() {
                 </Select>
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+
+            <div className="border-t">
               {subscribersLoading ? (
-                <div className="p-6 space-y-4">
-                  {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                <div className="p-4 space-y-2">
+                  {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
                 </div>
               ) : !subscribersData?.subscribers.length ? (
-                <div className="p-12 text-center text-muted-foreground">
-                  {pt ? "Nenhum assinante encontrado" : "No subscribers found"}
+                <div className="py-10 text-center">
+                  <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    {pt ? "Nenhum assinante encontrado" : "No subscribers found"}
+                  </p>
                 </div>
               ) : (
                 <>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
-                        <TableRow>
-                          <TableHead>{pt ? "Nome" : "Name"}</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>{pt ? "Plano" : "Plan"}</TableHead>
-                          <TableHead>{pt ? "Preço" : "Price"}</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>{pt ? "Tipo" : "Type"}</TableHead>
-                          <TableHead>{pt ? "Início" : "Start"}</TableHead>
-                          <TableHead>{pt ? "Fim" : "End"}</TableHead>
-                          <TableHead>Subscription ID</TableHead>
-                          <TableHead>Customer ID</TableHead>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-xs font-medium h-8 px-4">{pt ? "Nome" : "Name"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">Email</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Plano" : "Plan"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Preço" : "Price"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">Status</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Tipo" : "Type"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Início" : "Start"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Fim" : "End"}</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">Sub ID</TableHead>
+                          <TableHead className="text-xs font-medium h-8 px-3">Cust ID</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {subscribersData.subscribers.map((sub) => (
-                          <TableRow key={sub.id} data-testid={`row-subscriber-${sub.id}`}>
-                            <TableCell className="font-medium whitespace-nowrap">
+                          <TableRow key={sub.id} className="hover:bg-muted/30" data-testid={`row-subscriber-${sub.id}`}>
+                            <TableCell className="text-xs font-medium whitespace-nowrap py-2 px-4">
                               {sub.firstName || sub.lastName
-                                ? `${sub.firstName || ""} ${sub.lastName || ""}`.trim()
-                                : "-"}
+                                ? `${sub.firstName ?? ""} ${sub.lastName ?? ""}`.trim()
+                                : <span className="text-muted-foreground">—</span>}
                             </TableCell>
-                            <TableCell className="text-sm">{sub.email}</TableCell>
-                            <TableCell className="whitespace-nowrap">{sub.planName || "-"}</TableCell>
-                            <TableCell className="whitespace-nowrap text-sm">
-                              {sub.planPrice != null ? formatCurrency(sub.planPrice) : "-"}
+                            <TableCell className="text-xs py-2 px-3 max-w-[160px] truncate">{sub.email}</TableCell>
+                            <TableCell className="text-xs py-2 px-3 whitespace-nowrap">{sub.planName ?? "—"}</TableCell>
+                            <TableCell className="text-xs py-2 px-3 whitespace-nowrap tabular-nums">
+                              {sub.planPrice != null ? formatCurrency(sub.planPrice) : "—"}
                             </TableCell>
-                            <TableCell>{getStatusBadge(sub.subscriptionStatus)}</TableCell>
-                            <TableCell>{getTypeBadge(sub)}</TableCell>
-                            <TableCell className="whitespace-nowrap text-sm">{formatDate(sub.subscriptionStartDate)}</TableCell>
-                            <TableCell className="whitespace-nowrap text-sm">{formatDate(sub.subscriptionEndDate)}</TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
+                            <TableCell className="py-2 px-3">{statusBadge(sub.subscriptionStatus)}</TableCell>
+                            <TableCell className="py-2 px-3">{typeBadge(sub)}</TableCell>
+                            <TableCell className="text-xs py-2 px-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                              {formatDate(sub.subscriptionStartDate)}
+                            </TableCell>
+                            <TableCell className="text-xs py-2 px-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                              {formatDate(sub.subscriptionEndDate)}
+                            </TableCell>
+                            <TableCell className="py-2 px-3">
                               {sub.stripeSubscriptionId ? (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger className="cursor-default">
-                                      {sub.stripeSubscriptionId.slice(-10)}
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="font-mono text-xs">{sub.stripeSubscriptionId}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger className="font-mono text-[10px] text-muted-foreground cursor-default">
+                                    …{sub.stripeSubscriptionId.slice(-8)}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="font-mono text-xs">{sub.stripeSubscriptionId}</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               ) : (
-                                <span className="text-muted-foreground/50">—</span>
+                                <span className="text-muted-foreground/40 text-xs">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="font-mono text-xs text-muted-foreground">
+                            <TableCell className="py-2 px-3">
                               {sub.stripeCustomerId ? (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger className="cursor-default">
-                                      {sub.stripeCustomerId.slice(-10)}
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="font-mono text-xs">{sub.stripeCustomerId}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger className="font-mono text-[10px] text-muted-foreground cursor-default">
+                                    …{sub.stripeCustomerId.slice(-8)}
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="font-mono text-xs">{sub.stripeCustomerId}</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               ) : (
-                                <span className="text-muted-foreground/50">—</span>
+                                <span className="text-muted-foreground/40 text-xs">—</span>
                               )}
                             </TableCell>
                           </TableRow>
@@ -680,106 +676,122 @@ export default function AdminBilling() {
                       </TableBody>
                     </Table>
                   </div>
-                  <div className="flex items-center justify-between p-4 border-t">
-                    <div className="text-sm text-muted-foreground">
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between px-4 py-2.5 border-t bg-muted/20">
+                    <p className="text-[11px] text-muted-foreground">
                       {subscribersData.total} {pt ? "no total" : "total"}
-                    </div>
-                    <div className="flex items-center gap-2">
+                    </p>
+                    <div className="flex items-center gap-1.5">
                       <Button
                         variant="outline"
                         size="icon"
+                        className="h-7 w-7"
                         disabled={subscribersPage <= 1}
                         onClick={() => setSubscribersPage((p) => p - 1)}
                         data-testid="button-prev-page"
                       >
-                        <ChevronLeft className="w-4 h-4" />
+                        <ChevronLeft className="w-3.5 h-3.5" />
                       </Button>
-                      <span className="text-sm">
+                      <span className="text-xs text-muted-foreground min-w-[50px] text-center">
                         {subscribersPage} / {totalSubscribersPages || 1}
                       </span>
                       <Button
                         variant="outline"
                         size="icon"
+                        className="h-7 w-7"
                         disabled={subscribersPage >= totalSubscribersPages}
                         onClick={() => setSubscribersPage((p) => p + 1)}
                         data-testid="button-next-page"
                       >
-                        <ChevronRight className="w-4 h-4" />
+                        <ChevronRight className="w-3.5 h-3.5" />
                       </Button>
                     </div>
                   </div>
                 </>
               )}
-            </CardContent>
+            </div>
           </Card>
         </TabsContent>
 
-        <TabsContent value="payments">
+        {/* ── Payments ─────────────────────────────────────────────────── */}
+        <TabsContent value="payments" className="mt-0">
           <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle>{pt ? "Histórico de Pagamentos Stripe" : "Stripe Payment History"}</CardTitle>
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[240px] text-xs">
-                      {pt
-                        ? "Cobranças reais do Stripe (charges). Apenas pagamentos efetivamente processados."
-                        : "Real Stripe charges. Only successfully processed payments."}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
+            <CardHeader className="flex flex-row items-center gap-2 py-3 px-4">
+              <CardTitle className="text-sm font-semibold">
+                {pt ? "Pagamentos Stripe" : "Stripe Payments"}
+              </CardTitle>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[230px] text-xs">
+                  {pt
+                    ? "Cobranças reais processadas pelo Stripe. Apenas pagamentos confirmados (succeeded)."
+                    : "Real charges processed by Stripe. Only confirmed (succeeded) payments."}
+                </TooltipContent>
+              </Tooltip>
             </CardHeader>
-            <CardContent className="p-0">
+
+            <div className="border-t">
               {paymentsLoading ? (
-                <div className="p-6 space-y-4">
-                  {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                <div className="p-4 space-y-2">
+                  {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-9 w-full" />)}
                 </div>
               ) : !paymentsData?.payments.length ? (
-                <div className="p-12 text-center text-muted-foreground">
-                  {pt ? "Nenhum pagamento encontrado" : "No payments found"}
+                <div className="py-10 text-center">
+                  <DollarSign className="h-8 w-8 mx-auto mb-2 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    {pt ? "Nenhum pagamento encontrado" : "No payments found"}
+                  </p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>{pt ? "Data" : "Date"}</TableHead>
-                      <TableHead>{pt ? "Usuário" : "User"}</TableHead>
-                      <TableHead>{pt ? "Valor" : "Amount"}</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>ID</TableHead>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs font-medium h-8 px-4">{pt ? "Data" : "Date"}</TableHead>
+                      <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Usuário" : "User"}</TableHead>
+                      <TableHead className="text-xs font-medium h-8 px-3">{pt ? "Valor" : "Amount"}</TableHead>
+                      <TableHead className="text-xs font-medium h-8 px-3">Status</TableHead>
+                      <TableHead className="text-xs font-medium h-8 px-3">ID</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paymentsData.payments.map((payment) => (
-                      <TableRow key={payment.id} data-testid={`row-payment-${payment.id}`}>
-                        <TableCell className="whitespace-nowrap">{formatDate(payment.date)}</TableCell>
-                        <TableCell className="text-sm">{payment.userEmail || "-"}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(payment.amount)}</TableCell>
-                        <TableCell>
-                          {payment.status === "succeeded" ? (
-                            <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                              {pt ? "Sucesso" : "Success"}
+                    {paymentsData.payments.map((p) => (
+                      <TableRow key={p.id} className="hover:bg-muted/30" data-testid={`row-payment-${p.id}`}>
+                        <TableCell className="text-xs py-2 px-4 whitespace-nowrap tabular-nums text-muted-foreground">
+                          {formatDate(p.date)}
+                        </TableCell>
+                        <TableCell className="text-xs py-2 px-3 max-w-[180px] truncate">
+                          {p.userEmail ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-xs py-2 px-3 whitespace-nowrap tabular-nums font-medium">
+                          {formatCurrency(p.amount)}
+                        </TableCell>
+                        <TableCell className="py-2 px-3">
+                          {p.status === "succeeded" ? (
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-green-500/10 text-green-600 border-green-500/20">
+                              {pt ? "Pago" : "Paid"}
                             </Badge>
                           ) : (
-                            <Badge variant="destructive">{pt ? "Falhou" : "Failed"}</Badge>
+                            <Badge className="text-[10px] px-1.5 py-0 h-4 border bg-red-500/10 text-red-500 border-red-500/20">
+                              {pt ? "Falhou" : "Failed"}
+                            </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {payment.id.slice(-10)}
+                        <TableCell className="py-2 px-3 font-mono text-[10px] text-muted-foreground">
+                          …{p.id.slice(-8)}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               )}
-            </CardContent>
+            </div>
           </Card>
         </TabsContent>
       </Tabs>
     </div>
+    </TooltipProvider>
   );
 }

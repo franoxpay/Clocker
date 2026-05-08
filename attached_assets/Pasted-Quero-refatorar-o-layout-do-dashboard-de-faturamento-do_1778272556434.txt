@@ -1,0 +1,185 @@
+Quero refatorar o layout do dashboard de faturamento do painel admin para deixá-lo mais compacto, alinhado e profissional visualmente.
+
+IMPORTANTE:
+Não alterar regras de negócio.
+Não alterar cálculos.
+Não alterar endpoints.
+Mudança é principalmente de UI/UX/layout/responsividade.
+
+PROBLEMAS ATUAIS:
+
+1. O conteúdo está muito colado no menu lateral esquerdo.
+
+* O grid começa praticamente em cima da sidebar.
+* Falta padding/margin horizontal.
+* O dashboard parece “espremido”.
+
+2. Os cards estão grandes demais.
+
+* Muito espaço vazio.
+* Altura exagerada.
+* Pouca densidade de informação.
+
+3. O layout desperdiça espaço vertical.
+
+* Em telas grandes deveria mostrar mais conteúdo acima da dobra.
+* Hoje precisa scroll cedo demais.
+
+4. Os gráficos e tabelas ocupam espaço excessivo.
+
+* O gráfico de “Novos Usuários” está enorme mesmo sem dados.
+* O donut ocupa muito espaço vazio.
+
+5. Visualmente o dashboard parece desalinhado.
+
+* Espaçamentos inconsistentes.
+* Cards com alturas diferentes.
+* Grid pouco uniforme.
+
+OBJETIVO VISUAL:
+
+Quero um dashboard estilo:
+
+* Stripe Dashboard
+* Vercel Analytics
+* BetterStack
+* Linear
+* Supabase Studio
+
+Ou seja:
+
+* compacto
+* limpo
+* denso
+* moderno
+* profissional
+* com muito dado visível sem poluição
+
+ALTERAÇÕES NECESSÁRIAS:
+
+━━━━━━━━━━━━━━━━━━━
+LAYOUT GERAL
+━━━━━━━━━━━━━━━━━━━
+
+* Adicionar padding-left maior no conteúdo principal para afastar da sidebar
+* Melhorar container central
+* Usar max-width adequado
+* Melhorar espaçamento horizontal e vertical
+* Grid mais equilibrado
+
+━━━━━━━━━━━━━━━━━━━
+CARDS
+━━━━━━━━━━━━━━━━━━━
+
+* Reduzir altura dos cards em ~20–30%
+* Diminuir padding interno
+* Títulos menores
+* Números mais compactos
+* Ícones menores
+* Mostrar mais informação por card
+
+Exemplo:
+
+* valor principal
+* subtítulo menor
+* badge lateral
+* tendência pequena
+
+━━━━━━━━━━━━━━━━━━━
+GRID
+━━━━━━━━━━━━━━━━━━━
+
+Melhorar distribuição:
+
+Linha 1:
+Ativos | Inativos | Trial | Suspensos | Stripe | Manuais
+
+Linha 2:
+MRR | ARR | Receita | Ticket | LTV | Inadimplência
+
+Linha 3:
+Novos usuários (mais largo)
+Distribuição
+Cobertura Stripe
+
+Tudo mais compacto.
+
+━━━━━━━━━━━━━━━━━━━
+GRÁFICOS
+━━━━━━━━━━━━━━━━━━━
+
+* Reduzir altura do gráfico de novos usuários
+* Não ocupar espaço vazio gigante sem dados
+* Donut menor
+* Melhor centralização
+* Melhor responsividade
+
+━━━━━━━━━━━━━━━━━━━
+TABELAS
+━━━━━━━━━━━━━━━━━━━
+
+* Compactar linhas
+* Reduzir padding vertical
+* Melhorar alinhamento
+* Melhor densidade
+* Cabeçalho sticky
+* Scroll interno elegante
+
+━━━━━━━━━━━━━━━━━━━
+RESPONSIVIDADE
+━━━━━━━━━━━━━━━━━━━
+
+Desktop:
+
+* mais compacto
+* melhor aproveitamento
+
+Notebook:
+
+* sem quebrar layout
+* sem cards gigantes
+
+Mobile:
+
+* stack vertical
+* sem overflow
+
+━━━━━━━━━━━━━━━━━━━
+VISUAL
+━━━━━━━━━━━━━━━━━━━
+
+* Melhor hierarquia visual
+* Espaçamentos consistentes
+* Mais “enterprise SaaS”
+* Melhor contraste
+* Hover suave
+* Tooltips alinhados
+* Melhor alinhamento de textos e números
+
+━━━━━━━━━━━━━━━━━━━
+IMPORTANTE
+━━━━━━━━━━━━━━━━━━━
+
+NÃO:
+
+* mudar backend
+* mudar lógica
+* remover métricas
+* quebrar filtros
+* quebrar tabelas
+
+APENAS:
+
+* reorganizar
+* compactar
+* alinhar
+* melhorar UX/UI
+
+No final:
+mostrar relatório completo:
+
+* componentes alterados
+* o que foi compactado
+* melhorias de UX aplicadas
+* antes/depois do layout
+* melhorias de responsividade.
