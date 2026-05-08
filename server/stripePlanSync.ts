@@ -1,13 +1,21 @@
 import { db } from "./db";
 import { plans } from "@shared/schema";
-import { eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getStripeClient, isStripeConfigured } from "./stripeClient";
 import type Stripe from "stripe";
+
+export const OFFICIAL_PLAN_NAMES = [
+  "Plano Básico",
+  "Plano Avançado",
+  "Plano Pré-Escala",
+  "Plano Escala",
+  "Plano Ilimitado",
+] as const;
 
 export interface PlanSyncResult {
   planId: number;
   planName: string;
-  status: "linked" | "created" | "reused" | "error";
+  status: "linked" | "created" | "reused" | "error" | "ignored";
   stripeProductId?: string;
   stripePriceId?: string;
   action: string;
@@ -19,6 +27,7 @@ export interface SyncSummary {
   created: number;
   reused: number;
   linked: number;
+  ignored: number;
   errors: number;
   results: PlanSyncResult[];
 }
@@ -93,16 +102,28 @@ export async function syncPlansToStripe(): Promise<SyncSummary> {
 
   const stripe = await getStripeClient();
 
-  const allPlans = await db
+  const allActivePaidPlans = await db
     .select()
     .from(plans)
-    .where(eq(plans.isFree, false));
+    .where(and(eq(plans.isFree, false), eq(plans.isActive, true)));
 
-  console.log(`[StripePlanSync] ${allPlans.length} planos pagos encontrados no banco`);
+  console.log(`[StripePlanSync] ${allActivePaidPlans.length} planos ativos pagos encontrados no banco`);
 
   const results: PlanSyncResult[] = [];
 
-  for (const plan of allPlans) {
+  for (const plan of allActivePaidPlans) {
+    // Guard — only process officially allowed plan names
+    if (!(OFFICIAL_PLAN_NAMES as readonly string[]).includes(plan.name)) {
+      console.log(`[StripePlanSync] Plano ignorado por não ser oficial: "${plan.name}" (id=${plan.id})`);
+      results.push({
+        planId: plan.id,
+        planName: plan.name,
+        status: "ignored",
+        action: "Plano ignorado por não ser oficial",
+      });
+      continue;
+    }
+
     const result: PlanSyncResult = {
       planId: plan.id,
       planName: plan.name,
@@ -162,16 +183,17 @@ export async function syncPlansToStripe(): Promise<SyncSummary> {
   }
 
   const summary: SyncSummary = {
-    total: results.length,
+    total: results.filter((r) => r.status !== "ignored").length,
     created: results.filter((r) => r.status === "created").length,
     reused: results.filter((r) => r.status === "reused").length,
     linked: results.filter((r) => r.status === "linked").length,
+    ignored: results.filter((r) => r.status === "ignored").length,
     errors: results.filter((r) => r.status === "error").length,
     results,
   };
 
   console.log(
-    `[StripePlanSync] Concluído — criados: ${summary.created}, reutilizados: ${summary.reused}, já vinculados: ${summary.linked}, erros: ${summary.errors}`,
+    `[StripePlanSync] Concluído — criados: ${summary.created}, reutilizados: ${summary.reused}, já vinculados: ${summary.linked}, ignorados: ${summary.ignored}, erros: ${summary.errors}`,
   );
 
   return summary;

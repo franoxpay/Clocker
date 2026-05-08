@@ -1,0 +1,75 @@
+Corrija a sincronização de planos Stripe para considerar SOMENTE os planos oficiais ativos.
+
+Problema:
+O endpoint POST /api/admin/stripe/create-products criou Products/Prices também para planos deprecated:
+- Iniciante
+- Profissional
+- Empresarial
+
+Isso não deve acontecer.
+
+Regras:
+Os únicos planos pagos que podem existir/vincular na Stripe são:
+- Plano Básico
+- Plano Avançado
+- Plano Pré-Escala
+- Plano Escala
+- Plano Ilimitado
+
+O plano Free deve ser ignorado.
+Planos deprecated/inativos devem ser ignorados.
+
+Faça exatamente isto:
+
+1. Alterar syncPlansToStripe() para buscar somente planos oficiais ativos.
+Não usar “todos os planos pagos”.
+
+2. Garantir filtro obrigatório:
+- isActive = true
+- isFree = false
+- nome dentro da lista oficial
+
+3. Remover stripeProductId e stripePriceId dos planos deprecated no banco:
+- Iniciante
+- Profissional
+- Empresarial
+
+4. Na Stripe, arquivar/desativar os Products criados por engano:
+- Iniciante
+- Profissional
+- Empresarial
+
+Não apagar histórico, apenas marcar como inactive/archive se possível.
+
+5. Garantir que rodar o endpoint novamente retorne apenas 5 planos pagos oficiais.
+
+6. Adicionar proteção no código:
+Se algum plano pago não oficial aparecer, deve ser ignorado com log:
+"Plano ignorado por não ser oficial"
+
+7. Não alterar limites dos planos oficiais.
+8. Não alterar usuários.
+9. Não alterar subscriptions existentes.
+10. Não alterar checkout ainda.
+11. Não mexer em cloaker.
+
+Testar:
+- rodar endpoint novamente;
+- confirmar que só 5 planos oficiais são processados;
+- confirmar que deprecated não possuem stripePriceId;
+- confirmar que Products antigos foram arquivados na Stripe;
+- confirmar que não cria duplicatas.
+
+Critérios de aceite:
+- somente 5 planos oficiais pagos vinculados à Stripe;
+- deprecated sem stripePriceId;
+- products deprecated arquivados;
+- endpoint idempotente;
+- Free ignorado.
+
+No final me entregue:
+- arquivos alterados;
+- planos ignorados;
+- produtos arquivados;
+- IDs finais dos 5 planos oficiais;
+- resultado da nova execução.
