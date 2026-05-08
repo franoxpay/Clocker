@@ -1,0 +1,106 @@
+Quero que você investigue completamente por que a seção “Saúde do Sistema” do painel admin está mostrando:
+
+"Erro ao carregar dados de saúde
+Verifique se você tem permissão de admin."
+
+Importante:
+- NÃO implemente correções ainda.
+- Primeiro descubra exatamente a causa.
+- Quero diagnóstico técnico completo.
+- Quero saber se o problema é auth, rota, middleware, frontend, sessão, permissão, fetch ou cache.
+
+Analise profundamente:
+
+1. Frontend
+Verifique:
+- AdminMonitoring.tsx
+- query usada
+- endpoint chamado
+- headers enviados
+- credentials: 'include'
+- tratamento de erro
+- parsing da resposta
+- loading/error states
+- se está usando react-query
+- se há stale cache
+- se o token/sessão está indo corretamente
+
+Quero saber:
+- qual request está falhando;
+- status HTTP real;
+- body retornado;
+- stack/log exato.
+
+2. Backend — Health routes
+Analisar:
+- server/health/routes.ts
+- middleware usado
+- requireAdmin ou isAuthenticated
+- ordem de registro das rotas
+- se registerHealthRoutes(app) roda antes/depois de auth/session
+- se app.use(express.json()) interfere
+- se as rotas realmente existem no Express runtime
+
+Verificar:
+GET /api/internal/health
+GET /api/internal/health/summary
+
+3. Sessão/auth
+Investigar:
+- req.user existe?
+- req.session existe?
+- isAdmin está vindo corretamente?
+- impersonação interfere?
+- auth middleware está sobrescrevendo req.user?
+- replitAuth.ts interfere?
+- cookies estão chegando?
+- CORS/credentials interferem?
+
+4. Verificar diferenças:
+- rota funciona via curl?
+- rota funciona logado?
+- rota funciona com token INTERNAL_HEALTH_TOKEN?
+- rota falha só no frontend?
+- rota falha só no browser?
+
+5. Validar:
+- AdminMonitoring.tsx está usando endpoint correto?
+- AppSidebar usa o mesmo endpoint?
+- Um funciona e o outro não?
+- Existe diferença de autenticação entre eles?
+
+6. Verificar possível conflito:
+- /api/internal/*
+- auth middleware global
+- rate limit
+- CSRF
+- express.static
+- Vite proxy
+- rewrites
+
+7. Logs
+Adicionar logs temporários SOMENTE para diagnóstico:
+- request chegando;
+- req.user;
+- req.session;
+- headers;
+- auth result;
+- middleware chain.
+
+Mas NÃO deixar logs sensíveis permanentes.
+
+8. Resultado esperado
+Me entregue:
+- causa raiz exata;
+- arquivo responsável;
+- linha provável;
+- por que o erro acontece;
+- por que a mensagem aparece;
+- qual endpoint falha;
+- status HTTP real;
+- diferença entre frontend/backend;
+- se é bug de auth, sessão, middleware ou frontend;
+- impacto real.
+
+NÃO corrija ainda.
+Primeiro diagnostique completamente.
