@@ -1,0 +1,139 @@
+Quero que você faça uma auditoria completa da área de E-mails no painel admin antes de implementar melhorias.
+
+Importante:
+- NÃO implemente nada ainda.
+- Primeiro entenda como está hoje.
+- Quero diagnóstico completo.
+- Quero saber o que existe, o que funciona, o que está quebrado e o que pode melhorar.
+
+Analise tudo relacionado a e-mails no projeto:
+
+1. Estrutura atual do painel admin de e-mails
+- Quais páginas existem?
+- Quais menus existem?
+- Existe tela de templates?
+- Existe tela de logs?
+- Existe tela de envio manual?
+- Existe preview?
+- Existe filtro?
+- Existe busca?
+- Existe paginação?
+- Existe status de entrega?
+
+2. Backend de e-mails
+Mapear todos os arquivos e funções relacionados a:
+- Resend
+- sendEmail
+- email templates
+- email_logs
+- transactional emails
+- subscription reminders
+- password reset
+- billing emails
+- suspension emails
+- domain emails
+- affiliate emails
+- admin emails
+
+3. Templates
+Verificar:
+- onde os templates ficam salvos;
+- se são editáveis pelo admin;
+- se existe PT/EN;
+- quais variáveis existem;
+- se há preview;
+- se há teste de envio;
+- se templates quebrados podem causar erro;
+- se existe fallback.
+
+4. Logs de e-mails
+Verificar:
+- quais campos são salvos;
+- se salva recipient;
+- subject;
+- template;
+- status;
+- provider message id;
+- erro;
+- createdAt;
+- opened/clicked, se existir;
+- se existe retry;
+- se existe paginação/filtros.
+
+5. Envio e confiabilidade
+Verificar:
+- o que acontece se Resend falhar;
+- se erro é logado;
+- se existe retry;
+- se existe fila;
+- se email crítico pode ser perdido;
+- se envio é síncrono ou assíncrono;
+- se email pode atrasar resposta da API;
+- se existe rate limit.
+
+6. Segurança
+Verificar:
+- se dados sensíveis aparecem nos logs;
+- se HTML pode ser injetado por template;
+- se admin pode enviar email para qualquer endereço;
+- se existe risco de spam;
+- se existe validação de destinatário;
+- se existe abuso de envio manual;
+- se tokens aparecem em logs.
+
+7. Tipos de e-mail atuais
+Liste todos os eventos que enviam email, por exemplo:
+- boas-vindas;
+- reset de senha;
+- renovação;
+- pagamento falhou;
+- assinatura cancelada;
+- conta suspensa;
+- domínio caiu;
+- domínio ativado;
+- comissão afiliado;
+- teste admin.
+
+8. Problemas reais
+Encontrar bugs concretos:
+- template sem variável;
+- e-mail que deveria enviar mas não envia;
+- duplicidade;
+- falta de log;
+- falha silenciosa;
+- erro de idioma;
+- falta de status;
+- falta de retry;
+- envio bloqueando request;
+- envio para email errado.
+
+9. Melhorias possíveis
+Depois da análise, recomende melhorias práticas para transformar isso em uma central profissional de emails:
+- dashboard de emails;
+- logs melhores;
+- filtros;
+- resend status;
+- preview;
+- teste de envio;
+- editor de templates;
+- variáveis disponíveis;
+- histórico por usuário;
+- retry manual;
+- reenvio;
+- métricas;
+- alertas de falha.
+
+10. Resultado final
+Me entregue:
+- arquivos analisados;
+- rotas existentes;
+- telas existentes;
+- tabelas usadas;
+- tipos de email atuais;
+- bugs encontrados;
+- riscos de segurança;
+- problemas de UX;
+- melhorias recomendadas em ordem de prioridade.
+
+Não implemente nada ainda.
+Só audite.
