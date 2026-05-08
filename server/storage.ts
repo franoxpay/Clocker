@@ -312,6 +312,11 @@ export interface IStorage {
   // Stripe webhook idempotency
   hasProcessedWebhookEvent(eventId: string): Promise<boolean>;
   markWebhookEventProcessed(eventId: string, eventType: string, error?: string | null, payloadSummary?: any): Promise<void>;
+  cleanupOldWebhookEvents(retentionDays?: number): Promise<number>;
+
+  // Billing lock (persistent, multi-instance safe)
+  acquireBillingLock(userId: string, lockDurationMinutes?: number): Promise<boolean>;
+  releaseBillingLock(userId: string): Promise<void>;
 
   // Subscription inconsistency detection (admin)
   getUsersWithSubscriptionInconsistencies(): Promise<Array<{ user: User; issues: string[] }>>;
@@ -3122,6 +3127,41 @@ export class DatabaseStorage implements IStorage {
       .insert(stripeWebhookEvents)
       .values({ eventId, eventType, error: error ?? null, payloadSummary: payloadSummary ?? null })
       .onConflictDoNothing();
+  }
+
+  async cleanupOldWebhookEvents(retentionDays = 90): Promise<number> {
+    const result = await db.execute(
+      sql`DELETE FROM stripe_webhook_events WHERE processed_at < NOW() - INTERVAL '${sql.raw(String(retentionDays))} days'`
+    );
+    const deleted = (result as any).rowCount ?? 0;
+    if (deleted > 0) {
+      console.log(`[WebhookCleanup] Removed ${deleted} event(s) older than ${retentionDays} days`);
+    } else {
+      console.log(`[WebhookCleanup] No events older than ${retentionDays} days found`);
+    }
+    return deleted;
+  }
+
+  async acquireBillingLock(userId: string, lockDurationMinutes = 5): Promise<boolean> {
+    const expiry = new Date(Date.now() + lockDurationMinutes * 60 * 1000);
+    // Atomic: only update if no lock currently held (or lock expired)
+    const result = await db.execute(
+      sql`UPDATE users SET billing_lock_until = ${expiry.toISOString()} WHERE id = ${userId} AND (billing_lock_until IS NULL OR billing_lock_until < NOW()) RETURNING id`
+    );
+    const acquired = ((result as any).rowCount ?? 0) > 0;
+    if (acquired) {
+      console.log(`[BillingLock] Lock acquired for user ${userId} until ${expiry.toISOString()}`);
+    } else {
+      console.log(`[BillingLock] Lock refused for user ${userId} — already held`);
+    }
+    return acquired;
+  }
+
+  async releaseBillingLock(userId: string): Promise<void> {
+    await db.execute(
+      sql`UPDATE users SET billing_lock_until = NULL WHERE id = ${userId}`
+    );
+    console.log(`[BillingLock] Lock released for user ${userId}`);
   }
 
   // ==========================================

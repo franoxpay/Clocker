@@ -54,6 +54,7 @@ export const users = pgTable("users", {
   reminderSentOnExpiry: timestamp("reminder_sent_on_expiry"),
   reminderSent2DaysAfter: timestamp("reminder_sent_2_days_after"),
   reminderSent7DaysAfter: timestamp("reminder_sent_7_days_after"),
+  billingLockUntil: timestamp("billing_lock_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

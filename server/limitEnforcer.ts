@@ -183,20 +183,15 @@ export async function attemptAutoUpgrade(
 // ============================================================
 
 /**
- * In-memory concurrency guard: prevents multiple simultaneous upgrade attempts
- * for the same user when multiple cloaker requests fire in parallel.
- */
-const upgradingUsers = new Set<string>();
-
-/**
  * Called when a user exceeds 120% of their monthly click limit.
  *
  * Flow:
  *  1. Skip if already in grace period or suspended (idempotent)
- *  2. Skip if an upgrade is already in progress for this user (race guard)
+ *  2. Acquire DB-persisted billing lock (multi-instance safe, 5-min TTL)
  *  3. Attempt auto-upgrade via Stripe
  *  4. If upgraded → notify user, done
  *  5. If upgrade fails/unavailable → start 72h grace period + notify
+ *  6. Always release lock in finally block
  *
  * This is designed to be called fire-and-forget (does not block cloaker).
  */
@@ -213,12 +208,12 @@ export async function handleClickOverage(
     return;
   }
 
-  // Concurrency guard: skip if an upgrade is already in-flight for this user
-  if (upgradingUsers.has(userId)) {
-    console.log(`[LimitEnforcer] User ${userId} — upgrade already in progress, skipping concurrent call`);
+  // Persistent concurrency guard — atomic UPDATE in DB, safe across multiple server instances
+  const lockAcquired = await storage.acquireBillingLock(userId, 5);
+  if (!lockAcquired) {
+    // Another instance already holds the lock — skip silently
     return;
   }
-  upgradingUsers.add(userId);
 
   try {
     const limit = plan.maxClicks;
@@ -250,10 +245,10 @@ export async function handleClickOverage(
     }
 
     // Upgrade failed or not available → grace period
-    // Re-fetch user to guard against double-start between the initial check and now
+    // Re-fetch user to guard against any state change that happened between lock acquisition and now
     const freshUser = await storage.getUser(userId);
     if (freshUser?.gracePeriodEndsAt || freshUser?.suspendedAt) {
-      console.log(`[LimitEnforcer] User ${userId} — grace/suspension already set (race), skipping`);
+      console.log(`[LimitEnforcer] User ${userId} — grace/suspension already set after lock, skipping`);
       return;
     }
 
@@ -289,7 +284,9 @@ export async function handleClickOverage(
       });
     } catch (e) {}
   } finally {
-    upgradingUsers.delete(userId);
+    await storage.releaseBillingLock(userId).catch((err: any) =>
+      console.error(`[LimitEnforcer] Failed to release billing lock for user ${userId}:`, err.message)
+    );
   }
 }
 

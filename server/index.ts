@@ -469,6 +469,17 @@ async function reconcileStaleSubscriptions() {
     );
   }, 4 * 60 * 60 * 1000);
   
+  // Webhook event log cleanup: keep last 90 days, run on startup + daily
+  async function runWebhookEventCleanup() {
+    try {
+      await storage.cleanupOldWebhookEvents(90);
+    } catch (err: any) {
+      console.error("[WebhookCleanup] Error:", err.message);
+    }
+  }
+  runWebhookEventCleanup();
+  setInterval(runWebhookEventCleanup, 24 * 60 * 60 * 1000); // every 24h
+
   setupWebSocket(httpServer);
   startDomainMonitor();
   startSubscriptionReminder();
