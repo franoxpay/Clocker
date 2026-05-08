@@ -183,13 +183,20 @@ export async function attemptAutoUpgrade(
 // ============================================================
 
 /**
+ * In-memory concurrency guard: prevents multiple simultaneous upgrade attempts
+ * for the same user when multiple cloaker requests fire in parallel.
+ */
+const upgradingUsers = new Set<string>();
+
+/**
  * Called when a user exceeds 120% of their monthly click limit.
  *
  * Flow:
  *  1. Skip if already in grace period or suspended (idempotent)
- *  2. Attempt auto-upgrade via Stripe
- *  3. If upgraded → notify user, done
- *  4. If upgrade fails/unavailable → start 72h grace period + notify
+ *  2. Skip if an upgrade is already in progress for this user (race guard)
+ *  3. Attempt auto-upgrade via Stripe
+ *  4. If upgraded → notify user, done
+ *  5. If upgrade fails/unavailable → start 72h grace period + notify
  *
  * This is designed to be called fire-and-forget (does not block cloaker).
  */
@@ -206,66 +213,84 @@ export async function handleClickOverage(
     return;
   }
 
-  const limit = plan.maxClicks;
-  const toleranceLimit = Math.ceil(limit * OVERAGE_THRESHOLD_FACTOR);
+  // Concurrency guard: skip if an upgrade is already in-flight for this user
+  if (upgradingUsers.has(userId)) {
+    console.log(`[LimitEnforcer] User ${userId} — upgrade already in progress, skipping concurrent call`);
+    return;
+  }
+  upgradingUsers.add(userId);
 
-  console.log(
-    `[LimitEnforcer] 🔴 Click overage: user=${userId}, clicks=${clicksUsed}, ` +
-      `limit=${limit}, tolerance_limit=${toleranceLimit}`
-  );
-  console.log(`[LimitEnforcer] Auto-upgrade initiated for user ${userId}`);
+  try {
+    const limit = plan.maxClicks;
+    const toleranceLimit = Math.ceil(limit * OVERAGE_THRESHOLD_FACTOR);
 
-  const upgradeResult = await attemptAutoUpgrade(userId);
-
-  if (upgradeResult === "upgraded") {
     console.log(
-      `[LimitEnforcer] ✓ Auto-upgrade successful for user ${userId} — no grace period needed`
+      `[LimitEnforcer] 🔴 Click overage: user=${userId}, clicks=${clicksUsed}, ` +
+        `limit=${limit}, tolerance_limit=${toleranceLimit}`
     );
+    console.log(`[LimitEnforcer] Auto-upgrade initiated for user ${userId}`);
+
+    const upgradeResult = await attemptAutoUpgrade(userId);
+
+    if (upgradeResult === "upgraded") {
+      console.log(
+        `[LimitEnforcer] ✓ Auto-upgrade successful for user ${userId} — no grace period needed`
+      );
+      try {
+        await storage.createNotification({
+          userId,
+          type: "plan_upgraded",
+          titlePt: "Plano atualizado automaticamente",
+          titleEn: "Plan automatically upgraded",
+          messagePt: `Seu volume de clicks ultrapassou 120% do limite. Seu plano foi atualizado automaticamente para o próximo nível. Uma cobrança proporcional foi aplicada.`,
+          messageEn: `Your click volume exceeded 120% of the limit. Your plan was automatically upgraded to the next tier. A prorated charge was applied.`,
+        });
+      } catch (e) {}
+      return;
+    }
+
+    // Upgrade failed or not available → grace period
+    // Re-fetch user to guard against double-start between the initial check and now
+    const freshUser = await storage.getUser(userId);
+    if (freshUser?.gracePeriodEndsAt || freshUser?.suspendedAt) {
+      console.log(`[LimitEnforcer] User ${userId} — grace/suspension already set (race), skipping`);
+      return;
+    }
+
+    console.log(
+      `[LimitEnforcer] ⚠ Grace period started for user ${userId} (upgrade result: ${upgradeResult})`
+    );
+    await storage.startGracePeriod(userId);
+
+    // Send email notification
+    try {
+      const { sendPlanLimitEmail } = await import("./email");
+      if (user.email) {
+        sendPlanLimitEmail(
+          user.email,
+          "clicks",
+          clicksUsed,
+          limit,
+          plan.name,
+          userId
+        ).catch(() => {});
+      }
+    } catch (e) {}
+
+    // In-app notification
     try {
       await storage.createNotification({
         userId,
-        type: "plan_upgraded",
-        titlePt: "Plano atualizado automaticamente",
-        titleEn: "Plan automatically upgraded",
-        messagePt: `Seu volume de clicks ultrapassou 120% do limite. Seu plano foi atualizado automaticamente para o próximo nível. Uma cobrança proporcional foi aplicada.`,
-        messageEn: `Your click volume exceeded 120% of the limit. Your plan was automatically upgraded to the next tier. A prorated charge was applied.`,
+        type: "grace_period_started",
+        titlePt: "Limite de clicks atingido — período de carência iniciado",
+        titleEn: "Click limit reached — grace period started",
+        messagePt: `Você ultrapassou 120% do limite do seu plano (${clicksUsed.toLocaleString()} de ${limit.toLocaleString()} clicks). Seus redirects continuam ativos por 72 horas. Faça upgrade para evitar a suspensão da conta.`,
+        messageEn: `You exceeded 120% of your plan limit (${clicksUsed.toLocaleString()} of ${limit.toLocaleString()} clicks). Your redirects remain active for 72 hours. Please upgrade to avoid account suspension.`,
       });
     } catch (e) {}
-    return;
+  } finally {
+    upgradingUsers.delete(userId);
   }
-
-  // Upgrade failed or not available → grace period
-  console.log(
-    `[LimitEnforcer] ⚠ Grace period started for user ${userId} (upgrade result: ${upgradeResult})`
-  );
-  await storage.startGracePeriod(userId);
-
-  // Send email notification
-  try {
-    const { sendPlanLimitEmail } = await import("./email");
-    if (user.email) {
-      sendPlanLimitEmail(
-        user.email,
-        "clicks",
-        clicksUsed,
-        limit,
-        plan.name,
-        userId
-      ).catch(() => {});
-    }
-  } catch (e) {}
-
-  // In-app notification
-  try {
-    await storage.createNotification({
-      userId,
-      type: "grace_period_started",
-      titlePt: "Limite de clicks atingido — período de carência iniciado",
-      titleEn: "Click limit reached — grace period started",
-      messagePt: `Você ultrapassou 120% do limite do seu plano (${clicksUsed.toLocaleString()} de ${limit.toLocaleString()} clicks). Seus redirects continuam ativos por 72 horas. Faça upgrade para evitar a suspensão da conta.`,
-      messageEn: `You exceeded 120% of your plan limit (${clicksUsed.toLocaleString()} of ${limit.toLocaleString()} clicks). Your redirects remain active for 72 hours. Please upgrade to avoid account suspension.`,
-    });
-  } catch (e) {}
 }
 
 // ============================================================

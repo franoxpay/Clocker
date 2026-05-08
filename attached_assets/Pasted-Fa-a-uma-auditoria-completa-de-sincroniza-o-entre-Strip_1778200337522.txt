@@ -1,0 +1,141 @@
+Faça uma auditoria completa de sincronização entre Stripe e banco de dados.
+
+Objetivo:
+Garantir que:
+- status do Stripe;
+- status interno;
+- plano do usuário;
+- grace period;
+- suspensão;
+- subscription;
+- auto-upgrade;
+- billing lifecycle
+
+nunca fiquem inconsistentes.
+
+Faça exatamente isto:
+
+1. Analise todo o fluxo:
+- checkout;
+- criação de subscription;
+- renew;
+- invoice.payment_succeeded;
+- invoice.payment_failed;
+- customer.subscription.updated;
+- customer.subscription.deleted;
+- auto-upgrade;
+- grace period;
+- suspensão;
+- reativação.
+
+2. Identifique todos os campos usados:
+- stripeCustomerId
+- stripeSubscriptionId
+- subscriptionStatus
+- suspendedAt
+- gracePeriodEndsAt
+- planId
+- clicksUsedThisMonth
+- qualquer outro relacionado.
+
+3. Verifique possíveis divergências:
+Exemplo:
+- Stripe active + banco suspended
+- Stripe canceled + banco active
+- Stripe unpaid + redirects funcionando
+- plano Stripe ≠ plano banco
+- grace period sem expiração
+- subscription inexistente no Stripe mas ativa no banco
+
+4. Criar função centralizada de sincronização.
+
+Exemplo:
+syncUserSubscriptionState(userId)
+
+Ela deve:
+- consultar Stripe;
+- consultar banco;
+- decidir estado correto;
+- corrigir inconsistências automaticamente.
+
+5. Implementar idempotência nos webhooks.
+
+Garantir que:
+- mesmo webhook repetido não quebre estado;
+- retries do Stripe sejam seguros;
+- upgrades não sejam duplicados;
+- suspensão não execute duas vezes.
+
+6. Criar tabela/log de eventos Stripe se necessário.
+
+Exemplo:
+stripe_webhook_events
+
+Campos:
+- eventId
+- eventType
+- processed
+- processedAt
+- error
+- payload resumido
+
+7. Antes de processar webhook:
+- verificar se eventId já foi processado;
+- se sim, ignorar.
+
+8. Garantir que auto-upgrade:
+- não execute duas vezes;
+- não troque plano incorretamente;
+- não entre em loop.
+
+9. Garantir que reativação:
+- sempre limpe suspensão;
+- sempre limpe grace;
+- restaure redirects.
+
+10. Garantir que suspensão:
+- nunca suspenda usuário ativo/pago.
+
+11. Criar logs claros:
+- webhook recebido;
+- webhook ignorado;
+- estado sincronizado;
+- divergência detectada;
+- divergência corrigida.
+
+12. Criar endpoint/admin interno opcional para:
+- verificar inconsistências;
+- listar usuários divergentes.
+
+13. Não alterar cloaker além do necessário.
+
+14. Não alterar challenge system.
+
+15. Não alterar DNS/domínios.
+
+16. Testar:
+- webhook duplicado;
+- renew;
+- falha pagamento;
+- upgrade;
+- cancelamento;
+- reativação;
+- retry Stripe;
+- Stripe offline;
+- usuário suspenso pagando novamente.
+
+Critérios de aceite:
+- Stripe e banco ficam sincronizados;
+- webhook duplicado não quebra estado;
+- auto-upgrade não duplica;
+- suspensão e reativação funcionam;
+- inconsistências são detectadas;
+- logs claros;
+- sistema resiliente a retry.
+
+No final me entregue:
+- inconsistências encontradas;
+- arquivos alterados;
+- como ficou a idempotência;
+- como ficou a sincronização;
+- riscos restantes.

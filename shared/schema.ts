@@ -629,6 +629,19 @@ export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit
   updatedAt: true,
 });
 
+// Stripe webhook events — idempotency table (prevents duplicate processing on Stripe retries)
+export const stripeWebhookEvents = pgTable(
+  "stripe_webhook_events",
+  {
+    eventId: varchar("event_id").primaryKey(),
+    eventType: varchar("event_type").notNull(),
+    processedAt: timestamp("processed_at").defaultNow().notNull(),
+    error: text("error"),
+    payloadSummary: jsonb("payload_summary"),
+  }
+);
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;

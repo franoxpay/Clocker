@@ -20,6 +20,8 @@ import {
   commissions,
   emailLogs,
   emailTemplates,
+  stripeWebhookEvents,
+  type StripeWebhookEvent,
   type User,
   type InsertUser,
   type UpsertUser,
@@ -306,6 +308,13 @@ export interface IStorage {
   reactivateUserOffers(userId: string): Promise<void>;
   downgradeUserToFreePlan(userId: string): Promise<void>;
   restoreUserSubscription(userId: string, planId: number, subscriptionStatus: string): Promise<void>;
+
+  // Stripe webhook idempotency
+  hasProcessedWebhookEvent(eventId: string): Promise<boolean>;
+  markWebhookEventProcessed(eventId: string, eventType: string, error?: string | null, payloadSummary?: any): Promise<void>;
+
+  // Subscription inconsistency detection (admin)
+  getUsersWithSubscriptionInconsistencies(): Promise<Array<{ user: User; issues: string[] }>>;
 
   // Admin domain management
   getAllSystemDomains(filters?: { type?: 'user' | 'shared'; search?: string; status?: 'active' | 'inactive' }): Promise<Array<{
@@ -3088,6 +3097,97 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
     await this.reactivateUserOffers(userId);
     console.log(`[SubscriptionEnforcement] Restored subscription for user ${userId} to plan ${planId}`);
+  }
+
+  // ==========================================
+  // STRIPE WEBHOOK IDEMPOTENCY
+  // ==========================================
+
+  async hasProcessedWebhookEvent(eventId: string): Promise<boolean> {
+    const [row] = await db
+      .select({ eventId: stripeWebhookEvents.eventId })
+      .from(stripeWebhookEvents)
+      .where(eq(stripeWebhookEvents.eventId, eventId))
+      .limit(1);
+    return !!row;
+  }
+
+  async markWebhookEventProcessed(
+    eventId: string,
+    eventType: string,
+    error?: string | null,
+    payloadSummary?: any
+  ): Promise<void> {
+    await db
+      .insert(stripeWebhookEvents)
+      .values({ eventId, eventType, error: error ?? null, payloadSummary: payloadSummary ?? null })
+      .onConflictDoNothing();
+  }
+
+  // ==========================================
+  // SUBSCRIPTION INCONSISTENCY DETECTION
+  // ==========================================
+
+  async getUsersWithSubscriptionInconsistencies(): Promise<Array<{ user: User; issues: string[] }>> {
+    const allUsers = await db
+      .select()
+      .from(users)
+      .where(
+        sql`${users.stripeSubscriptionId} IS NOT NULL OR ${users.stripeCustomerId} IS NOT NULL`
+      );
+
+    const inconsistencies: Array<{ user: User; issues: string[] }> = [];
+    const now = new Date();
+
+    for (const user of allUsers) {
+      const issues: string[] = [];
+
+      // Suspended but subscription shows active/trialing
+      if (
+        user.suspendedAt &&
+        (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing')
+      ) {
+        issues.push(`suspended_at set but subscriptionStatus=${user.subscriptionStatus}`);
+      }
+
+      // Grace period already expired but user not suspended (scheduler not yet run)
+      if (user.gracePeriodEndsAt && now > user.gracePeriodEndsAt && !user.suspendedAt) {
+        issues.push(
+          `grace_period_ends_at is ${user.gracePeriodEndsAt.toISOString()} (expired) but not suspended`
+        );
+      }
+
+      // Active subscription status but subscriptionEndDate is more than 24h in the past
+      if (
+        user.subscriptionStatus === 'active' &&
+        user.subscriptionEndDate &&
+        now > new Date(user.subscriptionEndDate.getTime() + 24 * 60 * 60 * 1000)
+      ) {
+        issues.push(
+          `subscriptionStatus=active but subscriptionEndDate=${user.subscriptionEndDate.toISOString()} (>24h ago)`
+        );
+      }
+
+      // Active subscription but no planId
+      if (
+        user.stripeSubscriptionId &&
+        (user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing') &&
+        !user.planId
+      ) {
+        issues.push(`active subscription (${user.stripeSubscriptionId}) but planId is null`);
+      }
+
+      // Has both suspendedAt and gracePeriodEndsAt (should be mutually exclusive)
+      if (user.suspendedAt && user.gracePeriodEndsAt) {
+        issues.push(`both suspendedAt and gracePeriodEndsAt are set simultaneously`);
+      }
+
+      if (issues.length > 0) {
+        inconsistencies.push({ user, issues });
+      }
+    }
+
+    return inconsistencies;
   }
 }
 

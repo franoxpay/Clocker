@@ -462,6 +462,12 @@ async function reconcileStaleSubscriptions() {
   reconcileStaleSubscriptions().catch((err: any) =>
     console.error("[Reconcile] Unhandled error:", err.message)
   );
+  // Re-run reconciliation every 4 hours to catch any missed webhooks
+  setInterval(() => {
+    reconcileStaleSubscriptions().catch((err: any) =>
+      console.error("[Reconcile] Periodic unhandled error:", err.message)
+    );
+  }, 4 * 60 * 60 * 1000);
   
   setupWebSocket(httpServer);
   startDomainMonitor();

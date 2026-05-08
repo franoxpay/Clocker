@@ -62,27 +62,61 @@ export class WebhookHandlers {
       return;
     }
 
+    // ── IDEMPOTENCY CHECK ─────────────────────────────────────────────────────
+    // Stripe retries webhooks on failure. Prevent double-processing by recording
+    // each event ID the first time it is successfully handled.
+    if (event.id) {
+      const alreadyProcessed = await storage.hasProcessedWebhookEvent(event.id);
+      if (alreadyProcessed) {
+        console.log(`[Stripe Webhook] Event ${event.id} (${event.type}) already processed — skipping (idempotent)`);
+        return;
+      }
+    }
+
     console.log(`[Stripe Webhook] Processing event: ${event.type} (id: ${event.id})`);
 
-    switch (event.type) {
-      case 'checkout.session.completed':
-        await this.handleCheckoutSessionCompleted(event.data.object);
-        break;
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(event.data.object);
-        break;
-      case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(event.data.object);
-        break;
-      case 'invoice.payment_failed':
-        await this.handlePaymentFailed(event.data.object);
-        break;
-      case 'invoice.payment_succeeded':
-        await this.handlePaymentSucceeded(event.data.object);
-        break;
-      default:
-        console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+    let processingError: string | null = null;
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed':
+          await this.handleCheckoutSessionCompleted(event.data.object);
+          break;
+        case 'customer.subscription.created':
+        case 'customer.subscription.updated':
+          await this.handleSubscriptionUpdated(event.data.object);
+          break;
+        case 'customer.subscription.deleted':
+          await this.handleSubscriptionDeleted(event.data.object);
+          break;
+        case 'invoice.payment_failed':
+          await this.handlePaymentFailed(event.data.object);
+          break;
+        case 'invoice.payment_succeeded':
+          await this.handlePaymentSucceeded(event.data.object);
+          break;
+        default:
+          console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
+      }
+    } catch (err: any) {
+      processingError = err.message;
+      console.error(`[Stripe Webhook] Error processing event ${event.id} (${event.type}):`, err.message);
+      throw err;
+    } finally {
+      // Always record the event — even on error — so Stripe retries don't loop
+      // indefinitely. Error field captures what went wrong for debugging.
+      if (event.id) {
+        await storage.markWebhookEventProcessed(
+          event.id,
+          event.type,
+          processingError,
+          {
+            customerId: event.data?.object?.customer,
+            subscriptionId: event.data?.object?.subscription || event.data?.object?.id,
+          }
+        ).catch((markErr: any) =>
+          console.error('[Stripe Webhook] Failed to mark event as processed:', markErr.message)
+        );
+      }
     }
   }
 
@@ -254,7 +288,7 @@ export class WebhookHandlers {
     if (subscription.current_period_end) {
       updateData.subscriptionEndDate = new Date(subscription.current_period_end * 1000);
     }
-    if (subscription.current_period_start && status === 'active') {
+    if (subscription.current_period_start && (status === 'active' || status === 'trialing')) {
       updateData.subscriptionStartDate = new Date(subscription.current_period_start * 1000);
     }
 
@@ -267,38 +301,45 @@ export class WebhookHandlers {
 
     const isNowActive = status === 'active' || status === 'trialing';
 
-    if (isNowActive && user.suspendedAt && newPlan) {
-      const clicksThisMonth = user.clicksUsedThisMonth || 0;
-      if (newPlan.isUnlimited || clicksThisMonth <= newPlan.maxClicks) {
-        updateData.suspendedAt = null;
-        updateData.suspensionReason = null;
-        updateData.gracePeriodEndsAt = null;
+    // FIX: Unsuspend whenever subscription is active again — do NOT gate on click count.
+    // The user has paid; blocking them because they still have high click usage is wrong.
+    if (isNowActive && user.suspendedAt) {
+      updateData.suspendedAt = null;
+      updateData.suspensionReason = null;
+      updateData.gracePeriodEndsAt = null;
 
-        await storage.createSuspensionHistoryEntry({
-          userId: user.id,
-          event: 'unsuspended',
-          reason: 'plan_upgrade',
-          details: `User upgraded to plan ${newPlan.name}`,
-          actorType: 'system',
-          clicksAtEvent: clicksThisMonth,
-          planIdAtEvent: newPlan.id,
-        });
+      const planForLog = newPlan || (user.planId ? await storage.getPlan(user.planId) : null);
+      await storage.createSuspensionHistoryEntry({
+        userId: user.id,
+        event: 'unsuspended',
+        reason: 'payment_reactivated',
+        details: `Subscription became ${status}${planForLog ? ` on plan ${planForLog.name}` : ''}. Suspension cleared.`,
+        actorType: 'system',
+        clicksAtEvent: user.clicksUsedThisMonth,
+        planIdAtEvent: newPlan?.id ?? user.planId,
+      });
 
-        console.log(`[Stripe Webhook] Auto-unsuspended user ${user.id} — plan: ${newPlan.name}`);
-      }
+      console.log(`[Stripe Webhook] Auto-unsuspended user ${user.id} — subscription now ${status}`);
     }
+
+    // FIX: Only statuses that represent a definitive end of service warrant downgrade.
+    // 'past_due' means Stripe is retrying — payment may still succeed. Do NOT downgrade.
+    const DOWNGRADE_STATUSES = ['canceled', 'unpaid', 'incomplete_expired'];
+    const shouldDowngrade = DOWNGRADE_STATUSES.includes(status);
 
     if (isNowActive && newPlan) {
       updateData.gracePeriodEndsAt = null;
       await storage.updateUser(user.id, updateData);
       await storage.restoreUserSubscription(user.id, newPlan.id, status);
       console.log(`[Stripe Webhook] ✓ Subscription activated — user: ${user.id}, plan: ${newPlan.name}, status: ${status}`);
-    } else if (!isNowActive) {
+    } else if (shouldDowngrade) {
       await storage.updateUser(user.id, updateData);
       await storage.downgradeUserToFreePlan(user.id);
-      console.log(`[Stripe Webhook] ✓ Subscription inactive — user: ${user.id} downgraded to free plan (status: ${status})`);
+      console.log(`[Stripe Webhook] ✓ Subscription ended — user: ${user.id} downgraded to free plan (status: ${status})`);
     } else {
+      // past_due / incomplete / trialing without plan match — just update status, don't downgrade
       await storage.updateUser(user.id, updateData);
+      console.log(`[Stripe Webhook] Updated subscription status — user: ${user.id}, status: ${status} (no downgrade)`);
     }
   }
 
@@ -322,9 +363,9 @@ export class WebhookHandlers {
 
     await storage.createSuspensionHistoryEntry({
       userId: user.id,
-      event: 'grace_started',
+      event: 'unsuspended',
       reason: 'subscription_canceled',
-      details: 'Subscription canceled. User immediately downgraded to free plan.',
+      details: 'Subscription canceled/deleted. User downgraded to free plan immediately.',
       actorType: 'system',
       clicksAtEvent: user.clicksUsedThisMonth,
       planIdAtEvent: user.planId,
@@ -386,6 +427,14 @@ export class WebhookHandlers {
       console.error(`[Stripe Webhook] Error during fallback payment attempt: ${err.message}`);
     }
 
+    // FIX: Idempotent grace period — if grace is already set, preserve the original timer.
+    // Stripe retries payment_failed up to 4x; without this, each retry would push grace +72h.
+    if (user.gracePeriodEndsAt) {
+      await storage.updateUser(user.id, { subscriptionStatus: 'past_due' });
+      console.log(`[Stripe Webhook] Payment failed (retry) — user: ${user.id} grace period already active until ${user.gracePeriodEndsAt.toISOString()}, timer preserved`);
+      return;
+    }
+
     const gracePeriodEndsAt = new Date();
     gracePeriodEndsAt.setHours(gracePeriodEndsAt.getHours() + 72);
 
@@ -421,13 +470,46 @@ export class WebhookHandlers {
       return;
     }
 
-    if (user.subscriptionStatus !== 'active' || user.gracePeriodEndsAt) {
-      await storage.updateUser(user.id, {
-        subscriptionStatus: 'active',
-        stripeSubscriptionId: subscriptionId,
-        gracePeriodEndsAt: null,
+    const wasSuspended = !!user.suspendedAt;
+    const hadGrace = !!user.gracePeriodEndsAt;
+    const wasInactive = user.subscriptionStatus !== 'active';
+
+    // FIX: Always clear grace + suspension + restore active status.
+    // Previous code only updated if status wasn't already active, missing suspendedAt clearance.
+    await storage.updateUser(user.id, {
+      subscriptionStatus: 'active',
+      stripeSubscriptionId: subscriptionId,
+      gracePeriodEndsAt: null,
+      suspendedAt: null,
+      suspensionReason: null,
+    });
+
+    // FIX: Restore offers that may have been deactivated.
+    // Previous code never called restoreUserSubscription on payment success.
+    if (user.planId) {
+      await storage.restoreUserSubscription(user.id, user.planId, 'active');
+    }
+
+    if (wasSuspended || hadGrace) {
+      await storage.createSuspensionHistoryEntry({
+        userId: user.id,
+        event: 'unsuspended',
+        reason: 'payment_succeeded',
+        details: [
+          'Payment succeeded.',
+          wasSuspended ? 'Suspension cleared.' : '',
+          hadGrace ? 'Grace period cleared.' : '',
+          'Offers restored.',
+        ].filter(Boolean).join(' '),
+        actorType: 'system',
+        clicksAtEvent: user.clicksUsedThisMonth,
+        planIdAtEvent: user.planId,
       });
-      console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} restored to active, grace period cleared`);
+      console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} unsuspended, grace cleared, offers restored`);
+    } else if (wasInactive) {
+      console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} reactivated from ${user.subscriptionStatus}`);
+    } else {
+      console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} renewal confirmed (already active)`);
     }
   }
 }

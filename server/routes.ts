@@ -15,6 +15,7 @@ import { registerAffiliateRoutes } from "./routes/affiliate.routes";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { handleClickOverage, SUSPENDED_PAGE_URL } from "./limitEnforcer";
+import { syncUserSubscriptionState, syncAllUsers } from "./syncService";
 import { z } from "zod";
 import { startOfLocalDay, endOfLocalDay } from "./timezone";
 import {
@@ -1153,6 +1154,62 @@ export async function registerRoutes(
   </div>
 </body>
 </html>`);
+  });
+
+  // ==========================================
+  // ADMIN: SUBSCRIPTION INCONSISTENCY DETECTION + SYNC
+  // ==========================================
+
+  app.get("/api/admin/subscription-inconsistencies", isAuthenticated, async (req: Request, res: Response) => {
+    const userId = (req.user as any)?.id;
+    const user = await storage.getUser(userId);
+    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+
+    try {
+      const inconsistencies = await storage.getUsersWithSubscriptionInconsistencies();
+      res.json({
+        count: inconsistencies.length,
+        users: inconsistencies.map(({ user: u, issues }) => ({
+          id: u.id,
+          email: u.email,
+          subscriptionStatus: u.subscriptionStatus,
+          suspendedAt: u.suspendedAt,
+          gracePeriodEndsAt: u.gracePeriodEndsAt,
+          subscriptionEndDate: u.subscriptionEndDate,
+          planId: u.planId,
+          stripeSubscriptionId: u.stripeSubscriptionId,
+          issues,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/subscription-sync/:userId", isAuthenticated, async (req: Request, res: Response) => {
+    const currentUserId = (req.user as any)?.id;
+    const currentUser = await storage.getUser(currentUserId);
+    if (!currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+
+    try {
+      const result = await syncUserSubscriptionState(req.params.userId);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  app.post("/api/admin/subscription-sync-all", isAuthenticated, async (req: Request, res: Response) => {
+    const currentUserId = (req.user as any)?.id;
+    const currentUser = await storage.getUser(currentUserId);
+    if (!currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+
+    try {
+      const summary = await syncAllUsers();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   // ==========================================
