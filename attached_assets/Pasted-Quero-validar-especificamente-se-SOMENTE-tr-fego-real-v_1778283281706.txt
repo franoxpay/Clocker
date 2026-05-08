@@ -1,0 +1,144 @@
+Quero validar especificamente se SOMENTE tráfego real vindo do Facebook está chegando na BLACK page.
+
+IMPORTANTE:
+Esse é o ponto mais crítico antes da produção.
+
+Hoje o sistema já:
+- detecta bots;
+- detecta crawlers;
+- detecta fake UAs;
+- aplica rate limit;
+- aplica device/country.
+
+Mas agora preciso confirmar:
+BLACK page só é entregue para tráfego legítimo do Facebook.
+
+Objetivo:
+Garantir que:
+- tráfego orgânico;
+- acesso direto;
+- Google;
+- outras plataformas;
+- visitantes aleatórios;
+- crawlers não detectados;
+- usuários fora do fluxo do Facebook
+
+NÃO recebam BLACK indevidamente.
+
+Analise profundamente:
+
+1. Como o sistema decide:
+“esse visitante veio do Facebook”
+
+Verificar:
+- Referer
+- fbclid
+- parâmetros
+- headers
+- Facebook in-app browser
+- user-agent
+- qualquer outro sinal
+
+2. Descobrir a regra REAL atual.
+
+Hoje:
+o sistema exige origem Facebook para BLACK?
+OU
+qualquer humano válido recebe BLACK?
+
+Quero resposta objetiva.
+
+3. Testes obrigatórios
+
+Cenários:
+
+A)
+Usuário humano real
++ referrer facebook.com
++ mobile válido
+Esperado:
+BLACK
+
+B)
+Usuário humano real
++ sem referrer
++ acesso direto
+Esperado:
+WHITE (se a regra correta for Facebook-only)
+
+C)
+Usuário humano real
++ Google referrer
+Esperado:
+WHITE
+
+D)
+Usuário humano real
++ Instagram referrer
+Esperado:
+WHITE
+
+E)
+Usuário humano real
++ TikTok referrer
+Esperado:
+WHITE
+
+F)
+Usuário humano real
++ desktop normal
++ sem fbclid
+Esperado:
+WHITE
+
+G)
+Usuário humano real
++ fbclid fake manual
+Esperado:
+verificar se bypassa
+
+H)
+Usuário humano real
++ Facebook in-app browser
+Esperado:
+BLACK
+
+I)
+Crawler sem UA conhecido
++ sem referrer
+Esperado:
+WHITE
+
+4. Descobrir se existe bypass simples.
+
+Exemplo:
+- adicionar ?fbclid=123
+- mudar user-agent
+- mudar referer
+
+Isso sozinho já libera BLACK?
+Se sim, mostrar exatamente como reproduzir.
+
+5. Verificar risco:
+- link compartilhado fora do Facebook;
+- indexação Google;
+- tráfego direto;
+- preview de WhatsApp;
+- scanners automáticos.
+
+6. Não implementar ainda.
+Primeiro diagnosticar.
+
+7. Resultado final
+
+Quero saber:
+- qual é a regra atual REAL;
+- quem recebe BLACK hoje;
+- quem deveria receber BLACK;
+- se existe bypass;
+- nível de risco antes da produção;
+- confiança do sistema;
+- recomendação obrigatória antes do deploy.
+
+Se hoje “qualquer humano válido” recebe BLACK:
+deixe isso EXTREMAMENTE claro no relatório.

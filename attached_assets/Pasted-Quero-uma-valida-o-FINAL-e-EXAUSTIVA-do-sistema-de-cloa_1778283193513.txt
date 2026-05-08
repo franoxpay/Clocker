@@ -1,0 +1,243 @@
+Quero uma validação FINAL e EXAUSTIVA do sistema de cloaker/redirect antes da produção.
+
+IMPORTANTE:
+Agora NÃO é mais auditoria teórica.
+Quero testes REAIS executados ponta a ponta.
+
+Objetivo:
+Ter certeza absoluta de que:
+
+* Facebook reviewers vão para WHITE;
+* tráfego humano válido vai para BLACK;
+* nenhum bot/crawler chega na BLACK page;
+* nenhum fallback inseguro ainda existe.
+
+Não implementar features novas.
+Somente:
+
+* validar;
+* simular;
+* testar;
+* encontrar qualquer brecha restante.
+
+━━━━━━━━━━━━━━━━━━━
+
+1. TESTE REAL COM MATRIZ COMPLETA
+   ━━━━━━━━━━━━━━━━━━━
+
+Executar testes reais usando:
+
+* curl;
+* fetch;
+* headers customizados;
+* user-agents reais;
+* múltiplos cenários.
+
+Quero tabela final:
+
+* cenário;
+* expected;
+* actual;
+* motivo da decisão;
+* redirect final;
+* black ou white.
+
+━━━━━━━━━━━━━━━━━━━
+2. USER-AGENTS OBRIGATÓRIOS
+━━━━━━━━━━━━━━━━━━━
+
+Testar TODOS:
+
+Googlebot
+facebookexternalhit
+Facebot
+Twitterbot
+Slackbot
+Discordbot
+TelegramBot
+LinkedInBot
+Pinterestbot
+WhatsApp crawler
+HeadlessChrome
+Playwright
+Puppeteer
+Selenium
+curl
+wget
+python requests
+axios default UA
+Chrome/200 fake
+Bulid typo
+CFNetwork
+Instagram internal browser
+Facebook internal browser
+TikTok internal browser
+Safari iPhone real
+Chrome Android real
+Desktop Chrome real
+
+━━━━━━━━━━━━━━━━━━━
+3. TESTE DE TRÁFEGO HUMANO REAL
+━━━━━━━━━━━━━━━━━━━
+
+Validar:
+
+* mobile iPhone real;
+* Android real;
+* desktop;
+* browser normal;
+* referrer Facebook;
+* sem referrer;
+* VPN/datacenter;
+* IP residencial.
+
+Garantir:
+humano válido → BLACK
+
+━━━━━━━━━━━━━━━━━━━
+4. TESTE DE RATE LIMIT
+━━━━━━━━━━━━━━━━━━━
+
+Executar:
+
+* 20 requests seguidas;
+* mesma rota;
+* mesmo IP.
+
+Confirmar:
+1–15 → BLACK
+16+ → WHITE
+
+Testar:
+
+* /:slug
+* /r/:slug
+
+━━━━━━━━━━━━━━━━━━━
+5. TESTE DE DOMÍNIO
+━━━━━━━━━━━━━━━━━━━
+
+Validar:
+
+* domínio próprio ativo;
+* domínio compartilhado ativo;
+* domínio inativo;
+* domínio inexistente;
+* localhost/dev fallback.
+
+Garantir:
+produção NÃO usa fallback inseguro.
+
+━━━━━━━━━━━━━━━━━━━
+6. TESTE DE SUSPENSÃO
+━━━━━━━━━━━━━━━━━━━
+
+Validar:
+
+* usuário suspenso;
+* grace period;
+* usuário ativo.
+
+Garantir:
+suspenso → /suspended
+
+E validar:
+URL final correta:
+https://clerion.app/suspended
+
+━━━━━━━━━━━━━━━━━━━
+7. TESTE DE PARAMETROS
+━━━━━━━━━━━━━━━━━━━
+
+Testar:
+
+* utm_source;
+* fbclid;
+* ttclid;
+* macros TikTok;
+* parâmetros inválidos;
+* parâmetros gigantes;
+* SQLi básica;
+* XSS básica.
+
+Garantir:
+
+* sem crash;
+* sem redirect quebrado;
+* sem bypass.
+
+━━━━━━━━━━━━━━━━━━━
+8. TESTE DE PERFORMANCE
+━━━━━━━━━━━━━━━━━━━
+
+Medir:
+
+* tempo médio da decisão;
+* tempo até redirect;
+* gargalos.
+
+Separar:
+
+* cache hit;
+* DB lookup;
+* bot detection;
+* redirect final.
+
+━━━━━━━━━━━━━━━━━━━
+9. TESTE DE ANALYTICS
+━━━━━━━━━━━━━━━━━━━
+
+Confirmar:
+
+* black click conta;
+* white click não conta (se essa é a regra);
+* país salvo;
+* device salvo;
+* platform salva;
+* bot NÃO consome click.
+
+━━━━━━━━━━━━━━━━━━━
+10. TESTE DE SEGURANÇA
+━━━━━━━━━━━━━━━━━━━
+
+Verificar:
+
+* open redirect;
+* fallback inseguro;
+* bypass de white;
+* bypass de suspensão;
+* bypass via header;
+* bypass via querystring;
+* bypass via user-agent parcial.
+
+━━━━━━━━━━━━━━━━━━━
+11. LOGS
+━━━━━━━━━━━━━━━━━━━
+
+Gerar logs temporários claros:
+
+* decision;
+* reason;
+* bot=true/false;
+* finalTarget;
+* rateLimit;
+* country;
+* device;
+* uaClassification.
+
+Sem expor dados sensíveis.
+
+━━━━━━━━━━━━━━━━━━━
+12. RESULTADO FINAL
+━━━━━━━━━━━━━━━━━━━
+
+Quero um relatório final dizendo:
+
+* se o sistema está seguro para produção;
+* quais riscos ainda existem;
+* quais cenários ainda podem escapar;
+* confiança do sistema (0–100%);
+* qualquer recomendação obrigatória antes do deploy.
+
+Se encontrar QUALQUER possibilidade de bot cair na BLACK page:
+PARE e explique exatamente como reproduzir.
