@@ -1,0 +1,96 @@
+Crie automaticamente os Products e Prices na Stripe com base nos planos oficiais do banco.
+
+Objetivo:
+A Stripe ainda não tem os planos criados.
+O sistema deve criar os produtos/preços na Stripe automaticamente e salvar os IDs no banco.
+
+Planos oficiais pagos:
+
+1. Plano Básico — R$197/mês
+2. Plano Avançado — R$497/mês
+3. Plano Pré-Escala — R$997/mês
+4. Plano Escala — R$1.997/mês
+5. Plano Ilimitado — R$2.497/mês
+
+Não criar produto Stripe para o plano Free.
+
+Faça exatamente isto:
+
+1. Criar função:
+syncPlansToStripe()
+
+2. Para cada plano oficial pago:
+- verificar se já possui stripePriceId;
+- se já possui, validar se ainda existe na Stripe;
+- se não possui, criar Product na Stripe;
+- criar Price recorrente mensal em BRL;
+- salvar stripeProductId e stripePriceId no banco.
+
+3. Não criar duplicados:
+- antes de criar novo Product, procurar Product ativo com mesmo nome;
+- se existir, reutilizar;
+- antes de criar Price, procurar Price ativo mensal BRL com mesmo valor;
+- se existir, reutilizar.
+
+4. Valores devem ser em centavos:
+- R$197 = 19700
+- R$497 = 49700
+- R$997 = 99700
+- R$1997 = 199700
+- R$2497 = 249700
+
+5. Criar endpoint admin:
+POST /api/admin/stripe/create-products
+
+Esse endpoint deve:
+- exigir admin;
+- executar a sincronização;
+- retornar planos criados, reutilizados, vinculados e erros.
+
+6. Criar logs claros:
+- sync iniciado;
+- product criado;
+- product reutilizado;
+- price criado;
+- price reutilizado;
+- plano vinculado;
+- erro por plano.
+
+7. Se Stripe estiver sem chave ou com erro:
+- retornar erro claro;
+- não derrubar o app.
+
+8. Não alterar limites dos planos.
+9. Não alterar usuários.
+10. Não alterar subscriptions existentes.
+11. Não alterar cloaker.
+12. Não alterar domains.
+13. Não alterar backup.
+14. Não alterar autenticação.
+
+15. Testar:
+- Stripe vazio;
+- rodar endpoint uma vez;
+- rodar endpoint segunda vez e confirmar que não duplica;
+- plano Free ignorado;
+- plano com stripePriceId existente;
+- Stripe key inválida;
+- valores corretos na Stripe.
+
+Critérios de aceite:
+- 5 Products/Prices pagos criados ou reutilizados;
+- stripePriceId salvo nos planos;
+- stripeProductId salvo se houver campo;
+- endpoint admin funcionando;
+- rodar duas vezes não duplica;
+- checkout passa a conseguir usar os priceIds;
+- plano Free não cria produto.
+
+No final me entregue:
+- arquivos alterados;
+- endpoint criado;
+- products criados;
+- prices criados;
+- IDs salvos no banco;
+- como testar manualmente;
+- riscos restantes.

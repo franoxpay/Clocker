@@ -16,6 +16,7 @@ import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInf
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { handleClickOverage, SUSPENDED_PAGE_URL } from "./limitEnforcer";
 import { syncUserSubscriptionState, syncAllUsers } from "./syncService";
+import { syncPlansToStripe } from "./stripePlanSync";
 import { z } from "zod";
 import { startOfLocalDay, endOfLocalDay } from "./timezone";
 import {
@@ -1208,6 +1209,24 @@ export async function registerRoutes(
       const summary = await syncAllUsers();
       res.json(summary);
     } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ==========================================
+  // ADMIN: STRIPE PRODUCT/PRICE SYNC
+  // ==========================================
+
+  app.post("/api/admin/stripe/create-products", isAuthenticated, async (req: Request, res: Response) => {
+    const userId = (req.user as any)?.id;
+    const user = await storage.getUser(userId);
+    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+
+    try {
+      const summary = await syncPlansToStripe();
+      res.json(summary);
+    } catch (err: any) {
+      console.error("[Admin] stripe/create-products error:", err.message);
       res.status(500).json({ message: err.message });
     }
   });
