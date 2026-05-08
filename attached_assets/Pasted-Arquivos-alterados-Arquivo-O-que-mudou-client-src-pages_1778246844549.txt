@@ -1,0 +1,47 @@
+Arquivos alterados
+Arquivo	O que mudou
+client/src/pages/admin/AdminMonitoring.tsx	Adicionada seção "Saúde do Sistema" no topo da página, com banner de status geral, 8 cards de serviço, auto-refresh, loading e erro tratado. Seção original de performance de cliques mantida abaixo.
+client/src/components/AppSidebar.tsx	NavItem ganhou campo badge opcional. Query de /api/internal/health/summary adicionada (só para admin). Badge amarelo (~) ou vermelho (!) aparece no item "Monitoramento" quando status não é ok.
+Descrição visual da página
+┌─ Saúde do Sistema ──────────────────────────────── [Atualizar] ┐
+│ Atualizado às 12:53:01                                          │
+│                                                                 │
+│ ● Todos os sistemas operacionais          Uptime: 2h 14m · 8 serviços
+└─────────────────────────────────────────────────────────────────┘
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ 🟢 Database  │ │ 🟢 Redis     │ │ 🟢 Stripe    │ │ 🟢 Billing   │
+│   Saudável   │ │   Saudável   │ │   Saudável   │ │   Saudável   │
+│ 44ms         │ │ 42ms         │ │ 225ms        │ │              │
+│ ✓ Conectado  │ │ Config: Sim  │ │ Config: Sim  │ │ Graça: 0     │
+│              │ │ Conect: Sim  │ │ Planos: 5    │ │ Suspens: 0   │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ 🟢 Webhooks  │ │ 🟢 Backup    │ │ 🟢 DNS       │ │ 🔴 WebSocket │
+│   Saudável   │ │   Saudável   │ │   Saudável   │ │   Offline    │
+│              │ │              │ │              │ │              │
+│ Total: 0     │ │ Arquivos: 2  │ │ Sched: Sim   │ │ Servidor: Não│
+│ 24h: 0       │ │ Mais rec:    │ │ Falhas: 1    │ │ Conexões: 0  │
+│ Falhos: 0    │ │ 15h · 36MB   │ │ há 15min     │ │              │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
+─────────────────────── Performance de Cliques ──────────────────
+[Gráficos e tabela de requisições lentas existentes abaixo]
+
+No menu lateral — item "Monitoramento" ganha badge:
+
+~ amarelo quando degraded
+! vermelho quando critical
+Como testar
+Logar como admin → ir para Painel Admin → Monitoramento
+A seção "Saúde do Sistema" aparece no topo com os 8 cards
+Botão "Atualizar" → faz refetch imediato (ícone gira durante carregamento)
+Auto-refresh ocorre a cada 30s automaticamente (visível em "Atualizado às HH:MM:SS")
+Badge no menu → visible quando status !== 'ok' (atualiza a cada 60s)
+Erro → se o endpoint falhar, aparece banner vermelho com mensagem amigável
+Loading → skeletons aparecem enquanto a primeira carga acontece
+Nenhum secret, token ou stack trace é exibido na tela
+Riscos restantes
+Risco	Observação
+WebSocket aparece como 🔴 Offline	Correto em dev (hot-reload recria o módulo). Em produção o servidor WS está ativo e aparece como saudável
+Badge no menu usa /api/internal/health/summary	Requer sessão admin — usuários normais nunca veem esse endpoint
+Auto-refresh do menu é 60s, da página é 30s	Proposital: o menu é mais leve; a página tem mais detalhe
+DNS Monitor pode mostrar domainsWithActiveFailures: 1	Legítimo — o domínio foifoi.nacionalonline.app está falhando no DNS conforme logs do servidor

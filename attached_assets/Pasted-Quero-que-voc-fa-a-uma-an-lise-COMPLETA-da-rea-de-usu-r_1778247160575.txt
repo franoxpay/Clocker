@@ -1,0 +1,224 @@
+Quero que você faça uma análise COMPLETA da área de usuários do painel admin antes de implementar qualquer mudança.
+
+Importante:
+- NÃO implemente nada ainda
+- NÃO assuma comportamento
+- NÃO simplifique análise
+- Primeiro entenda toda a arquitetura atual
+- Quero um diagnóstico profundo da gestão de usuários/admin impersonation
+
+Analise e me responda detalhadamente:
+
+━━━━━━━━━━━━━━━━━━━
+1. Estrutura atual do painel admin de usuários
+━━━━━━━━━━━━━━━━━━━
+
+- Como funciona hoje a listagem de usuários?
+- Quais endpoints são usados?
+- Como é feita paginação?
+- Existe busca?
+- Existe filtro?
+- Existe ordenação?
+- Existe cache?
+- Existe websocket/live update?
+- Como o frontend carrega os dados?
+- Existe lazy loading?
+- Existe debounce na busca?
+- Quantos usuários o sistema suporta hoje sem degradar?
+
+Mostrar:
+- arquivos envolvidos;
+- rotas;
+- queries;
+- componentes frontend;
+- estrutura do fluxo completo.
+
+━━━━━━━━━━━━━━━━━━━
+2. Dados disponíveis hoje por usuário
+━━━━━━━━━━━━━━━━━━━
+
+Mapear TUDO que existe no banco relacionado ao usuário:
+
+- auth
+- subscription
+- billing
+- stripe
+- referrals
+- offers
+- domains
+- clicks
+- revenue
+- commissions
+- webhooks
+- login
+- sessions
+- IPs
+- device info
+- admin flags
+- suspension
+- grace period
+- usage
+- limits
+- upgrades
+- auto-upgrade
+- logs
+- notifications
+- emails
+- recovery
+- 2FA
+- API keys
+- tokens
+- websocket presence
+- activity
+- last seen
+- createdAt
+- updatedAt
+
+Quero:
+- tabelas;
+- colunas;
+- relacionamentos;
+- o que já existe pronto;
+- o que não existe.
+
+━━━━━━━━━━━━━━━━━━━
+3. Tela atual de detalhes do usuário
+━━━━━━━━━━━━━━━━━━━
+
+Verifique:
+- já existe página de detalhes?
+- já existe modal?
+- o que mostra?
+- o que falta?
+- quais dados já são carregados?
+- quais dados estão inacessíveis?
+- existe endpoint dedicado?
+- existe problema de performance?
+- existe N+1 query?
+- existe informação inconsistente?
+
+━━━━━━━━━━━━━━━━━━━
+4. Funcionalidade “Entrar como usuário”
+━━━━━━━━━━━━━━━━━━━
+
+Essa é MUITO importante.
+
+Analise profundamente:
+
+- Como foi implementada hoje?
+- Qual endpoint?
+- Como troca sessão?
+- Usa JWT?
+- Usa cookie?
+- Usa session?
+- Usa passport?
+- Usa token temporário?
+- Como restaura admin depois?
+- Existe audit log?
+- Existe impersonation token?
+- Existe expiração?
+- Existe proteção contra escalation?
+- Existe CSRF risk?
+- Existe session fixation?
+- Existe possibilidade do admin ficar preso?
+- Existe problema de auth state no frontend?
+- Existe race condition?
+- Existe problema de cookies?
+- Existe problema de domínio/subdomínio?
+- Existe problema de CORS?
+- Existe problema de SameSite?
+- Existe problema no Replit?
+- Existe problema no storage da sessão?
+- Existe problema no refresh da página?
+
+━━━━━━━━━━━━━━━━━━━
+5. Diagnóstico do motivo pelo qual NÃO funciona
+━━━━━━━━━━━━━━━━━━━
+
+Quero que descubra EXATAMENTE:
+
+- por que o “entrar como usuário” quebra;
+- onde quebra;
+- logs;
+- fluxo;
+- requests;
+- cookies;
+- respostas;
+- middleware;
+- auth state;
+- frontend state;
+- redirects.
+
+Não quero hipótese genérica.
+Quero:
+- causa real;
+- evidência real;
+- arquivo real;
+- linha aproximada;
+- impacto real.
+
+━━━━━━━━━━━━━━━━━━━
+6. Segurança
+━━━━━━━━━━━━━━━━━━━
+
+Analisar:
+- admin consegue acessar qualquer conta?
+- existe proteção contra auto-impersonation?
+- existe proteção contra impersonar outro admin?
+- existe audit trail?
+- existe rollback seguro?
+- existe timeout?
+- existe logout forçado?
+- existe invalidação de sessão?
+- existe replay risk?
+- existe privilege leak?
+
+━━━━━━━━━━━━━━━━━━━
+7. Escalabilidade
+━━━━━━━━━━━━━━━━━━━
+
+Analisar:
+- painel admin aguenta muitos usuários?
+- queries são indexadas?
+- existem full scans?
+- existe risco de travamento?
+- busca escala?
+- paginação é eficiente?
+- quais queries são pesadas?
+- quais endpoints precisam otimização?
+
+━━━━━━━━━━━━━━━━━━━
+8. Melhor arquitetura recomendada
+━━━━━━━━━━━━━━━━━━━
+
+Depois da análise:
+- explique como DEVERIA ser;
+- mas ainda sem implementar.
+
+Quero:
+- arquitetura ideal;
+- fluxo ideal;
+- impersonation ideal;
+- audit ideal;
+- estrutura ideal da tela de usuário;
+- permissões ideais;
+- UX ideal.
+
+━━━━━━━━━━━━━━━━━━━
+9. Resultado final esperado
+━━━━━━━━━━━━━━━━━━━
+
+Me entregue:
+- diagnóstico técnico completo;
+- bugs encontrados;
+- riscos;
+- problemas de segurança;
+- gargalos;
+- inconsistências;
+- fluxo atual;
+- fluxo ideal;
+- lista priorizada do que deve ser corrigido primeiro.
+
+Importante:
+NÃO implemente nada ainda.
+Primeiro apenas audite profundamente o sistema atual.
