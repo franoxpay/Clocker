@@ -2,6 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated, isAdmin } from "./replitAuth";
+import { toSafeUser } from "./lib/safeUser";
 import { randomBytes, createHash } from "crypto";
 import { getStripeClient, getStripePublishableKey, isStripeConfigured, ensureStripeCustomer } from "./stripeClient";
 import { sql } from "drizzle-orm";
@@ -1751,7 +1752,6 @@ export async function registerRoutes(
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const { password, ...userWithoutPassword } = user;
       const isSuspended = user.suspendedAt !== null;
       const isTrialing = user.trialEndsAt !== null && new Date(user.trialEndsAt) > new Date();
       const isSubscriptionActive = ['active', 'trialing'].includes(user.subscriptionStatus ?? '');
@@ -1759,7 +1759,7 @@ export async function registerRoutes(
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
       const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
       
-      res.json({ ...userWithoutPassword, isSuspended, isTrialing, isAdmin, isSubscriptionActive });
+      res.json({ ...toSafeUser(user), isSuspended, isTrialing, isAdmin, isSubscriptionActive });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Internal server error" });

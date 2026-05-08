@@ -7,6 +7,7 @@ import { getStripeClient, isStripeConfigured } from "../stripeClient";
 import { sendDomainRemovedEmail } from "../email";
 import { verifyDomainDNS } from "../domainUtils";
 import { resetConsecutiveFailures } from "../domainMonitor";
+import { toSafeUser, toSafeUsers } from "../lib/safeUser";
 
 const DEFAULT_EMAIL_TEMPLATES = {
   welcome: {
@@ -531,7 +532,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const clicksBreakdown = await storage.getClicksBreakdownByUserIds(userIds);
       
       const usersWithClicks = result.users.map(user => ({
-        ...user,
+        ...toSafeUser(user),
         clicksBreakdown: clicksBreakdown.get(user.id) || { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 },
       }));
       

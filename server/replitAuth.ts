@@ -4,6 +4,7 @@ import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { sendWelcomeEmail } from "./email";
+import { toSafeUser } from "./lib/safeUser";
 
 function getSessionDatabaseUrl(): string {
   // Mirror the same priority as server/db.ts so the session store
@@ -87,8 +88,7 @@ export async function setupAuth(app: Express) {
 
       req.session.userId = user.id;
 
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      res.json(toSafeUser(user));
     } catch (error) {
       console.error("Error registering user:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
@@ -130,8 +130,7 @@ export async function setupAuth(app: Express) {
           console.error("[Auth] Session save error:", err);
           return res.status(500).json({ message: "Erro ao criar sessão" });
         }
-        const { password: _, ...userWithoutPassword } = user;
-        res.json(userWithoutPassword);
+        res.json(toSafeUser(user));
       });
     } catch (error) {
       console.error("Error logging in:", error);
