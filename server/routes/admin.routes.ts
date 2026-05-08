@@ -779,6 +779,9 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
 
   app.post("/api/admin/users/:id/change-password", isAdmin, async (req: Request, res: Response) => {
     try {
+      if (req.session.impersonationToken) {
+        return res.status(403).json({ message: "Cannot change passwords while impersonating a user. Exit impersonation first." });
+      }
       const userId = req.params.id;
       const { password } = req.body;
       
@@ -798,6 +801,9 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
 
   app.delete("/api/admin/users/:id", isAdmin, async (req: Request, res: Response) => {
     try {
+      if (req.session.impersonationToken) {
+        return res.status(403).json({ message: "Cannot delete users while impersonating. Exit impersonation first." });
+      }
       const userId = req.params.id;
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
       
@@ -822,13 +828,35 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
     try {
       const adminId = (req.user as any).id;
       const targetUserId = req.params.id;
+
+      if (adminId === targetUserId) {
+        return res.status(400).json({ message: "Cannot impersonate yourself" });
+      }
+
+      const targetUser = await storage.getUser(targetUserId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+      if (adminEmail && targetUser.email?.toLowerCase() === adminEmail) {
+        return res.status(400).json({ message: "Cannot impersonate an admin user" });
+      }
+
+      const existingToken = req.session.impersonationToken;
+      if (existingToken) {
+        await storage.deleteAdminImpersonation(existingToken);
+      }
+
       const sessionToken = randomBytes(32).toString("hex");
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 1);
 
       await storage.createAdminImpersonation(adminId, targetUserId, sessionToken, expiresAt);
-      
-      (req.session as any).impersonationToken = sessionToken;
+      req.session.impersonationToken = sessionToken;
+
+      console.log(`[Impersonation] Admin ${adminId} started impersonating user ${targetUserId} (${targetUser.email})`);
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error impersonating user:", error);
@@ -838,18 +866,23 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
 
   app.get("/api/admin/impersonation/status", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const sessionToken = (req.session as any).impersonationToken;
+      const sessionToken = req.session.impersonationToken;
       if (!sessionToken) {
         return res.json({ isImpersonating: false });
       }
       const impersonation = await storage.getAdminImpersonation(sessionToken);
       if (!impersonation) {
+        delete req.session.impersonationToken;
         return res.json({ isImpersonating: false });
       }
-      const targetUser = await storage.getUser(impersonation.targetUserId);
+      const [targetUser, adminUser] = await Promise.all([
+        storage.getUser(impersonation.targetUserId),
+        storage.getUser(impersonation.adminId),
+      ]);
       res.json({
         isImpersonating: true,
         targetUser: targetUser ? { id: targetUser.id, email: targetUser.email } : null,
+        adminUser: adminUser ? { id: adminUser.id, email: adminUser.email } : null,
       });
     } catch (error) {
       console.error("Error checking impersonation status:", error);
@@ -859,10 +892,12 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
 
   app.post("/api/admin/impersonation/exit", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const sessionToken = (req.session as any).impersonationToken;
+      const sessionToken = req.session.impersonationToken;
       if (sessionToken) {
+        const impersonation = await storage.getAdminImpersonation(sessionToken);
         await storage.deleteAdminImpersonation(sessionToken);
-        delete (req.session as any).impersonationToken;
+        delete req.session.impersonationToken;
+        console.log(`[Impersonation] Admin ${impersonation?.adminId} exited impersonation of ${impersonation?.targetUserId}`);
       }
       res.json({ success: true });
     } catch (error) {

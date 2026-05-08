@@ -131,11 +131,13 @@ export default function AdminUsers() {
       return res.json();
     },
     onSuccess: () => {
+      queryClient.clear();
       window.location.href = "/";
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: t("common.error"),
+        description: error?.message || (language === "pt-BR" ? "Não foi possível entrar como usuário" : "Could not impersonate user"),
         variant: "destructive",
       });
     },

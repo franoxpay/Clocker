@@ -1,0 +1,102 @@
+Corrija a funcionalidade "Entrar como usuário" no painel admin.
+
+Problema atual:
+O sistema cria um token de impersonação, mas não troca o contexto real do usuário.
+Depois do redirect, o admin continua vendo os próprios dados.
+
+Objetivo:
+Quando o admin clicar em "Entrar como usuário", todas as APIs devem passar a responder como se fossem o usuário alvo, até o admin sair da impersonação.
+
+Faça exatamente isto:
+
+1. Auditar o fluxo atual:
+- POST /api/admin/impersonate/:id
+- /api/admin/impersonation/status
+- /api/admin/impersonation/exit
+- middleware isAuthenticated
+- session
+- cookies
+- frontend após redirect
+
+2. Não criar novo sistema do zero.
+A tabela adminImpersonations já existe e deve ser reutilizada.
+
+3. Ao iniciar impersonação:
+- validar que quem pediu é admin;
+- validar que usuário alvo existe;
+- impedir impersonar outro admin;
+- impedir auto-impersonation;
+- criar token com expiração;
+- salvar token na sessão;
+- registrar audit log.
+
+4. No middleware de autenticação:
+- verificar se existe req.session.impersonationToken;
+- validar token no banco;
+- verificar expiresAt;
+- se válido, definir contexto como usuário alvo;
+- adicionar flags:
+  - req.user.id = targetUserId
+  - req.user.originalAdminId = adminId
+  - req.user.isImpersonating = true
+
+5. O admin precisa conseguir sair da impersonação:
+- endpoint exit deve remover o token da sessão;
+- restaurar contexto original do admin;
+- redirecionar de volta ao admin.
+
+6. O frontend precisa mostrar banner claro:
+"Você está acessando como [email]. Sair da impersonação"
+
+7. Enquanto impersonando:
+- painel do usuário deve mostrar dados do usuário alvo;
+- rotas admin devem continuar protegidas e só permitir acesso ao admin original, se necessário;
+- evitar que o usuário alvo ganhe permissões admin.
+
+8. Proteger ações perigosas:
+- não permitir alterar senha enquanto impersonando;
+- não permitir billing admin enquanto impersonando;
+- não permitir deletar usuário enquanto impersonando;
+- se necessário, bloquear rotas admin durante impersonação exceto exit/status.
+
+9. Segurança:
+- token deve expirar;
+- token inválido deve ser removido da sessão;
+- logs não devem expor token;
+- registrar startedAt e endedAt;
+- registrar IP/userAgent se já existir suporte.
+
+10. Corrigir possíveis problemas de frontend:
+- invalidar cache React Query após entrar/sair;
+- forçar refetch de /api/auth/user;
+- garantir que refresh da página mantém impersonação até expirar;
+- garantir que logout limpa impersonação.
+
+11. Testar:
+- admin entra como usuário comum;
+- dashboard mostra dados do usuário comum;
+- /api/auth/user retorna usuário alvo com isImpersonating;
+- status mostra admin original e usuário alvo;
+- sair restaura admin;
+- refresh mantém impersonação;
+- expiração remove impersonação;
+- tentativa de impersonar admin é bloqueada;
+- tentativa de auto-impersonation é bloqueada;
+- usuário comum não consegue usar endpoints de impersonação.
+
+Critérios de aceite:
+- "Entrar como usuário" troca contexto real das APIs;
+- banner aparece;
+- sair funciona;
+- refresh funciona;
+- expiração funciona;
+- segurança preservada;
+- audit log registrado;
+- usuário alvo nunca recebe permissão admin.
+
+No final me entregue:
+- arquivos alterados;
+- causa exata do bug;
+- como ficou o fluxo;
+- como testou;
+- riscos restantes.

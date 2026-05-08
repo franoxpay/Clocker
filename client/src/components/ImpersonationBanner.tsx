@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { LogOut } from "lucide-react";
+import { LogOut, UserCog } from "lucide-react";
 
 interface ImpersonationData {
   isImpersonating: boolean;
@@ -10,14 +10,20 @@ interface ImpersonationData {
     id: string;
     email: string;
   };
+  adminUser?: {
+    id: string;
+    email: string;
+  };
+  expiresAt?: string;
 }
 
 export function ImpersonationBanner() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const { data: impersonation } = useQuery<ImpersonationData>({
     queryKey: ["/api/admin/impersonation/status"],
     retry: false,
+    refetchInterval: 60_000,
   });
 
   const exitMutation = useMutation({
@@ -26,9 +32,8 @@ export function ImpersonationBanner() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/impersonation/status"] });
-      window.location.href = "/confg-admin";
+      queryClient.clear();
+      window.location.href = "/confg-admin/users";
     },
   });
 
@@ -38,22 +43,26 @@ export function ImpersonationBanner() {
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-50 h-12 bg-destructive/90 backdrop-blur-sm flex items-center justify-between px-4"
+      className="fixed top-0 left-0 right-0 z-50 h-12 bg-destructive/90 backdrop-blur-sm flex items-center justify-between px-4 gap-2"
       data-testid="banner-impersonation"
     >
-      <span className="text-destructive-foreground text-sm font-medium">
-        {t("admin.impersonating")}: {impersonation.targetUser?.email}
-      </span>
+      <div className="flex items-center gap-2 text-destructive-foreground text-sm font-medium min-w-0">
+        <UserCog className="w-4 h-4 shrink-0" />
+        <span className="truncate">
+          {language === "pt-BR" ? "Você está acessando como" : "You are accessing as"}:&nbsp;
+          <strong>{impersonation.targetUser?.email}</strong>
+        </span>
+      </div>
       <Button
         variant="outline"
         size="sm"
         onClick={() => exitMutation.mutate()}
         disabled={exitMutation.isPending}
-        className="bg-background/20 border-destructive-foreground/30 text-destructive-foreground"
+        className="shrink-0 bg-background/20 border-destructive-foreground/30 text-destructive-foreground hover:bg-background/30"
         data-testid="button-exit-impersonation"
       >
         <LogOut className="w-4 h-4 mr-2" />
-        {t("admin.returnToAdmin")}
+        {language === "pt-BR" ? "Sair da impersonação" : "Exit impersonation"}
       </Button>
     </div>
   );

@@ -1758,8 +1758,10 @@ export async function registerRoutes(
       
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
       const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
-      
-      res.json({ ...toSafeUser(user), isSuspended, isTrialing, isAdmin, isSubscriptionActive });
+      const isImpersonating = (req as any).user?.isImpersonating === true;
+      const originalAdminId = (req as any).user?.originalAdminId ?? null;
+
+      res.json({ ...toSafeUser(user), isSuspended, isTrialing, isAdmin, isSubscriptionActive, isImpersonating, originalAdminId });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Internal server error" });
