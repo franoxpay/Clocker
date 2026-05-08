@@ -22,6 +22,38 @@ const BACKUP_TIME_UTC = (process.env.BACKUP_TIME_UTC || "03:00").trim();
 // ── State ─────────────────────────────────────────────────────────────────
 
 let isBackupRunning = false;
+let nextScheduledAt: string | null = null;
+let schedulerStarted = false;
+
+// ── Stats export ──────────────────────────────────────────────────────────
+
+export interface BackupFileInfo {
+  name: string;
+  createdAt: string;
+  sizeFormatted: string;
+}
+
+export interface BackupStats {
+  schedulerActive: boolean;
+  backups: BackupFileInfo[];
+  nextScheduledAt: string | null;
+}
+
+export function getBackupStats(): BackupStats {
+  const files = listBackups(BACKUP_DIR);
+  return {
+    schedulerActive: schedulerStarted,
+    nextScheduledAt,
+    backups: files.map((f) => {
+      // Parse timestamp from filename: backup-YYYY-MM-DD-HH-mm.sql.gz
+      const match = f.name.match(/backup-(\d{4}-\d{2}-\d{2}-\d{2}-\d{2})/);
+      const createdAt = match
+        ? match[1].replace(/(\d{4}-\d{2}-\d{2})-(\d{2})-(\d{2})/, "$1T$2:$3:00Z")
+        : new Date(0).toISOString();
+      return { name: f.name, createdAt, sizeFormatted: formatBytes(f.size) };
+    }),
+  };
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -153,6 +185,7 @@ function scheduleNextRun(): void {
   const { hour, minute } = parseBackupTime();
   const delayMs = msUntilNextRun(hour, minute);
   const nextRun = new Date(Date.now() + delayMs);
+  nextScheduledAt = nextRun.toISOString();
 
   console.log(
     `[Backup] Next scheduled backup: ${nextRun.toISOString()} ` +
@@ -171,8 +204,6 @@ function scheduleNextRun(): void {
  * Starts the automatic backup scheduler.
  * Call once during server startup — safe to call multiple times (idempotent via flag).
  */
-let schedulerStarted = false;
-
 export function startBackupScheduler(): void {
   if (schedulerStarted) return;
   schedulerStarted = true;

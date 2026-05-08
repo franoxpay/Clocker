@@ -12,6 +12,7 @@ import { resetConsecutiveFailures } from "./domainMonitor";
 import { registerAdminRoutes, seedDefaultEmailTemplates } from "./routes/admin.routes";
 import { registerNotificationRoutes } from "./routes/notifications.routes";
 import { registerAffiliateRoutes } from "./routes/affiliate.routes";
+import { registerHealthRoutes } from "./health/routes";
 import { getCachedGeoIp, cacheGeoIp, getRedisClient, getCachedIpInfo, cacheIpInfo, type IpInfoData } from "./redis";
 import { sendPlanLimitEmail, sendDomainRemovedEmail, sendPasswordResetEmail } from "./email";
 import { handleClickOverage, SUSPENDED_PAGE_URL } from "./limitEnforcer";
@@ -1127,6 +1128,7 @@ export async function registerRoutes(
   registerNotificationRoutes(app);
   registerAffiliateRoutes(app);
   registerAdminRoutes(app, () => { adminSettingsCache = null; });
+  registerHealthRoutes(app);
 
   // ==========================================
   // SUSPENDED PAGE (lightweight, no auth, no React)

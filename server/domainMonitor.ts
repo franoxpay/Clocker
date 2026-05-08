@@ -69,6 +69,27 @@ const DNS_RESOLVERS: Array<{ name: string; resolver: typeof dns | Resolver }> = 
 ];
 
 let isRunning = false;
+let lastRunAt: Date | null = null;
+let schedulerStarted = false;
+
+export interface DnsMonitorStats {
+  schedulerActive: boolean;
+  isRunning: boolean;
+  lastRunAt: string | null;
+  domainsWithActiveFailures: number;
+  totalFailureEntries: number;
+}
+
+export function getDnsMonitorStats(): DnsMonitorStats {
+  const entries = [...consecutiveFailures.values()];
+  return {
+    schedulerActive: schedulerStarted,
+    isRunning,
+    lastRunAt: lastRunAt ? lastRunAt.toISOString() : null,
+    domainsWithActiveFailures: entries.filter((v) => v > 0).length,
+    totalFailureEntries: entries.reduce((sum, v) => sum + v, 0),
+  };
+}
 
 // ──────────────────────────────────────────────────────────────
 // HELPERS
@@ -224,6 +245,7 @@ async function checkAllDomains() {
   }
 
   isRunning = true;
+  lastRunAt = new Date();
   console.log("[DOMAIN MONITOR] Starting domain health check...");
 
   try {
@@ -404,6 +426,7 @@ async function checkAllDomains() {
 }
 
 export function startDomainMonitor() {
+  schedulerStarted = true;
   console.log("[DOMAIN MONITOR] Starting domain health monitoring service (5-minute interval)");
 
   // Run initial check after 30 seconds (give server time to start)

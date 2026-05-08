@@ -115,6 +115,20 @@ export function sendNotification(
   });
 }
 
+export interface WebSocketStats {
+  serverActive: boolean;
+  totalConnections: number;
+  authenticatedUsers: number;
+}
+
+export function getWebSocketStats(): WebSocketStats {
+  return {
+    serverActive: wss !== null,
+    totalConnections: wss ? wss.clients.size : 0,
+    authenticatedUsers: clients.size,
+  };
+}
+
 export const WebSocketService = {
   setup: setupWebSocket,
   sendToUser,

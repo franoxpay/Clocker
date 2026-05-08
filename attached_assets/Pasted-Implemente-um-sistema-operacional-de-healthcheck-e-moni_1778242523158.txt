@@ -1,0 +1,155 @@
+Implemente um sistema operacional de healthcheck e monitoramento interno do SaaS.
+
+Objetivo:
+Ter uma visão clara da saúde real do sistema:
+- banco;
+- Redis;
+- Stripe;
+- billing;
+- schedulers;
+- backups;
+- webhook processing;
+- websocket;
+- DNS monitor;
+- filas internas.
+
+O sistema já está complexo o suficiente para precisar observabilidade operacional.
+
+Faça exatamente isto:
+
+1. Criar endpoint interno:
+GET /api/internal/health
+
+2. O endpoint deve retornar JSON estruturado.
+
+Exemplo:
+
+{
+  "status": "ok",
+  "timestamp": "...",
+  "uptime": 12345,
+  "services": {
+    "database": {...},
+    "redis": {...},
+    "stripe": {...},
+    "billing": {...},
+    "webhooks": {...},
+    "backupScheduler": {...},
+    "dnsMonitor": {...},
+    "websocket": {...}
+  }
+}
+
+3. Implementar healthcheck do PostgreSQL:
+- query simples;
+- medir latência;
+- timeout;
+- status:
+  - healthy
+  - degraded
+  - down
+
+4. Implementar healthcheck Redis:
+- ping;
+- latência;
+- conexão ativa;
+- timeout.
+
+5. Implementar healthcheck Stripe:
+- validar chave;
+- inicialização;
+- request leve;
+- detectar invalid API key.
+
+6. Billing health:
+- último webhook processado;
+- quantidade de webhooks pendentes/falhos;
+- quantidade de usuários em grace;
+- quantidade suspensos;
+- último auto-upgrade;
+- scheduler ativo.
+
+7. Backup health:
+- último backup encontrado;
+- quantidade de backups;
+- idade do backup mais recente;
+- scheduler ativo.
+
+8. DNS monitor health:
+- última execução;
+- falhas recentes;
+- domínios inconsistentes.
+
+9. Websocket health:
+- quantidade de conexões;
+- servidor ativo;
+- uptime.
+
+10. Health status geral:
+- ok
+- degraded
+- critical
+
+Exemplo:
+- DB down = critical
+- Redis down = degraded
+- Stripe invalid = critical
+
+11. Não expor:
+- secrets;
+- DATABASE_URL;
+- Stripe secret;
+- payloads sensíveis;
+- stack traces.
+
+12. Proteger endpoint:
+- admin auth
+OU
+- internal token.
+
+13. Criar módulos organizados:
+server/health/
+
+14. Não colocar tudo no routes.ts.
+
+15. Adicionar timeouts.
+Nenhum check pode travar endpoint inteiro.
+
+16. Adicionar logs:
+- health system initialized;
+- service degraded;
+- service recovered.
+
+17. Criar endpoint opcional:
+GET /api/internal/health/summary
+
+Resposta ultra leve para monitor externo.
+
+18. Não alterar cloaker.
+19. Não alterar Stripe billing logic.
+20. Não alterar frontend ainda.
+
+21. Testar:
+- Redis offline;
+- PostgreSQL offline;
+- Stripe invalid;
+- scheduler parado;
+- backup inexistente;
+- webhook atrasado;
+- websocket parado.
+
+Critérios de aceite:
+- endpoint retorna status estruturado;
+- serviços detectam falhas reais;
+- timeout funcionando;
+- endpoint protegido;
+- sem vazamento de secrets;
+- logs claros;
+- código modularizado.
+
+No final me entregue:
+- arquivos criados;
+- endpoints criados;
+- exemplo de JSON;
+- exemplos healthy/degraded/critical;
+- riscos restantes.
