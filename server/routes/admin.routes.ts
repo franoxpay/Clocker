@@ -1072,7 +1072,10 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
     try {
       const metrics = await storage.getBillingMetrics();
       
+      // totalRevenue: ONLY livemode=true charges (real money)
+      // testRevenue:  livemode=false charges (test/fictitious — shown separately)
       let totalRevenue = 0;
+      let testRevenue = 0;
       const stripeConfigured = await isStripeConfigured();
       if (stripeConfigured) {
         try {
@@ -1086,8 +1089,13 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
               params.starting_after = startingAfter;
             }
             const charges = await stripe.charges.list(params);
-            totalRevenue += charges.data
-              .filter(c => c.status === 'succeeded')
+            const succeeded = charges.data.filter(c => c.status === 'succeeded');
+            // Split by livemode
+            totalRevenue += succeeded
+              .filter(c => c.livemode === true)
+              .reduce((sum, c) => sum + c.amount, 0) / 100;
+            testRevenue += succeeded
+              .filter(c => c.livemode === false)
               .reduce((sum, c) => sum + c.amount, 0) / 100;
             hasMore = charges.has_more;
             if (charges.data.length > 0) {
@@ -1122,6 +1130,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         ltv,
         inadimplenciaRate,
         totalRevenue,
+        testRevenue,
         manualUsersCount: metrics.manualUsersCount,
         manualPlansValue: metrics.manualPlansValue,
       });

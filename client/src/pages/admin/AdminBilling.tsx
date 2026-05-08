@@ -78,6 +78,7 @@ interface BillingMetrics {
   ltv: number;
   inadimplenciaRate: number;
   totalRevenue: number;
+  testRevenue: number;
   manualUsersCount: number;
   manualPlansValue: number;
 }
@@ -383,8 +384,8 @@ export default function AdminBilling() {
             value={formatCurrency(metrics?.totalRevenue)}
             icon={DollarSign}
             iconColor="text-foreground"
-            sub={pt ? "Charges Stripe pagos" : "Stripe succeeded charges"}
-            tooltip={pt ? "Soma real de todas as cobranças com status succeeded no Stripe." : "Real sum of all Stripe charges with succeeded status."}
+            sub={pt ? "Somente Stripe Live" : "Stripe Live only"}
+            tooltip={pt ? "Soma de cobranças Stripe com status succeeded e livemode=true. Pagamentos de teste (livemode=false) são excluídos." : "Sum of Stripe charges with status succeeded and livemode=true. Test payments (livemode=false) are excluded."}
             loading={metricsLoading}
             testId="text-total-revenue"
           />
@@ -421,6 +422,25 @@ export default function AdminBilling() {
           />
         </div>
       </div>
+
+      {/* ── Test revenue notice ───────────────────────────────────────────── */}
+      {!metricsLoading && (metrics?.testRevenue ?? 0) > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-500/30 bg-blue-500/5 px-4 py-3">
+          <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              {pt
+                ? `${formatCurrency(metrics!.testRevenue)} em pagamentos de teste não contabilizados`
+                : `${formatCurrency(metrics!.testRevenue)} in test payments not counted`}
+            </p>
+            <p className="text-xs text-blue-600/70 dark:text-blue-500/70 mt-0.5">
+              {pt
+                ? "Charges Stripe com livemode=false — dinheiro fictício, excluído da Receita Total."
+                : "Stripe charges with livemode=false — fictitious money, excluded from Total Revenue."}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Manual users notice ───────────────────────────────────────────── */}
       {!metricsLoading && (metrics?.manualUsersCount ?? 0) > 0 && (
