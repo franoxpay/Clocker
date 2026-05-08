@@ -3052,6 +3052,17 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Plan not found" });
       }
 
+      // Block free, inactive, and unconfigured plans from checkout
+      if (plan.isFree) {
+        return res.status(400).json({ message: "Cannot create checkout for free plan", code: "FREE_PLAN_CHECKOUT" });
+      }
+      if (!plan.isActive) {
+        return res.status(400).json({ message: "This plan is no longer available", code: "INACTIVE_PLAN" });
+      }
+      if (!plan.stripePriceId) {
+        return res.status(400).json({ message: "Plan is not configured for billing. Contact support.", code: "PLAN_NOT_CONFIGURED" });
+      }
+
       // Check if this is a downgrade and if usage exceeds new plan limits
       if (!plan.isUnlimited) {
         const offersCount = await storage.getUserOffersCount(userId);
@@ -3137,37 +3148,26 @@ export async function registerRoutes(
           }
         }
 
-        if (priceId && plan.stripePriceId) {
-          subscriptionConfig.items = [{ price: priceId }];
-        } else {
-          const product = await stripe.products.create({
-            name: plan.name,
-            description: plan.nameEn || undefined,
-          });
-          
-          const price = await stripe.prices.create({
-            product: product.id,
-            unit_amount: plan.price,
-            currency: 'brl',
-            recurring: { interval: 'month' },
-          });
-          
-          subscriptionConfig.items = [{ price: price.id }];
-        }
+        // Always use the synced stripePriceId — never create ad-hoc products/prices
+        subscriptionConfig.items = [{ price: plan.stripePriceId }];
 
-        const subscription = await stripe.subscriptions.create({
-          ...subscriptionConfig,
-          payment_behavior: 'error_if_incomplete',
-          payment_settings: {
-            payment_method_options: {
-              card: {
-                request_three_d_secure: 'automatic',
+        const idempotencyKeySub = `sub_${userId}_${plan.id}_${Math.floor(Date.now() / 600000)}`;
+        const subscription = await stripe.subscriptions.create(
+          {
+            ...subscriptionConfig,
+            payment_behavior: 'error_if_incomplete',
+            payment_settings: {
+              payment_method_options: {
+                card: {
+                  request_three_d_secure: 'automatic',
+                },
               },
+              save_default_payment_method: 'on_subscription',
             },
-            save_default_payment_method: 'on_subscription',
+            expand: ['latest_invoice.payment_intent'],
           },
-          expand: ['latest_invoice.payment_intent'],
-        });
+          { idempotencyKey: idempotencyKeySub }
+        );
         
         const subscriptionStatus = subscription.status;
         const invoice = subscription.latest_invoice as any;
@@ -3259,24 +3259,11 @@ export async function registerRoutes(
         };
       }
 
-      if (priceId && plan.stripePriceId) {
-        sessionConfig.line_items = [{ price: priceId, quantity: 1 }];
-      } else {
-        sessionConfig.line_items = [{
-          price_data: {
-            currency: 'brl',
-            product_data: { 
-              name: plan.name,
-              description: plan.nameEn || undefined,
-            },
-            unit_amount: plan.price,
-            recurring: { interval: 'month' },
-          },
-          quantity: 1,
-        }];
-      }
+      // Always use the synced stripePriceId — never create ad-hoc price_data
+      sessionConfig.line_items = [{ price: plan.stripePriceId, quantity: 1 }];
 
-      const session = await stripe.checkout.sessions.create(sessionConfig);
+      const idempotencyKeyCs = `cs_${userId}_${plan.id}_${Math.floor(Date.now() / 600000)}`;
+      const session = await stripe.checkout.sessions.create(sessionConfig, { idempotencyKey: idempotencyKeyCs });
       console.log(`[Stripe] Checkout session created: ${session.id} for user ${userId} plan ${plan?.id}`);
       res.json({ url: session.url });
     } catch (error: any) {

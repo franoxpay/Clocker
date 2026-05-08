@@ -161,24 +161,39 @@ export class WebhookHandlers {
 
     const updateData: any = { stripeCustomerId: customerId };
 
+    let parsedPlanId: number | null = null;
+    if (planIdStr) {
+      const n = parseInt(planIdStr, 10);
+      if (!isNaN(n)) {
+        parsedPlanId = n;
+        updateData.planId = n;
+      } else {
+        console.log(`[Stripe Webhook] Invalid planId in metadata: ${planIdStr}`);
+      }
+    }
+
     if (subscriptionId) {
       updateData.stripeSubscriptionId = subscriptionId;
       updateData.subscriptionStatus = 'active';
       updateData.subscriptionStartDate = session.created
         ? new Date(session.created * 1000)
         : new Date();
-    }
-
-    if (planIdStr) {
-      const parsedPlanId = parseInt(planIdStr, 10);
-      if (!isNaN(parsedPlanId)) {
-        updateData.planId = parsedPlanId;
-      } else {
-        console.log(`[Stripe Webhook] Invalid planId in metadata: ${planIdStr}`);
-      }
+      // Clear any suspension / grace state immediately on successful checkout
+      updateData.suspendedAt = null;
+      updateData.suspensionReason = null;
+      updateData.gracePeriodEndsAt = null;
     }
 
     await storage.updateUser(userId, updateData);
+
+    // Restore offers that may have been deactivated by the system
+    const effectivePlanId = parsedPlanId ?? user.planId;
+    if (subscriptionId && effectivePlanId) {
+      await storage.restoreUserSubscription(userId, effectivePlanId, 'active').catch((err: any) =>
+        console.error('[Stripe Webhook] Error restoring subscription on checkout complete:', err.message)
+      );
+    }
+
     console.log(`[Stripe Webhook] ✓ Subscription activated — user: ${userId}, subscription: ${subscriptionId}`);
 
     // Send subscription confirmation email
