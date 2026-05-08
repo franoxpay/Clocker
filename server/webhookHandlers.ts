@@ -1,7 +1,12 @@
 import Stripe from 'stripe';
 import { getStripeSync, isStripeConfigured, getStripeClient, getStripeWebhookSecret } from './stripeClient';
 import { storage } from './storage';
-import { sendSubscriptionConfirmationEmail } from './email';
+import {
+  sendSubscriptionConfirmationEmail,
+  sendPaymentFailedEmail,
+  sendSubscriptionCancelledEmail,
+  sendSubscriptionRenewedEmail,
+} from './email';
 
 export class WebhookHandlers {
   static async processWebhook(payload: Buffer, signature: string, uuid?: string): Promise<void> {
@@ -388,6 +393,19 @@ export class WebhookHandlers {
 
     console.log(`[Stripe Webhook] ✓ Subscription canceled — user: ${user.id} downgraded to free plan`);
 
+    // Send subscription_cancelled email
+    if (user.email) {
+      const planName = user.planId
+        ? (await storage.getPlan(user.planId))?.name ?? 'seu plano'
+        : 'seu plano';
+      const endDate = subscription.ended_at
+        ? new Date(subscription.ended_at * 1000).toLocaleDateString('pt-BR')
+        : new Date().toLocaleDateString('pt-BR');
+      sendSubscriptionCancelledEmail(user.email, user.firstName || 'Cliente', planName, endDate, user.id).catch(err => {
+        console.error('[Stripe Webhook] Failed to send subscription_cancelled email:', err.message);
+      });
+    }
+
     await this.reversePendingCommissionsForUser(user.id, 'subscription_canceled_early');
   }
 
@@ -466,6 +484,16 @@ export class WebhookHandlers {
     });
 
     console.log(`[Stripe Webhook] ✓ Payment failed — user: ${user.id} set to past_due, grace period until ${gracePeriodEndsAt.toISOString()}`);
+
+    // Send payment_failed email (only on first failure, not retries)
+    if (user.email) {
+      const planName = user.planId
+        ? (await storage.getPlan(user.planId))?.name ?? 'seu plano'
+        : 'seu plano';
+      sendPaymentFailedEmail(user.email, user.firstName || 'Cliente', planName, user.id).catch(err => {
+        console.error('[Stripe Webhook] Failed to send payment_failed email:', err.message);
+      });
+    }
   }
 
   private static async handlePaymentSucceeded(invoice: any): Promise<void> {
@@ -525,6 +553,21 @@ export class WebhookHandlers {
       console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} reactivated from ${user.subscriptionStatus}`);
     } else {
       console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} renewal confirmed (already active)`);
+    }
+
+    // Send subscription_renewed email (on every successful payment: renewal or recovery)
+    if (user.email) {
+      const planName = user.planId
+        ? (await storage.getPlan(user.planId))?.name ?? 'seu plano'
+        : 'seu plano';
+      const nextRenewalDate = invoice.lines?.data?.[0]?.period?.end
+        ? new Date(invoice.lines.data[0].period.end * 1000).toLocaleDateString('pt-BR')
+        : '';
+      if (nextRenewalDate) {
+        sendSubscriptionRenewedEmail(user.email, user.firstName || 'Cliente', planName, nextRenewalDate, user.id).catch(err => {
+          console.error('[Stripe Webhook] Failed to send subscription_renewed email:', err.message);
+        });
+      }
     }
   }
 }

@@ -16,6 +16,7 @@
 
 import { storage } from "./storage";
 import { getStripeClient, isStripeConfigured } from "./stripeClient";
+import { sendPlanLimitEmail, sendAccountSuspendedEmail } from "./email";
 import type { User, Plan } from "@shared/schema";
 
 // 20% tolerance above plan limit before triggering upgrade/grace
@@ -257,20 +258,12 @@ export async function handleClickOverage(
     );
     await storage.startGracePeriod(userId);
 
-    // Send email notification
-    try {
-      const { sendPlanLimitEmail } = await import("./email");
-      if (user.email) {
-        sendPlanLimitEmail(
-          user.email,
-          "clicks",
-          clicksUsed,
-          limit,
-          plan.name,
-          userId
-        ).catch(() => {});
-      }
-    } catch (e) {}
+    // Send plan_limit email notification
+    if (user.email) {
+      sendPlanLimitEmail(user.email, "clicks", clicksUsed, limit, plan.name, userId).catch(err => {
+        console.error(`[LimitEnforcer] Failed to send plan_limit email for user ${userId}:`, err.message);
+      });
+    }
 
     // In-app notification
     try {
@@ -333,6 +326,18 @@ export async function processExpiredGracePeriods(): Promise<void> {
               "Your grace period has expired. Please settle your subscription to restore access. All your data has been preserved.",
           });
         } catch (e) {}
+
+        // Send account_suspended email
+        if (user.email) {
+          sendAccountSuspendedEmail(
+            user.email,
+            user.firstName || 'Cliente',
+            'Período de carência expirado',
+            user.id
+          ).catch(err => {
+            console.error(`[LimitEnforcer] Failed to send account_suspended email for user ${user.id}:`, err.message);
+          });
+        }
       } catch (userErr: any) {
         console.error(
           `[LimitEnforcer] Failed to suspend user ${user.id}:`,

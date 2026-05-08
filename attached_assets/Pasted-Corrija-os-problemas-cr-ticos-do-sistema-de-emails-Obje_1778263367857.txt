@@ -1,0 +1,133 @@
+Corrija os problemas críticos do sistema de emails.
+
+Objetivo:
+Fazer os emails automáticos usarem os templates editáveis do banco e garantir que emails críticos realmente sejam enviados e logados.
+
+Faça exatamente isto:
+
+1. Conectar templates do banco aos envios reais.
+
+Hoje os envios automáticos usam HTML hardcoded em email.ts.
+Isso precisa mudar.
+
+A função central de envio deve:
+- buscar template no banco por type;
+- escolher PT ou EN conforme usuário/configuração;
+- substituir placeholders;
+- usar fallback seguro caso template não exista;
+- enviar pelo Resend;
+- registrar em email_logs.
+
+2. Criar ou ajustar função central:
+sendTemplatedEmail(type, user, variables)
+
+Essa função deve:
+- carregar template;
+- renderizar subject;
+- renderizar HTML;
+- substituir variáveis;
+- validar placeholders ausentes;
+- chamar Resend;
+- logar sucesso/falha.
+
+3. Não remover fallback hardcoded ainda.
+Se template do banco faltar, usar fallback para não quebrar emails críticos.
+
+4. Implementar os emails que existem como template mas nunca são enviados:
+- payment_failed
+- account_suspended
+- subscription_cancelled
+- subscription_renewed
+
+Criar funções:
+- sendPaymentFailedEmail()
+- sendAccountSuspendedEmail()
+- sendSubscriptionCancelledEmail()
+- sendSubscriptionRenewedEmail()
+
+5. Conectar essas funções nos lugares corretos:
+
+payment_failed:
+- webhookHandlers.ts
+- quando invoice.payment_failed iniciar ou manter grace period.
+
+account_suspended:
+- limitEnforcer.ts
+- quando usuário for suspenso após grace period vencido.
+
+subscription_cancelled:
+- webhookHandlers.ts
+- quando customer.subscription.deleted for processado.
+
+subscription_renewed:
+- webhookHandlers.ts
+- quando invoice.payment_succeeded representar renovação/regularização.
+
+6. Corrigir send-test.
+
+Hoje ele usa Resend diretamente e não loga.
+Alterar para usar a função central de envio, para aparecer em email_logs.
+
+7. Corrigir placeholders do teste:
+Adicionar suporte para:
+- {{endDate}}
+- {{nextRenewalDate}}
+- {{reason}}
+- {{subscriptionStatus}}
+
+8. Corrigir plan_limit email.
+
+Hoje erros são silenciados com:
+.catch(() => {})
+
+Trocar por log claro.
+Se falhar, deve aparecer em email_logs como failed.
+
+9. Remover emailService.ts se realmente não for usado.
+
+É código morto com marca antiga.
+Antes de remover, confirmar que não existe import em nenhum lugar.
+
+10. Padronizar FROM_EMAIL.
+
+Usar:
+noreply@clerion.app
+
+Garantir que todos os envios usam a mesma configuração.
+Não usar cleryon.com.
+
+11. Não alterar billing logic.
+12. Não alterar Stripe logic.
+13. Não alterar frontend ainda, exceto se necessário para send-test.
+14. Não alterar templates visuais agora.
+
+15. Testar:
+- welcome;
+- password_reset;
+- plan_limit;
+- payment_failed;
+- account_suspended;
+- subscription_cancelled;
+- subscription_renewed;
+- send-test;
+- template inexistente com fallback;
+- Resend falhando;
+- log sent;
+- log failed.
+
+Critérios de aceite:
+- templates editados no admin afetam emails reais;
+- 4 emails críticos ausentes são enviados;
+- email de teste aparece em email_logs;
+- falhas são logadas;
+- FROM_EMAIL padronizado para clerion.app;
+- emailService.ts removido se morto;
+- nenhum token sensível aparece em logs.
+
+No final me entregue:
+- arquivos alterados;
+- funções criadas;
+- templates conectados;
+- eventos que disparam cada email;
+- como testou;
+- riscos restantes.

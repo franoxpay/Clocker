@@ -4,7 +4,7 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { isAdmin, isAuthenticated } from "../replitAuth";
 import { getStripeClient, isStripeConfigured } from "../stripeClient";
-import { sendDomainRemovedEmail } from "../email";
+import { sendDomainRemovedEmail, sendEmail } from "../email";
 import { verifyDomainDNS } from "../domainUtils";
 import { resetConsecutiveFailures } from "../domainMonitor";
 import { toSafeUser, toSafeUsers } from "../lib/safeUser";
@@ -2172,6 +2172,9 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const htmlTemplate = locale === 'pt' ? template.htmlPt : template.htmlEn;
       const subjectTemplate = locale === 'pt' ? template.subjectPt : template.subjectEn;
       
+      const today = new Date().toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US');
+      const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(locale === 'pt' ? 'pt-BR' : 'en-US');
+
       const replacePlaceholders = (text: string) => text
         .replace(/\{\{name\}\}/g, userName)
         .replace(/\{\{firstName\}\}/g, userName)
@@ -2180,28 +2183,28 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         .replace(/\{\{domain\}\}/g, "example.com")
         .replace(/\{\{limitType\}\}/g, locale === 'pt' ? "cliques" : "clicks")
         .replace(/\{\{currentUsage\}\}/g, "1000")
-        .replace(/\{\{limit\}\}/g, "1000");
-      
+        .replace(/\{\{limit\}\}/g, "1000")
+        .replace(/\{\{endDate\}\}/g, futureDate)
+        .replace(/\{\{nextRenewalDate\}\}/g, futureDate)
+        .replace(/\{\{reason\}\}/g, locale === 'pt' ? "pagamento pendente" : "pending payment")
+        .replace(/\{\{subscriptionStatus\}\}/g, locale === 'pt' ? "ativo" : "active")
+        .replace(/\{\{date\}\}/g, today);
+
       const htmlContent = replacePlaceholders(htmlTemplate);
       const subject = `[TESTE] ${replacePlaceholders(subjectTemplate)}`;
-      
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      
-      const { data, error } = await resend.emails.send({
-        from: `Cleryon <${process.env.FROM_EMAIL || 'noreply@clerion.app'}>`,
-        to: [targetEmail],
+
+      // Use central sendEmail so test emails appear in email_logs
+      const result = await sendEmail({
+        to: targetEmail,
         subject,
         html: htmlContent,
+        type: templateType as any,
+        userId: targetUserId,
+        metadata: { isTest: true, locale },
       });
-      
-      if (error) {
-        console.error("Error sending test email:", error);
-        return res.status(500).json({ message: error.message });
-      }
-      
+
       console.log(`[ADMIN] Test email sent to ${targetEmail} (type: ${templateType}, locale: ${locale})`);
-      res.json({ success: true, messageId: data?.id });
+      res.json({ success: true, messageId: result?.id });
     } catch (error) {
       console.error("Error sending test email:", error);
       res.status(500).json({ message: "Internal server error" });

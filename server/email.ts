@@ -512,4 +512,192 @@ ${EMAIL_FOOTER}
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CENTRAL TEMPLATED EMAIL FUNCTION
+// Loads template from DB (with hardcoded fallback). All automated sends use this.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function applyVariables(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+}
+
+export async function sendTemplatedEmail(
+  type: EmailType,
+  options: {
+    to: string;
+    userId?: string;
+    locale?: 'pt' | 'en';
+    variables?: Record<string, string>;
+    fallbackSubject: string;
+    fallbackHtml: string;
+    metadata?: Record<string, any>;
+  }
+): Promise<any> {
+  const {
+    to, userId, locale = 'pt',
+    variables = {}, fallbackSubject, fallbackHtml, metadata,
+  } = options;
+
+  let subject: string;
+  let html: string;
+
+  try {
+    const { storage } = await import('./storage');
+    const template = await storage.getEmailTemplate(type);
+    if (template) {
+      const rawSubject = locale === 'pt' ? template.subjectPt : template.subjectEn;
+      const rawHtml    = locale === 'pt' ? template.htmlPt    : template.htmlEn;
+      subject = applyVariables(rawSubject, variables);
+      html    = applyVariables(rawHtml,    variables);
+    } else {
+      console.log(`[Email] No DB template for "${type}", using hardcoded fallback`);
+      subject = fallbackSubject;
+      html    = fallbackHtml;
+    }
+  } catch (err) {
+    console.warn(`[Email] Failed to load DB template for "${type}", using hardcoded fallback:`, err);
+    subject = fallbackSubject;
+    html    = fallbackHtml;
+  }
+
+  return sendEmail({ to, subject, html, userId, type, metadata });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW EMAIL FUNCTIONS — previously missing
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendPaymentFailedEmail(
+  email: string,
+  firstName: string,
+  planName: string,
+  userId?: string
+) {
+  const fallbackHtmlPt = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">Falha no Pagamento</h2>
+      <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
+      <p style="color: #555; line-height: 1.6;">Não conseguimos processar o pagamento da sua assinatura do plano <strong>${planName}</strong>.</p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;">Por favor, atualize seus dados de pagamento para evitar a suspensão da sua conta.</p>
+      </div>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${APP_URL}/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Atualizar Pagamento</a>
+      </div>
+${EMAIL_FOOTER}
+    </div>`;
+
+  return sendTemplatedEmail('payment_failed', {
+    to: email,
+    userId,
+    locale: 'pt',
+    variables: { firstName, planName },
+    fallbackSubject: 'Falha no Pagamento - Ação Necessária - Cleryon',
+    fallbackHtml: fallbackHtmlPt,
+    metadata: { firstName, planName },
+  });
+}
+
+export async function sendAccountSuspendedEmail(
+  email: string,
+  firstName: string,
+  reason: string,
+  userId?: string
+) {
+  const fallbackHtmlPt = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">Conta Suspensa</h2>
+      <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
+      <p style="color: #555; line-height: 1.6;">Sua conta foi suspensa devido a: <strong>${reason}</strong></p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;">Suas ofertas e domínios foram temporariamente desativados.</p>
+      </div>
+      <p style="color: #555; line-height: 1.6;">Regularize sua assinatura para restaurar o acesso.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${APP_URL}/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Regularizar Conta</a>
+      </div>
+${EMAIL_FOOTER}
+    </div>`;
+
+  return sendTemplatedEmail('account_suspended', {
+    to: email,
+    userId,
+    locale: 'pt',
+    variables: { firstName, reason },
+    fallbackSubject: 'Sua Conta Foi Suspensa - Cleryon',
+    fallbackHtml: fallbackHtmlPt,
+    metadata: { firstName, reason },
+  });
+}
+
+export async function sendSubscriptionCancelledEmail(
+  email: string,
+  firstName: string,
+  planName: string,
+  endDate: string,
+  userId?: string
+) {
+  const fallbackHtmlPt = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #ef4444;">Assinatura Cancelada</h2>
+      <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
+      <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong>${planName}</strong> foi cancelada.</p>
+      <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #991b1b;">Você ainda terá acesso aos recursos do seu plano até ${endDate}.</p>
+      </div>
+      <p style="color: #555; line-height: 1.6;">Sentimos sua falta! Você pode reativar sua assinatura a qualquer momento.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${APP_URL}/subscription" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reativar Assinatura</a>
+      </div>
+${EMAIL_FOOTER}
+    </div>`;
+
+  return sendTemplatedEmail('subscription_cancelled', {
+    to: email,
+    userId,
+    locale: 'pt',
+    variables: { firstName, planName, endDate },
+    fallbackSubject: `Assinatura Cancelada - Cleryon`,
+    fallbackHtml: fallbackHtmlPt,
+    metadata: { firstName, planName, endDate },
+  });
+}
+
+export async function sendSubscriptionRenewedEmail(
+  email: string,
+  firstName: string,
+  planName: string,
+  nextRenewalDate: string,
+  userId?: string
+) {
+  const fallbackHtmlPt = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+${EMAIL_HEADER}
+      <h2 style="color: #10b981;">Assinatura Renovada!</h2>
+      <p style="color: #555; line-height: 1.6;">Olá ${firstName},</p>
+      <p style="color: #555; line-height: 1.6;">Sua assinatura do plano <strong>${planName}</strong> foi renovada com sucesso!</p>
+      <div style="background-color: #ecfdf5; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0;">
+        <p style="margin: 0; color: #065f46;">Próxima renovação: ${nextRenewalDate}</p>
+      </div>
+      <p style="color: #555; line-height: 1.6;">Obrigado por continuar conosco!</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${APP_URL}" style="display: inline-block; background-color: #6366f1; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">Acessar Painel</a>
+      </div>
+${EMAIL_FOOTER}
+    </div>`;
+
+  return sendTemplatedEmail('subscription_renewed', {
+    to: email,
+    userId,
+    locale: 'pt',
+    variables: { firstName, planName, nextRenewalDate },
+    fallbackSubject: `Assinatura ${planName} Renovada - Cleryon`,
+    fallbackHtml: fallbackHtmlPt,
+    metadata: { firstName, planName, nextRenewalDate },
+  });
+}
+
 export { resend };
