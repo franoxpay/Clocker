@@ -198,6 +198,33 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ── Type badge (proper component — avoids invalid-hook-call from plain fn) ────
+function TypeBadge({ sub, pt }: { sub: Subscriber; pt: boolean }) {
+  if (sub.isStripeSubscription) {
+    return (
+      <Badge className="text-[10px] px-1.5 py-0 h-4 border font-medium bg-green-500/10 text-green-700 border-green-500/20 gap-1 leading-none">
+        <CreditCard className="h-2.5 w-2.5" />
+        Stripe
+      </Badge>
+    );
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 h-4 border font-medium bg-yellow-500/10 text-yellow-700 border-yellow-500/20 leading-none cursor-help rounded-full">
+          <Wrench className="h-2.5 w-2.5" />
+          {pt ? "Manual" : "Manual"}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[220px] text-xs">
+        {pt
+          ? "Ativado manualmente pelo admin — sem assinatura Stripe recorrente."
+          : "Manually activated — no Stripe recurring subscription."}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function AdminBilling() {
   const { language } = useLanguage();
   const [subscribersPage, setSubscribersPage] = useState(1);
@@ -275,33 +302,6 @@ export default function AdminBilling() {
     return <Badge className={`text-[10px] px-1.5 py-0 leading-none h-4 border font-medium ${m.cls}`}>{m.label}</Badge>;
   };
 
-  // ── Type badge ──────────────────────────────────────────────────────────────
-  const typeBadge = (sub: Subscriber) => {
-    if (sub.isStripeSubscription) {
-      return (
-        <Badge className="text-[10px] px-1.5 py-0 h-4 border font-medium bg-green-500/10 text-green-700 border-green-500/20 gap-1 leading-none">
-          <CreditCard className="h-2.5 w-2.5" />
-          Stripe
-        </Badge>
-      );
-    }
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Badge className="text-[10px] px-1.5 py-0 h-4 border font-medium bg-yellow-500/10 text-yellow-700 border-yellow-500/20 gap-1 leading-none cursor-help">
-            <Wrench className="h-2.5 w-2.5" />
-            {pt ? "Manual" : "Manual"}
-          </Badge>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-[220px] text-xs">
-          {pt
-            ? "Ativado manualmente pelo admin — sem assinatura Stripe recorrente."
-            : "Manually activated — no Stripe recurring subscription."}
-        </TooltipContent>
-      </Tooltip>
-    );
-  };
-
   const pieData = metrics
     ? [
         { name: pt ? "Ativos" : "Active",    value: metrics.subscriptionsActive },
@@ -313,7 +313,7 @@ export default function AdminBilling() {
 
   return (
     <TooltipProvider>
-    <div className="space-y-5 max-w-[1400px]">
+    <div className="p-6 space-y-5 max-w-[1400px]">
 
       {/* ── ROW 1 — Subscriptions ─────────────────────────────────────────── */}
       <div>
@@ -636,7 +636,7 @@ export default function AdminBilling() {
                               {sub.planPrice != null ? formatCurrency(sub.planPrice) : "—"}
                             </TableCell>
                             <TableCell className="py-2 px-3">{statusBadge(sub.subscriptionStatus)}</TableCell>
-                            <TableCell className="py-2 px-3">{typeBadge(sub)}</TableCell>
+                            <TableCell className="py-2 px-3"><TypeBadge sub={sub} pt={pt} /></TableCell>
                             <TableCell className="text-xs py-2 px-3 whitespace-nowrap text-muted-foreground tabular-nums">
                               {formatDate(sub.subscriptionStartDate)}
                             </TableCell>
