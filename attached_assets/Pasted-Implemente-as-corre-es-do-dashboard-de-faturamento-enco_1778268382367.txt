@@ -1,0 +1,196 @@
+Implemente as correções do dashboard de faturamento encontradas na auditoria.
+
+IMPORTANTE:
+Não quebrar dados existentes.
+Não remover usuários ativos.
+Não remover planos.
+Apenas corrigir cálculo, classificação e visualização.
+
+OBJETIVOS:
+
+1. Corrigir MRR multiplicado por 100
+2. Diferenciar assinatura manual vs Stripe real
+3. Garantir persistência correta de stripe_subscription_id
+4. Melhorar visual do dashboard
+5. Adicionar métricas financeiras reais
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 1 — CORRIGIR MRR
+━━━━━━━━━━━━━━━━━━━
+
+Problema atual:
+plans.price está salvo em centavos:
+19700 = R$197
+
+O backend soma os valores e envia sem dividir por 100.
+
+Corrigir em:
+server/storage.ts
+função:
+getBillingMetrics()
+
+O MRR retornado pela API deve vir em reais já convertido:
+SUM(plans.price) / 100.0
+
+Garantir:
+- sem perda decimal;
+- usar numeric/float corretamente;
+- frontend não deve dividir novamente.
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 2 — DIFERENCIAR ASSINATURA REAL VS MANUAL
+━━━━━━━━━━━━━━━━━━━
+
+Hoje:
+subscriptionStatus='active'
+não significa necessariamente Stripe ativo.
+
+Adicionar classificação:
+
+Stripe real:
+- stripeSubscriptionId != null
+
+Manual:
+- active sem stripeSubscriptionId
+
+Adicionar nos endpoints:
+GET /api/admin/billing/subscribers
+GET /api/admin/billing/metrics
+
+Novos campos:
+
+isManualSubscription
+isStripeSubscription
+
+Adicionar métricas:
+- activeStripeSubscriptions
+- activeManualSubscriptions
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 3 — CORRIGIR PERSISTÊNCIA DO STRIPE
+━━━━━━━━━━━━━━━━━━━
+
+Auditar todo fluxo:
+
+checkout.session.completed
+invoice.payment_succeeded
+customer.subscription.updated
+
+Garantir que:
+stripeSubscriptionId
+stripeCustomerId
+planId
+subscriptionStatus
+
+sempre sejam persistidos corretamente no banco.
+
+Se o checkout completar e não existir stripeSubscriptionId:
+- corrigir automaticamente.
+
+Adicionar logs claros:
+[StripeSync]
+[CheckoutCompleted]
+[SubscriptionPersisted]
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 4 — MELHORIAS VISUAIS NO DASHBOARD
+━━━━━━━━━━━━━━━━━━━
+
+Melhorar AdminBilling.tsx:
+
+Adicionar cards:
+
+- MRR Estimado
+- Receita Stripe Real
+- Assinaturas Stripe
+- Assinaturas Manuais
+- Inadimplentes
+- Em Grace Period
+
+Melhorar visual:
+- cards com cores;
+- badges;
+- indicadores de crescimento;
+- loading skeleton;
+- empty states;
+- tooltips explicativos.
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 5 — TABELA DE ASSINANTES
+━━━━━━━━━━━━━━━━━━━
+
+Adicionar colunas:
+
+- Tipo:
+  Stripe / Manual
+
+- Stripe Status:
+  active
+  past_due
+  canceled
+  unpaid
+
+- Subscription ID
+- Customer ID
+
+Badge visual:
+🟢 Stripe
+🟡 Manual
+
+Se manual:
+mostrar tooltip:
+"Usuário ativado sem assinatura recorrente Stripe"
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 6 — NOVAS MÉTRICAS REAIS
+━━━━━━━━━━━━━━━━━━━
+
+Separar:
+
+MRR estimado:
+soma dos planos ativos
+
+Receita real:
+Stripe charges pagos
+
+Adicionar:
+- ARR estimado
+- ticket médio
+- churn rate simples
+- LTV estimado
+- taxa de inadimplência
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 7 — SEGURANÇA
+━━━━━━━━━━━━━━━━━━━
+
+Nunca expor:
+- secrets;
+- payment_method;
+- card brand completo;
+- last4 completo em logs;
+- customer email de terceiros.
+
+━━━━━━━━━━━━━━━━━━━
+PARTE 8 — TESTES
+━━━━━━━━━━━━━━━━━━━
+
+Validar:
+
+✓ MRR correto
+✓ Receita total correta
+✓ Manual vs Stripe correto
+✓ Checkout salva subscriptionId
+✓ Dashboard renderiza
+✓ Cards corretos
+✓ Sem NaN
+✓ Sem divisão dupla
+✓ Sem regressão
+
+No final:
+entregar relatório completo:
+- arquivos alterados;
+- bugs corrigidos;
+- métricas novas;
+- exemplos reais;
+- diferença entre antes/depois.

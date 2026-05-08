@@ -1099,14 +1099,27 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         }
       }
       
+      const activeCount = metrics.subscriptionsActive;
+      const avgTicket = activeCount > 0 ? metrics.mrr / activeCount : 0;
+      const ltv = avgTicket * 12;
+      const inadimplentes = metrics.gracePeriodCount;
+      const inadimplenciaRate = activeCount > 0 ? (inadimplentes / activeCount) * 100 : 0;
+
       res.json({
         subscriptionsActive: metrics.subscriptionsActive,
         subscriptionsInactive: metrics.subscriptionsInactive,
         subscriptionsTrial: metrics.subscriptionsTrial,
         subscriptionsSuspended: metrics.subscriptionsSuspended,
+        activeStripeSubscriptions: metrics.activeStripeSubscriptions,
+        activeManualSubscriptions: metrics.activeManualSubscriptions,
+        gracePeriodCount: metrics.gracePeriodCount,
         usersToday: metrics.usersToday,
         usersThisMonth: metrics.usersThisMonth,
         mrr: metrics.mrr,
+        arr: metrics.arr,
+        avgTicket,
+        ltv,
+        inadimplenciaRate,
         totalRevenue,
       });
     } catch (error) {

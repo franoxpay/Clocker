@@ -246,9 +246,13 @@ export interface IStorage {
     subscriptionsInactive: number;
     subscriptionsTrial: number;
     subscriptionsSuspended: number;
+    activeStripeSubscriptions: number;
+    activeManualSubscriptions: number;
+    gracePeriodCount: number;
     usersToday: number;
     usersThisMonth: number;
     mrr: number;
+    arr: number;
     totalRevenue: number;
   }>;
 
@@ -264,10 +268,14 @@ export interface IStorage {
       lastName: string | null;
       planId: number | null;
       planName: string | null;
+      planPrice: number | null;
       subscriptionStatus: string;
       subscriptionStartDate: Date | null;
       subscriptionEndDate: Date | null;
       stripeCustomerId: string | null;
+      stripeSubscriptionId: string | null;
+      isManualSubscription: boolean;
+      isStripeSubscription: boolean;
     }>;
     total: number;
   }>;
@@ -1923,9 +1931,13 @@ export class DatabaseStorage implements IStorage {
     subscriptionsInactive: number;
     subscriptionsTrial: number;
     subscriptionsSuspended: number;
+    activeStripeSubscriptions: number;
+    activeManualSubscriptions: number;
+    gracePeriodCount: number;
     usersToday: number;
     usersThisMonth: number;
     mrr: number;
+    arr: number;
     totalRevenue: number;
   }> {
     const now = new Date();
@@ -1939,27 +1951,37 @@ export class DatabaseStorage implements IStorage {
         inactive: sql<number>`SUM(CASE WHEN ${users.subscriptionStatus} = 'inactive' OR ${users.subscriptionStatus} IS NULL THEN 1 ELSE 0 END)`,
         trial: sql<number>`SUM(CASE WHEN ${users.trialEndsAt} IS NOT NULL AND ${users.trialEndsAt} > NOW() THEN 1 ELSE 0 END)`,
         suspended: sql<number>`SUM(CASE WHEN ${users.suspendedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+        activeStripe: sql<number>`SUM(CASE WHEN ${users.subscriptionStatus} = 'active' AND ${users.stripeSubscriptionId} IS NOT NULL THEN 1 ELSE 0 END)`,
+        activeManual: sql<number>`SUM(CASE WHEN ${users.subscriptionStatus} = 'active' AND ${users.stripeSubscriptionId} IS NULL THEN 1 ELSE 0 END)`,
+        gracePeriod: sql<number>`SUM(CASE WHEN ${users.gracePeriodEndsAt} IS NOT NULL AND ${users.gracePeriodEndsAt} > NOW() THEN 1 ELSE 0 END)`,
         usersToday: sql<number>`SUM(CASE WHEN ${users.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
         usersThisMonth: sql<number>`SUM(CASE WHEN ${users.createdAt} >= ${monthStart} THEN 1 ELSE 0 END)`,
       })
       .from(users);
 
+    // plans.price is stored in centavos — divide by 100 to get reais
     const mrrResult = await db
       .select({
-        mrr: sql<number>`COALESCE(SUM(${plans.price}), 0)`,
+        mrrCents: sql<number>`COALESCE(SUM(${plans.price}), 0)`,
       })
       .from(users)
       .innerJoin(plans, eq(users.planId, plans.id))
       .where(eq(users.subscriptionStatus, 'active'));
+
+    const mrrReais = Number(mrrResult[0]?.mrrCents || 0) / 100;
 
     return {
       subscriptionsActive: Number(stats?.active || 0),
       subscriptionsInactive: Number(stats?.inactive || 0),
       subscriptionsTrial: Number(stats?.trial || 0),
       subscriptionsSuspended: Number(stats?.suspended || 0),
+      activeStripeSubscriptions: Number(stats?.activeStripe || 0),
+      activeManualSubscriptions: Number(stats?.activeManual || 0),
+      gracePeriodCount: Number(stats?.gracePeriod || 0),
       usersToday: Number(stats?.usersToday || 0),
       usersThisMonth: Number(stats?.usersThisMonth || 0),
-      mrr: Number(mrrResult[0]?.mrr || 0),
+      mrr: mrrReais,
+      arr: mrrReais * 12,
       totalRevenue: 0,
     };
   }
@@ -2015,10 +2037,12 @@ export class DatabaseStorage implements IStorage {
         lastName: users.lastName,
         planId: users.planId,
         planName: plans.name,
+        planPrice: plans.price,
         subscriptionStatus: users.subscriptionStatus,
         subscriptionStartDate: users.subscriptionStartDate,
         subscriptionEndDate: users.subscriptionEndDate,
         stripeCustomerId: users.stripeCustomerId,
+        stripeSubscriptionId: users.stripeSubscriptionId,
       })
       .from(users)
       .leftJoin(plans, eq(users.planId, plans.id))
@@ -2043,10 +2067,14 @@ export class DatabaseStorage implements IStorage {
         lastName: row.lastName,
         planId: row.planId,
         planName: row.planName,
+        planPrice: row.planPrice != null ? row.planPrice / 100 : null,
         subscriptionStatus: row.subscriptionStatus ?? 'inactive',
         subscriptionStartDate: row.subscriptionStartDate,
         subscriptionEndDate: row.subscriptionEndDate,
         stripeCustomerId: row.stripeCustomerId,
+        stripeSubscriptionId: row.stripeSubscriptionId,
+        isManualSubscription: !row.stripeSubscriptionId,
+        isStripeSubscription: !!row.stripeSubscriptionId,
       })),
       total: Number(countResult?.count || 0),
     };
