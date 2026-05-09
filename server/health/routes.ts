@@ -18,8 +18,9 @@ export function registerHealthRoutes(app: Express): void {
   app.get("/api/internal/health", isAdmin, async (req: Request, res: Response) => {
     try {
       const report = await runHealthChecks();
-      const httpStatus = report.status === "critical" ? 503 : 200;
-      res.status(httpStatus).json(report);
+      // Always 200: status field ("ok" | "degraded" | "critical") carries severity.
+      // Returning 503 caused the dashboard queryFn to throw before parsing the body.
+      res.status(200).json(report);
     } catch (err: any) {
       console.error("[Health] Failed to run health checks:", err.message);
       res.status(500).json({ error: "Health check failed to complete" });
@@ -29,8 +30,7 @@ export function registerHealthRoutes(app: Express): void {
   app.get("/api/internal/health/summary", isAdmin, async (req: Request, res: Response) => {
     try {
       const summary = await runHealthSummary();
-      const httpStatus = summary.status === "critical" ? 503 : 200;
-      res.status(httpStatus).json(summary);
+      res.status(200).json(summary);
     } catch (err: any) {
       console.error("[Health] Failed to run summary check:", err.message);
       res.status(500).json({ error: "Health summary failed" });

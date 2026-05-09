@@ -333,11 +333,25 @@ function HealthSection({ isPt }: { isPt: boolean }) {
     data: health,
     isLoading,
     isError,
+    error: healthError,
     dataUpdatedAt,
     refetch,
     isFetching,
   } = useQuery<HealthReport>({
     queryKey: ["/api/internal/health"],
+    queryFn: async () => {
+      const res = await fetch("/api/internal/health", { credentials: "include" });
+      // Accept 200 (ok/degraded) and 503 (critical) — both carry a JSON body.
+      // Any other non-ok status (401, 403, 500, etc.) is a real error.
+      if (!res.ok && res.status !== 503) {
+        const text = await res.text().catch(() => res.statusText);
+        console.error("[Health] Unexpected HTTP status:", res.status, text);
+        throw new Error(`${res.status}: ${text}`);
+      }
+      const data = await res.json();
+      console.log("[Health] Response received:", data);
+      return data as HealthReport;
+    },
     refetchInterval: 30000,
     refetchOnMount: true,
     staleTime: 25000,
@@ -410,14 +424,17 @@ function HealthSection({ isPt }: { isPt: boolean }) {
       ) : isError ? (
         <div className="flex items-center gap-3 p-4 rounded-xl border bg-red-500/10 border-red-500/20">
           <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-red-500">
               {isPt ? "Erro ao carregar dados de saúde" : "Failed to load health data"}
             </p>
-            <p className="text-xs text-muted-foreground">
-              {isPt ? "Verifique se você tem permissão de admin." : "Make sure you have admin access."}
+            <p className="text-xs text-muted-foreground break-all">
+              {healthError instanceof Error ? healthError.message : String(healthError ?? "")}
             </p>
           </div>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="shrink-0">
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
         </div>
       ) : health ? (
         <div
