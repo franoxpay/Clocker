@@ -3,10 +3,10 @@
  *
  * Registers health check endpoints under /api/internal/health.
  *
- * Authentication (either satisfies):
+ * Authentication (any of the following satisfies):
  *   1. X-Internal-Token header matches INTERNAL_HEALTH_TOKEN env var
- *   2. Session-based admin: reads req.session.userId, loads user from DB,
- *      verifies email matches ADMIN_EMAIL env var.
+ *   2. Session user has user.isAdmin === true in the database  ← primary
+ *   3. Session user email matches ADMIN_EMAIL env var          ← fallback
  *
  * Endpoints:
  *   GET /api/internal/health          — full structured report
@@ -26,10 +26,12 @@ async function requireHealthAuth(req: Request, res: Response, next: NextFunction
     return next();
   }
 
-  // Option 2: session-based admin user
-  // req.user is not populated in health routes, so we read the session directly.
+  // Option 2 & 3: session-based admin user
+  // req.user is populated by Passport after isAuthenticated, but health routes
+  // don't go through that middleware, so we read the session directly.
   const userId = req.session?.userId;
   if (!userId) {
+    console.log("[Health] Auth denied — no session userId");
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -37,13 +39,32 @@ async function requireHealthAuth(req: Request, res: Response, next: NextFunction
   try {
     const user = await storage.getUser(userId);
     if (!user) {
+      console.log(`[Health] Auth denied — userId ${userId} not found in DB`);
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
 
+    // Primary: trust the isAdmin flag stored in the database
+    const isAdminByFlag = user.isAdmin === true;
+
+    // Fallback: compare against ADMIN_EMAIL env var (email-based)
     const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-    const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
-    if (!isAdmin) {
+    const isAdminByEmail = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
+
+    const granted = isAdminByFlag || isAdminByEmail;
+
+    console.log(JSON.stringify({
+      event: "HEALTH_AUTH_CHECK",
+      userId,
+      userEmail: user.email,
+      isAdminByFlag,
+      isAdminByEmail,
+      ADMIN_EMAIL_SET: !!adminEmail,
+      granted,
+      timestamp: new Date().toISOString(),
+    }));
+
+    if (!granted) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }

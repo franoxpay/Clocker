@@ -206,12 +206,17 @@ export const isAdmin: RequestHandler = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-    const isAdminUser = adminEmail && user.email?.toLowerCase() === adminEmail;
+    // Primary: trust the isAdmin flag stored in the database
+    const isAdminByFlag = user.isAdmin === true;
 
-    if (!isAdminUser) {
+    // Fallback: compare against ADMIN_EMAIL env var
+    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
+    const isAdminByEmail = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
+
+    if (!isAdminByFlag && !isAdminByEmail) {
       return res.status(403).json({ message: "Forbidden" });
     }
+
     (req as any).user = { id: userId };
     return next();
   } catch (error) {
