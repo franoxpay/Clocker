@@ -1,0 +1,110 @@
+Precisamos parar e auditar a estrutura inteira de autenticação do app antes de continuar mexendo no /api/internal/health.
+
+Problema:
+Mesmo após múltiplos fixes, rebuilds e deploys, a seção “Saúde do Sistema” continua retornando erro em produção enquanto o usuário já está autenticado e navegando normalmente dentro do painel admin.
+
+Isso indica claramente que existe duplicação/confusão estrutural na autenticação do sistema.
+
+Quero uma análise estrutural completa antes de qualquer novo patch.
+
+Objetivo:
+Entender EXATAMENTE como a autenticação/admin funciona hoje e remover autenticações redundantes/incompatíveis dentro do painel admin.
+
+Faça uma auditoria completa e responda com:
+
+1. Fluxo completo de autenticação
+Mapear:
+- session middleware
+- cookie/session store
+- isAuthenticated
+- isAdmin
+- requireAdmin
+- requirePermission
+- checkIsAdmin
+- req.user
+- req.session.userId
+- onde cada um é populado
+- ordem dos middlewares
+- quais arquivos registram as rotas
+
+2. Estrutura real das rotas
+Listar:
+- quais rotas usam isAuthenticated
+- quais usam isAdmin
+- quais usam requireAdmin
+- quais usam requirePermission
+- quais usam autenticação própria/manual
+
+Especialmente:
+- /api/admin/*
+- /api/internal/health
+- /api/internal/health/summary
+
+3. Descobrir por que o painel admin funciona mas health não
+Se eu já estou autenticado no admin:
+- por que /api/admin/* funciona?
+- por que /api/internal/health falha?
+
+Quero a causa REAL.
+Não quero hipótese.
+
+4. Verificar diferença entre:
+- req.user
+- req.session.userId
+- cookies
+- credentials include
+- CORS
+- prefixos de rota
+- app.use()
+- ordem de registro das rotas
+
+5. Procurar duplicação de autenticação
+Exemplo:
+- middleware manual lendo req.session
+- middleware diferente do usado no admin
+- middleware registrado antes/depois da session
+- rotas internas fora da cadeia principal
+
+6. Após a auditoria:
+quero simplificar drasticamente.
+
+Regra desejada:
+SE o usuário acessa qualquer rota /confg-admin
+ENTÃO ele automaticamente pode acessar:
+- /api/internal/health
+- /api/internal/health/summary
+
+Sem segunda autenticação.
+Sem permissão extra.
+Sem requirePermission.
+Sem lógica paralela.
+Sem leitura manual de sessão.
+
+7. Quero a solução estrutural correta:
+- um único middleware admin;
+- uma única fonte de verdade;
+- sem duplicação;
+- sem fallback escondido;
+- sem lógica especial só para health.
+
+8. Antes de alterar:
+mostrar:
+- estrutura atual;
+- causa raiz definitiva;
+- quais middlewares entram em conflito;
+- qual arquitetura será removida;
+- qual arquitetura ficará.
+
+9. Depois implementar:
+- health usando exatamente a mesma cadeia auth do admin;
+- zero autenticação redundante;
+- zero leitura manual de session;
+- zero lógica custom.
+
+10. Entregar:
+- mapa completo do auth flow;
+- arquivos envolvidos;
+- conflito exato;
+- diff arquitetural;
+- motivo pelo qual todos os fixes anteriores falharam;
+- validação final em produção.
