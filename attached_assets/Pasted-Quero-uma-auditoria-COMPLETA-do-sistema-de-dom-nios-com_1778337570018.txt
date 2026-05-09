@@ -1,0 +1,193 @@
+Quero uma auditoria COMPLETA do sistema de domínios compartilhados, verificação DNS e monitoramento automático antes de qualquer alteração.
+
+Problemas observados em produção:
+
+1. Domínios configurados corretamente aparecem como:
+- "No CNAME record found"
+- "CNAME points to clerion.app instead of cleryon.com"
+mesmo quando o DNS está correto.
+
+2. Às vezes TODOS os domínios compartilhados somem para o usuário.
+No painel admin aparecem como:
+- desativados;
+- DNS falhou;
+- não ativos.
+
+Mas ao clicar em "Verificar", eles voltam imediatamente para ativos.
+
+3. O problema acontece tanto:
+- em domínios adicionados pelo usuário;
+- quanto em domínios adicionados via painel admin.
+
+Antes de corrigir qualquer coisa, quero entender TODA a arquitetura.
+
+Faça uma auditoria completa cobrindo:
+
+PARTE 1 — Fluxo completo de domínio
+
+Mapear o fluxo completo:
+- criação do domínio;
+- ativação;
+- verificação DNS;
+- SSL;
+- monitor automático;
+- fallback;
+- desativação;
+- reativação;
+- compartilhamento.
+
+Quero entender:
+- quais tabelas são usadas;
+- quais campos mudam;
+- quais schedulers/jobs existem;
+- quais endpoints fazem verify;
+- quais serviços externos são usados;
+- onde o status "ativo/inativo" é decidido.
+
+PARTE 2 — Arquivos e responsabilidades
+
+Liste todos os arquivos relacionados:
+- domainMonitor.ts
+- rotas
+- storage
+- verificadores DNS
+- SSL
+- cron/schedulers
+- EasyPanel
+- cache
+- frontend
+- componentes admin
+- componentes do usuário
+
+Explique responsabilidade de cada um.
+
+PARTE 3 — Estados possíveis
+
+Quero todos os estados possíveis de um domínio:
+- active
+- inactive
+- pending
+- ssl_pending
+- failed
+- suspended
+etc.
+
+E:
+- quem altera;
+- quando altera;
+- quais triggers;
+- quais timers;
+- quais verificações.
+
+PARTE 4 — Verificação DNS
+
+Audite completamente a lógica de DNS.
+
+Quero saber:
+- qual hostname esperado;
+- se existe conflito entre:
+  - clerion.app
+  - cleryon.com
+- se há hardcoded antigo;
+- se MAIN_DOMAIN interfere;
+- se shared domains usam target diferente;
+- se user domains usam target diferente;
+- se existem comparações erradas de string.
+
+Verifique:
+- normalize de domínio;
+- lowercase;
+- trailing dot;
+- wildcard;
+- propagation;
+- múltiplos CNAMEs;
+- cache DNS;
+- TTL;
+- race conditions.
+
+PARTE 5 — Monitor automático
+
+Audite o scheduler/monitor.
+
+Quero entender:
+- frequência;
+- timeout;
+- retries;
+- concorrência;
+- o que faz um domínio virar inactive;
+- se uma falha temporária já desativa;
+- se existe debounce;
+- se existe quorum;
+- se existe cache;
+- se existe retry progressivo.
+
+Investigue especialmente:
+- todos os shared domains ficando inativos ao mesmo tempo;
+- e depois voltando ao clicar em verificar.
+
+Isso sugere:
+- falha do monitor;
+- timeout;
+- rate limit;
+- DNS provider issue;
+- ou bug lógico.
+
+PARTE 6 — Logs e evidências
+
+Adicionar logs temporários detalhados:
+- domínio;
+- DNS encontrado;
+- target esperado;
+- target recebido;
+- resultado normalize;
+- erro exato;
+- tempo da query;
+- origem da verificação:
+  - monitor automático
+  - verify manual
+  - criação
+  - admin
+- quem marcou inactive;
+- por quê.
+
+Quero exemplos reais dos domínios:
+- pay.walllora.shop
+- pay.monsieurstyle.store
+- pay.megadvira2025.shop
+- pay.essencialmix.store
+- pay.directatienda.com
+- pay.autocarcenter.store
+- teste.fanzfi.com
+
+PARTE 7 — Painel admin
+
+Audite:
+- diferenças entre domínio do usuário e domínio compartilhado;
+- porque admin e usuário às vezes veem estados diferentes;
+- se existe cache stale no frontend;
+- react-query staleTime;
+- invalidação de cache;
+- race condition de refresh.
+
+PARTE 8 — Não corrigir ainda
+
+IMPORTANTE:
+Não alterar nenhuma lógica ainda.
+
+Primeiro quero:
+- diagnóstico completo;
+- causa raiz;
+- arquivos afetados;
+- evidências reais;
+- riscos;
+- plano de correção ideal.
+
+No final me entregue:
+1. arquitetura completa;
+2. fluxo de estados;
+3. causa provável do bug;
+4. se existe hardcoded clerion/cleryon;
+5. se o monitor está agressivo demais;
+6. porque verify manual funciona;
+7. porque shared domains somem todos ao mesmo tempo;
+8. plano de correção ideal.
