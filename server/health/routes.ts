@@ -5,26 +5,18 @@
  *
  * Autenticação — qualquer uma das condições abaixo libera acesso:
  *   1. Header X-Internal-Token = INTERNAL_HEALTH_TOKEN  (monitor externo, sem sessão)
- *   2. Sessão admin válida  →  requireAdmin (mesmo middleware de /api/admin/*)
- *        a. users.isAdmin = true no banco               (fonte: database)
- *        b. ADMIN_EMAIL env var como fallback            (fonte: admin_email_fallback, loga WARNING)
+ *   2. isAuthenticated + isAdmin  — EXATAMENTE os mesmos middlewares de /api/admin/*
  *
  * Regra: se o usuário acessa /confg-admin → acessa /api/internal/health.
- *
- * Endpoints:
- *   GET /api/internal/health         — relatório completo de todos os serviços
- *   GET /api/internal/health/summary — status ultra-leve para monitores externos
  */
 
 import type { Express, Request, Response, NextFunction } from "express";
 import { runHealthChecks, runHealthSummary } from "./runner";
-import { checkIsAdmin } from "../auth/permissions";
-import { storage } from "../storage";
+import { isAuthenticated, isAdmin } from "../replitAuth";
 
-// ─── Guard middleware ────────────────────────────────────────────────────────
+// ─── Token estático (monitor externo sem sessão) ─────────────────────────────
 
-async function guardHealth(req: Request, res: Response, next: NextFunction) {
-  // 1. Fast-path: token estático para monitor externo
+function internalTokenMiddleware(req: Request, res: Response, next: NextFunction) {
   const internalToken = process.env.INTERNAL_HEALTH_TOKEN;
   if (internalToken && req.headers["x-internal-token"] === internalToken) {
     console.log(JSON.stringify({
@@ -40,57 +32,50 @@ async function guardHealth(req: Request, res: Response, next: NextFunction) {
     }));
     return next();
   }
+  // Sem token válido: passa para o middleware de sessão normal
+  return next("route");
+}
 
-  // 2. Sessão admin (igual a qualquer rota /api/admin/*)
-  const sessionUserId: string | undefined = (req as any).session?.userId;
-  const hasSession = !!sessionUserId;
+// ─── Guard composto ──────────────────────────────────────────────────────────
+// Rota A: token interno → libera direto
+// Rota B: sessão admin → isAuthenticated + isAdmin (igual /api/admin/*)
 
-  if (!hasSession) {
-    console.log(JSON.stringify({
-      event: "HEALTH_AUTH_RESULT",
-      granted: false,
-      reason: "no_session",
-      hasSession: false,
-      sessionUserId: null,
-      userLoaded: false,
-      isAdmin: false,
-      path: req.path,
-      timestamp: new Date().toISOString(),
-    }));
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+function registerGuardedRoute(
+  app: Express,
+  method: "get" | "post",
+  path: string,
+  handler: (req: Request, res: Response) => Promise<void>,
+) {
+  // Caminho 1: token interno
+  app[method](path, internalTokenMiddleware, handler);
 
-  try {
-    const check = await checkIsAdmin(sessionUserId!);
-
-    console.log(JSON.stringify({
-      event: "HEALTH_AUTH_RESULT",
-      granted: check.granted,
-      reason: check.granted ? check.source : "not_admin",
-      hasSession,
-      sessionUserId,
-      userLoaded: !!check.user,
-      isAdmin: check.userIsAdminFromDb,
-      adminEmailFallback: check.adminEmailMatch && !check.userIsAdminFromDb,
-      path: req.path,
-      timestamp: new Date().toISOString(),
-    }));
-
-    if (!check.granted) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-
-    return next();
-  } catch (err: any) {
-    console.error("[Health] guardHealth error:", err.message);
-    return res.status(500).json({ message: "Internal server error" });
-  }
+  // Caminho 2: sessão admin (mesmo chain de todas as rotas /api/admin/*)
+  app[method](
+    path,
+    isAuthenticated,
+    isAdmin,
+    (req: Request, res: Response, next: NextFunction) => {
+      console.log(JSON.stringify({
+        event: "HEALTH_AUTH_RESULT",
+        granted: true,
+        reason: "admin_session",
+        hasSession: true,
+        sessionUserId: req.session?.userId ?? null,
+        userLoaded: true,
+        isAdmin: true,
+        path: req.path,
+        timestamp: new Date().toISOString(),
+      }));
+      return next();
+    },
+    handler,
+  );
 }
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
 
 export function registerHealthRoutes(app: Express): void {
-  app.get("/api/internal/health", guardHealth, async (req: Request, res: Response) => {
+  registerGuardedRoute(app, "get", "/api/internal/health", async (req, res) => {
     try {
       const report = await runHealthChecks();
 
@@ -116,7 +101,7 @@ export function registerHealthRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/internal/health/summary", guardHealth, async (req: Request, res: Response) => {
+  registerGuardedRoute(app, "get", "/api/internal/health/summary", async (req, res) => {
     try {
       const summary = await runHealthSummary();
       const httpStatus = summary.status === "critical" ? 503 : 200;
