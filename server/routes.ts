@@ -989,6 +989,63 @@ interface IpAnalysis {
 const ipAnalysisCache = new Map<string, { data: IpAnalysis; timestamp: number }>();
 const IP_ANALYSIS_CACHE_TTL = 3600000; // 1 hour
 
+// ──────────────────────────────────────────────────────────────
+// DECISION REASON HELPER
+// ──────────────────────────────────────────────────────────────
+/**
+ * Computes a single canonical decision reason string for a click.
+ * Used in click logs so operators can see exactly why each redirect happened.
+ *
+ * Returns 'valid_traffic' for BLACK redirects.
+ * Returns one of the reason codes below for WHITE redirects:
+ *   bot_detected:rate_limited | bot_detected:datacenter_ip | bot_detected:proxy_ip
+ *   bot_detected:facebook_crawler | bot_detected:headless_browser
+ *   bot_detected:facebook_background | bot_detected:empty_ua
+ *   bot_detected:fake_chrome_version | bot_detected:unresolved_macro | bot_detected:ua_pattern
+ *   invalid_xcode | invalid_fbcl_format | missing_params | missing_xcode | missing_ttclid
+ *   missing_utm_medium | missing_utm_content | missing_utm_campaign
+ *   invalid_device:{device} | invalid_country:{country} | unknown
+ */
+function computeDecisionReason(
+  finalDecision: 'black' | 'white',
+  isBotDetected: boolean,
+  botPrimaryReason: string,
+  paramsValid: boolean,
+  failReason: string,
+  deviceAllowed: boolean,
+  countryAllowed: boolean,
+  deviceType: string,
+  country: string
+): string {
+  if (finalDecision === 'black') return 'valid_traffic';
+
+  if (isBotDetected) {
+    const r = botPrimaryReason.toLowerCase();
+    if (r.startsWith('rate_limited')) return 'bot_detected:rate_limited';
+    if (r.startsWith('datacenter_ip')) return 'bot_detected:datacenter_ip';
+    if (r.startsWith('proxy_ip')) return 'bot_detected:proxy_ip';
+    if (r.includes('facebookexternalhit') || r.includes('facebook') || r.includes('facebot') || r.includes('meta-external')) return 'bot_detected:facebook_crawler';
+    if (r.includes('headlesschrome') || r.includes('headless') || r.includes('puppeteer') || r.includes('playwright') || r.includes('selenium')) return 'bot_detected:headless_browser';
+    if (r.includes('cfnetwork')) return 'bot_detected:facebook_background';
+    if (r.includes('ua_empty') || r.includes('too_short')) return 'bot_detected:empty_ua';
+    if (r.includes('fake_chrome')) return 'bot_detected:fake_chrome_version';
+    if (r.includes('unresolved_macro')) return 'bot_detected:unresolved_macro';
+    if (r.startsWith('bot_ua')) return 'bot_detected:ua_pattern';
+    if (r.startsWith('ua_typo')) return 'bot_detected:ua_typo';
+    return `bot_detected:${botPrimaryReason.substring(0, 40).replace(/[^a-zA-Z0-9_:.\-]/g, '_')}`;
+  }
+
+  if (failReason) {
+    if (failReason === 'missing_facebook_params') return 'missing_params';
+    if (failReason.startsWith('unresolved_')) return 'bot_detected:unresolved_macro';
+    return failReason;
+  }
+
+  if (!deviceAllowed) return `invalid_device:${deviceType}`;
+  if (!countryAllowed) return `invalid_country:${country}`;
+  return 'unknown';
+}
+
 async function analyzeIP(ip: string): Promise<IpAnalysis> {
   try {
     const cleanIp = ip.replace(/^::ffff:/, "");
@@ -3732,6 +3789,9 @@ export async function registerRoutes(
 
       // If going to WHITE page - fire-and-forget analytics, redirect immediately
       if (!shouldRedirectToBlack) {
+        const xcodeValid = xcode === offer.xcode;
+        const fbclValid = !!(fbcl && fbcl.split('|').length >= 2);
+        const decisionReason = computeDecisionReason('white', isBotDetected, botResult.primaryReason, paramsValid, failReason, deviceAllowed, countryAllowed, deviceType, country);
         storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
@@ -3753,14 +3813,21 @@ export async function registerRoutes(
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok" ? (fixedQuery.adname || rawQuery.adname || null) : null,
             adset: offer.platform === "tiktok" ? (fixedQuery.adset || rawQuery.adset || null) : null,
-            failReason: failReason || (() => {
-              const parts: string[] = [];
-              if (isBotDetected) parts.push(`bot_detected`);
-              if (!deviceAllowed) parts.push(`device_blocked:${deviceType}`);
-              if (!countryAllowed) parts.push(`country_blocked:${country}`);
-              return parts.join(';') || 'unknown';
-            })(),
+            failReason: failReason || decisionReason,
+            decisionReason,
+            finalDecision: 'white',
             isBotDetected,
+            botReasons: botResult.reasons,
+            botConfidence: botResult.confidence,
+            paramsValid,
+            xcodeValid,
+            fbclValid,
+            deviceAllowed,
+            countryAllowed,
+            isDatacenter: ipAnalysis.isDatacenter,
+            isProxy: ipAnalysis.isProxy,
+            isCorporateProxy: ipAnalysis.isCorporateProxy,
+            route: '/r/:slug',
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
@@ -3772,15 +3839,15 @@ export async function registerRoutes(
           ` | device=${deviceType}` +
           ` | ua="${userAgent.substring(0, 80)}"` +
           ` | paramsValid=${paramsValid}` +
-          ` | xcodeValid=${xcode === offer.xcode}` +
-          ` | fbclValid=${!!(fbcl && fbcl.split('|').length >= 2)}` +
+          ` | xcodeValid=${xcodeValid}` +
+          ` | fbclValid=${fbclValid}` +
           ` | countryAllowed=${countryAllowed}` +
           ` | deviceAllowed=${deviceAllowed}` +
           ` | isBotDetected=${isBotDetected}` +
           ` | botReasons=[${botResult.reasons.join('|')}]` +
           ` | confidence=${botResult.confidence}` +
           ` | corporate=${ipAnalysis.isCorporateProxy}` +
-          ` | failReason=${failReason || 'none'}` +
+          ` | decisionReason=${decisionReason}` +
           ` | target=${targetUrl.substring(0, 60)}`
         );
         return res.redirect(302, targetUrl);
@@ -3871,6 +3938,20 @@ export async function registerRoutes(
             campaignName: fbcl?.split("|")[0] || null,
             campaignId: fbcl?.split("|")[1] || null,
             xcode: xcode || null,
+            decisionReason: 'valid_traffic',
+            finalDecision: 'black',
+            isBotDetected: false,
+            botReasons: [],
+            botConfidence: botResult.confidence,
+            paramsValid: true,
+            xcodeValid: true,
+            fbclValid: true,
+            deviceAllowed: true,
+            countryAllowed: true,
+            isDatacenter: ipAnalysis.isDatacenter,
+            isProxy: ipAnalysis.isProxy,
+            isCorporateProxy: ipAnalysis.isCorporateProxy,
+            route: '/r/:slug',
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, true)
@@ -4277,6 +4358,9 @@ export async function registerRoutes(
 
       // If going to WHITE page - fire-and-forget analytics, redirect immediately
       if (!shouldRedirectToBlack) {
+        const xcodeValid2 = xcode === offer.xcode;
+        const fbclValid2 = !!(fbcl && fbcl.split('|').length >= 2);
+        const decisionReason2 = computeDecisionReason('white', isBotDetected2, botResult2.primaryReason, paramsValid, failReason, deviceAllowed, countryAllowed, deviceType, country);
         storage.createClickLog({
           offerId: offer.id,
           userId: offer.userId,
@@ -4298,12 +4382,21 @@ export async function registerRoutes(
             campaignId: offer.platform === "facebook" ? (fbcl?.split("|")[1] || null) : null,
             adname: offer.platform === "tiktok" ? (fixedQuery2.adname || rawQuery2.adname || null) : null,
             adset: offer.platform === "tiktok" ? (fixedQuery2.adset || rawQuery2.adset || null) : null,
-            failReason: failReason || (() => {
-              const parts: string[] = [];
-              if (!deviceAllowed) parts.push(`device_blocked:${deviceType}`);
-              if (!countryAllowed) parts.push(`country_blocked:${country}`);
-              return parts.join(';') || 'unknown';
-            })(),
+            failReason: failReason || decisionReason2,
+            decisionReason: decisionReason2,
+            finalDecision: 'white',
+            isBotDetected: isBotDetected2,
+            botReasons: botResult2.reasons,
+            botConfidence: botResult2.confidence,
+            paramsValid,
+            xcodeValid: xcodeValid2,
+            fbclValid: fbclValid2,
+            deviceAllowed,
+            countryAllowed,
+            isDatacenter: ipAnalysis2.isDatacenter,
+            isProxy: ipAnalysis2.isProxy,
+            isCorporateProxy: ipAnalysis2.isCorporateProxy,
+            route: '/:slug',
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
@@ -4315,15 +4408,15 @@ export async function registerRoutes(
           ` | device=${deviceType}` +
           ` | ua="${userAgent.substring(0, 80)}"` +
           ` | paramsValid=${paramsValid}` +
-          ` | xcodeValid=${xcode2 === offer.xcode}` +
-          ` | fbclValid=${!!(fbcl2 && fbcl2.split('|').length >= 2)}` +
+          ` | xcodeValid=${xcodeValid2}` +
+          ` | fbclValid=${fbclValid2}` +
           ` | countryAllowed=${countryAllowed}` +
           ` | deviceAllowed=${deviceAllowed}` +
           ` | isBotDetected=${isBotDetected2}` +
           ` | botReasons=[${botResult2.reasons.join('|')}]` +
           ` | confidence=${botResult2.confidence}` +
           ` | corporate=${ipAnalysis2.isCorporateProxy}` +
-          ` | failReason=${failReason || 'none'}` +
+          ` | decisionReason=${decisionReason2}` +
           ` | target=${targetUrl.substring(0, 60)}`
         );
         return res.redirect(302, targetUrl);
@@ -4412,6 +4505,20 @@ export async function registerRoutes(
             campaignName: fbcl?.split("|")[0] || null,
             campaignId: fbcl?.split("|")[1] || null,
             xcode: xcode || null,
+            decisionReason: 'valid_traffic',
+            finalDecision: 'black',
+            isBotDetected: false,
+            botReasons: [],
+            botConfidence: botResult2.confidence,
+            paramsValid: true,
+            xcodeValid: true,
+            fbclValid: true,
+            deviceAllowed: true,
+            countryAllowed: true,
+            isDatacenter: ipAnalysis2.isDatacenter,
+            isProxy: ipAnalysis2.isProxy,
+            isCorporateProxy: ipAnalysis2.isCorporateProxy,
+            route: '/:slug',
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, true)

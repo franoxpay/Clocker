@@ -10,8 +10,9 @@ export function registerNotificationRoutes(app: Express): void {
       const limit = parseInt(req.query.limit as string) || 50;
       const offerId = req.query.offerId && req.query.offerId !== "all" ? parseInt(req.query.offerId as string) : undefined;
       const redirectType = req.query.redirectType && req.query.redirectType !== "all" ? req.query.redirectType as string : undefined;
+      const reason = req.query.reason && req.query.reason !== "all" ? req.query.reason as string : undefined;
 
-      const result = await storage.getClickLogs(userId, page, limit, { offerId, redirectType });
+      const result = await storage.getClickLogs(userId, page, limit, { offerId, redirectType, reason });
       res.json(result);
     } catch (error) {
       console.error("Error fetching logs:", error);

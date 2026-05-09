@@ -125,7 +125,7 @@ export interface IStorage {
     userId: string,
     page: number,
     limit: number,
-    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string }
+    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string; startDate?: string; endDate?: string; reason?: string }
   ): Promise<{ logs: ClickLog[]; total: number }>;
   getClickLogsByPeriod(userId: string, days: number): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>>;
   getDashboardStats(userId: string, filters: {
@@ -1000,7 +1000,7 @@ export class DatabaseStorage implements IStorage {
     userId: string,
     page: number,
     limit: number,
-    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string; startDate?: string; endDate?: string }
+    filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string; startDate?: string; endDate?: string; reason?: string }
   ): Promise<{ logs: ClickLog[]; total: number }> {
     const offset = (page - 1) * limit;
     const conditions = [eq(clickLogs.userId, userId)];
@@ -1018,6 +1018,28 @@ export class DatabaseStorage implements IStorage {
       const endDate = new Date(filters.endDate);
       endDate.setHours(23, 59, 59, 999);
       conditions.push(lte(clickLogs.createdAt, endDate));
+    }
+    if (filters?.reason) {
+      switch (filters.reason) {
+        case 'bot_detected':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'bot_detected%'}`);
+          break;
+        case 'rate_limited':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' = ${'bot_detected:rate_limited'}`);
+          break;
+        case 'invalid_params':
+          conditions.push(sql`(${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_%'} OR ${clickLogs.allParams}->>'decisionReason' LIKE ${'missing_%'})`);
+          break;
+        case 'invalid_device':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_device%'}`);
+          break;
+        case 'invalid_country':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_country%'}`);
+          break;
+        case 'valid_traffic':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' = ${'valid_traffic'}`);
+          break;
+      }
     }
 
     const whereClause = and(...conditions);
