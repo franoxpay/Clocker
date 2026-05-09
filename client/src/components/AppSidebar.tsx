@@ -76,6 +76,7 @@ const adminUsersItems = [
 const adminPlatformItems = [
   { key: "plans",       path: "/confg-admin/plans",       icon: CreditCard,      label: "nav.admin.plans" },
   { key: "domains",     path: "/confg-admin/domains",     icon: Globe,           label: "nav.admin.domains" },
+  { key: "click-logs",  path: "/confg-admin/click-logs",  icon: Activity,        label: "nav.admin.clickLogs" },
   { key: "emails",      path: "/confg-admin/emails",      icon: Mail,            label: "nav.admin.emails" },
   { key: "settings",    path: "/confg-admin/settings",    icon: Cog,             label: "nav.admin.settings" },
 ];

@@ -37,6 +37,7 @@ import AdminBilling from "@/pages/admin/AdminBilling";
 import AdminDomains from "@/pages/admin/AdminDomains";
 import AdminReferrals from "@/pages/admin/AdminReferrals";
 import AdminEmails from "@/pages/admin/AdminEmails";
+import AdminClickLogs from "@/pages/admin/AdminClickLogs";
 import NotFound from "@/pages/not-found";
 import ResetPassword from "@/pages/ResetPassword";
 
@@ -86,6 +87,7 @@ function AdminRoutes() {
           <Route path="/confg-admin/monitoring" component={AdminMonitoring} />
           <Route path="/confg-admin/referrals" component={AdminReferrals} />
           <Route path="/confg-admin/emails" component={AdminEmails} />
+          <Route path="/confg-admin/click-logs" component={AdminClickLogs} />
           <Route path="/confg-admin/settings" component={AdminSettings} />
           <Route component={NotFound} />
         </Switch>

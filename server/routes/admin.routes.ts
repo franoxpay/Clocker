@@ -2295,4 +2295,105 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // ──────────────────────────────────────────────────────────────
+  // ADMIN CLICK LOGS — global traffic log for all users
+  // ──────────────────────────────────────────────────────────────
+  app.get("/api/admin/click-logs", isAuthenticated, isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page  = parseInt(req.query.page  as string) || 1;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 500);
+
+      const botDetected    = req.query.botDetected    !== undefined && req.query.botDetected    !== "all" ? req.query.botDetected    === "true" : undefined;
+      const corporateProxy = req.query.corporateProxy !== undefined && req.query.corporateProxy !== "all" ? req.query.corporateProxy === "true" : undefined;
+      const datacenter     = req.query.datacenter     !== undefined && req.query.datacenter     !== "all" ? req.query.datacenter     === "true" : undefined;
+      const proxy          = req.query.proxy          !== undefined && req.query.proxy          !== "all" ? req.query.proxy          === "true" : undefined;
+
+      const filters = {
+        userId:        req.query.userId        as string | undefined || undefined,
+        email:         req.query.email         as string | undefined || undefined,
+        offerId:       req.query.offerId       ? parseInt(req.query.offerId as string) : undefined,
+        redirectType:  req.query.redirectType  as string | undefined || undefined,
+        reason:        req.query.reason        as string | undefined || undefined,
+        platform:      req.query.platform      as string | undefined || undefined,
+        country:       req.query.country       as string | undefined || undefined,
+        device:        req.query.device        as string | undefined || undefined,
+        ip:            req.query.ip            as string | undefined || undefined,
+        startDate:     req.query.startDate     as string | undefined || undefined,
+        endDate:       req.query.endDate       as string | undefined || undefined,
+        botDetected,
+        corporateProxy,
+        datacenter,
+        proxy,
+      };
+
+      const result = await storage.getAdminClickLogs(page, limit, filters);
+      res.json({ ...result, page, limit });
+    } catch (error) {
+      console.error("[ADMIN] Error fetching click logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // CSV export of admin click logs
+  app.get("/api/admin/click-logs/export", isAuthenticated, isAdmin, async (req: Request, res: Response) => {
+    try {
+      const filters = {
+        userId:       req.query.userId       as string | undefined || undefined,
+        email:        req.query.email        as string | undefined || undefined,
+        offerId:      req.query.offerId      ? parseInt(req.query.offerId as string) : undefined,
+        redirectType: req.query.redirectType as string | undefined || undefined,
+        reason:       req.query.reason       as string | undefined || undefined,
+        platform:     req.query.platform     as string | undefined || undefined,
+        country:      req.query.country      as string | undefined || undefined,
+        device:       req.query.device       as string | undefined || undefined,
+        ip:           req.query.ip           as string | undefined || undefined,
+        startDate:    req.query.startDate    as string | undefined || undefined,
+        endDate:      req.query.endDate      as string | undefined || undefined,
+        botDetected:    req.query.botDetected    !== undefined && req.query.botDetected    !== "all" ? req.query.botDetected    === "true" : undefined,
+        corporateProxy: req.query.corporateProxy !== undefined && req.query.corporateProxy !== "all" ? req.query.corporateProxy === "true" : undefined,
+        datacenter:     req.query.datacenter     !== undefined && req.query.datacenter     !== "all" ? req.query.datacenter     === "true" : undefined,
+        proxy:          req.query.proxy          !== undefined && req.query.proxy          !== "all" ? req.query.proxy          === "true" : undefined,
+      };
+
+      const { logs } = await storage.getAdminClickLogs(1, 10000, filters);
+
+      const headers = [
+        "id","createdAt","userId","userEmail","userName","offerId","offerName","platform",
+        "ipAddress","country","device","redirectedTo","decisionReason","isBotDetected",
+        "botReasons","botConfidence","paramsValid","xcodeValid","fbclValid","deviceAllowed",
+        "countryAllowed","isDatacenter","isProxy","isCorporateProxy","route","responseTimeMs","requestUrl"
+      ];
+
+      const csvRows = [
+        headers.join(","),
+        ...logs.map(log => {
+          const p = (log.allParams as any) || {};
+          const escape = (v: any) => {
+            if (v === null || v === undefined) return "";
+            const s = String(v).replace(/"/g, '""');
+            return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s}"` : s;
+          };
+          return [
+            log.id, log.createdAt, log.userId, log.userEmail, log.userName,
+            log.offerId, log.offerName, log.platform,
+            log.ipAddress, log.country, log.device, log.redirectedTo,
+            p.decisionReason, p.isBotDetected,
+            Array.isArray(p.botReasons) ? p.botReasons.join("|") : (p.botReasons || ""),
+            p.botConfidence, p.paramsValid, p.xcodeValid, p.fbclValid,
+            p.deviceAllowed, p.countryAllowed,
+            p.isDatacenter, p.isProxy, p.isCorporateProxy, p.route,
+            log.responseTimeMs, log.requestUrl
+          ].map(escape).join(",");
+        }),
+      ].join("\n");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename=click_logs_admin_${new Date().toISOString().split("T")[0]}.csv`);
+      res.send(csvRows);
+    } catch (error) {
+      console.error("[ADMIN] Error exporting click logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 }

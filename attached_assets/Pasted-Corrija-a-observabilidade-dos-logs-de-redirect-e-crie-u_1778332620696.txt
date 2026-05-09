@@ -1,0 +1,185 @@
+Corrija a observabilidade dos logs de redirect e crie uma seção ADMIN para logs globais.
+
+Problemas atuais:
+1. O campo “Motivo” está mostrando “Tráfego Real / valid_traffic” até em cliques WHITE.
+2. O tooltip mostra campos vazios: paramsValid, xcodeValid, fbclValid, deviceAllowed, countryAllowed.
+3. Essa informação técnica não deve aparecer no painel comum do usuário.
+4. Preciso de uma tela no painel admin para ver logs de TODOS os usuários com filtros avançados.
+
+Faça exatamente isto:
+
+PARTE 1 — Corrigir decisionReason
+
+1. Se finalDecision = BLACK:
+decisionReason deve ser valid_traffic.
+
+2. Se finalDecision = WHITE:
+NUNCA pode ser valid_traffic.
+
+Para WHITE, calcular motivo real:
+- bot_detected:<primaryReason>
+- invalid_xcode
+- invalid_fbcl
+- missing_params
+- invalid_device
+- invalid_country
+- subscription_inactive
+- offer_inactive
+- user_suspended
+- unknown_white_reason
+
+3. Garantir que os campos abaixo sejam realmente salvos em allParams:
+- finalDecision
+- decisionReason
+- isBotDetected
+- botReasons
+- botConfidence
+- paramsValid
+- xcodeValid
+- fbclValid
+- deviceAllowed
+- countryAllowed
+- isDatacenter
+- isProxy
+- isCorporateProxy
+- route
+- platform
+
+4. Corrigir todos os pontos createClickLog:
+- BLACK
+- WHITE
+- /:slug
+- /r/:slug
+
+5. Testar:
+- BLACK humano → valid_traffic
+- WHITE desktop → invalid_device:desktop
+- WHITE bot → bot_detected:...
+- WHITE xcode errado → invalid_xcode
+- WHITE fbcl inválido → invalid_fbcl
+- WHITE país bloqueado → invalid_country
+
+PARTE 2 — Remover detalhes técnicos do painel comum
+
+1. No painel normal do usuário, ocultar:
+- decisionReason
+- botReasons
+- xcodeValid
+- fbclValid
+- paramsValid
+- isBotDetected
+- detector details
+
+2. Usuário comum deve ver apenas:
+- data
+- oferta
+- tipo black/white
+- país
+- dispositivo
+- URL entrada
+- IP
+- user agent, se já existia
+
+3. Não expor lógica interna do cloaker para usuários comuns.
+
+PARTE 3 — Criar tela ADMIN de logs globais
+
+Criar página no painel admin:
+Admin → Logs de Tráfego
+ou
+Admin → Click Logs
+
+Essa página deve mostrar logs de todos os usuários.
+
+Campos na tabela:
+- data/hora
+- usuário/email
+- offer
+- platform
+- tipo: black/white
+- decisionReason
+- botReasons
+- país
+- dispositivo
+- IP
+- route
+- URL entrada
+- user-agent
+- corporateProxy
+- datacenter
+- proxy
+- paramsValid
+- xcodeValid
+- fbclValid
+- deviceAllowed
+- countryAllowed
+
+Filtros:
+- usuário
+- email
+- offer
+- tipo black/white
+- motivo
+- platform
+- país
+- device
+- IP
+- data inicial/final
+- botDetected sim/não
+- corporateProxy sim/não
+- datacenter sim/não
+- proxy sim/não
+
+Extras:
+- paginação
+- busca
+- botão limpar filtros
+- tooltip com detalhes técnicos
+- export CSV opcional se for simples
+
+PARTE 4 — Backend admin
+
+Criar endpoint protegido por admin:
+GET /api/admin/click-logs
+
+Com filtros:
+- userId
+- email
+- offerId
+- type
+- reason
+- platform
+- country
+- device
+- ip
+- startDate
+- endDate
+- botDetected
+- corporateProxy
+- datacenter
+- proxy
+- page
+- limit
+
+Esse endpoint deve:
+- ser paginado;
+- usar joins com users/offers;
+- não retornar dados sensíveis;
+- ser eficiente.
+
+PARTE 5 — Segurança
+
+1. Apenas admin pode acessar logs globais.
+2. Usuário comum não pode ver decisionReason técnico.
+3. Não expor xcode completo se estiver na URL; mascarar se possível.
+4. Não expor tokens/secrets.
+5. Não quebrar analytics existentes.
+
+No final me entregue:
+- causa do valid_traffic em WHITE;
+- arquivos alterados;
+- endpoint admin criado;
+- página admin criada;
+- filtros disponíveis;
+- exemplos de logs corrigidos;
+- como testar.

@@ -127,6 +127,27 @@ export interface IStorage {
     limit: number,
     filters?: { offerId?: number; domainId?: number; redirectType?: string; platform?: string; startDate?: string; endDate?: string; reason?: string }
   ): Promise<{ logs: ClickLog[]; total: number }>;
+  getAdminClickLogs(
+    page: number,
+    limit: number,
+    filters?: {
+      userId?: string;
+      email?: string;
+      offerId?: number;
+      redirectType?: string;
+      reason?: string;
+      platform?: string;
+      country?: string;
+      device?: string;
+      ip?: string;
+      startDate?: string;
+      endDate?: string;
+      botDetected?: boolean;
+      corporateProxy?: boolean;
+      datacenter?: boolean;
+      proxy?: boolean;
+    }
+  ): Promise<{ logs: any[]; total: number }>;
   getClickLogsByPeriod(userId: string, days: number): Promise<Array<{ date: string; clicks: number; blackClicks: number; whiteClicks: number }>>;
   getDashboardStats(userId: string, filters: {
     offerId?: number;
@@ -1063,6 +1084,144 @@ export class DatabaseStorage implements IStorage {
 
     return {
       logs: logsResult.map((row) => ({ ...row.log, offer: row.offer })) as any,
+      total: Number(count),
+    };
+  }
+
+  async getAdminClickLogs(
+    page: number,
+    limit: number,
+    filters?: {
+      userId?: string;
+      email?: string;
+      offerId?: number;
+      redirectType?: string;
+      reason?: string;
+      platform?: string;
+      country?: string;
+      device?: string;
+      ip?: string;
+      startDate?: string;
+      endDate?: string;
+      botDetected?: boolean;
+      corporateProxy?: boolean;
+      datacenter?: boolean;
+      proxy?: boolean;
+    }
+  ): Promise<{ logs: any[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const conditions: any[] = [];
+
+    if (filters?.userId) {
+      conditions.push(eq(clickLogs.userId, filters.userId));
+    }
+    if (filters?.email) {
+      conditions.push(sql`lower(${users.email}) LIKE lower(${'%' + filters.email + '%'})`);
+    }
+    if (filters?.offerId) {
+      conditions.push(eq(clickLogs.offerId, filters.offerId));
+    }
+    if (filters?.redirectType) {
+      conditions.push(eq(clickLogs.redirectedTo, filters.redirectType));
+    }
+    if (filters?.country) {
+      conditions.push(sql`lower(${clickLogs.country}) = lower(${filters.country})`);
+    }
+    if (filters?.device) {
+      conditions.push(eq(clickLogs.device, filters.device));
+    }
+    if (filters?.ip) {
+      conditions.push(sql`${clickLogs.ipAddress} LIKE ${'%' + filters.ip + '%'}`);
+    }
+    if (filters?.platform) {
+      conditions.push(sql`${clickLogs.allParams}->>'platform' = ${filters.platform}`);
+    }
+    if (filters?.startDate) {
+      conditions.push(gte(clickLogs.createdAt, new Date(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      const endDate = new Date(filters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      conditions.push(lte(clickLogs.createdAt, endDate));
+    }
+    if (filters?.reason) {
+      switch (filters.reason) {
+        case 'bot_detected':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'bot_detected%'}`);
+          break;
+        case 'rate_limited':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' = ${'bot_detected:rate_limited'}`);
+          break;
+        case 'invalid_params':
+          conditions.push(sql`(${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_%'} OR ${clickLogs.allParams}->>'decisionReason' LIKE ${'missing_%'})`);
+          break;
+        case 'invalid_device':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_device%'}`);
+          break;
+        case 'invalid_country':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' LIKE ${'invalid_country%'}`);
+          break;
+        case 'valid_traffic':
+          conditions.push(sql`${clickLogs.allParams}->>'decisionReason' = ${'valid_traffic'}`);
+          break;
+      }
+    }
+    if (filters?.botDetected !== undefined) {
+      const val = filters.botDetected;
+      conditions.push(sql`(${clickLogs.allParams}->>'isBotDetected')::boolean = ${val}`);
+    }
+    if (filters?.corporateProxy !== undefined) {
+      const val = filters.corporateProxy;
+      conditions.push(sql`(${clickLogs.allParams}->>'isCorporateProxy')::boolean = ${val}`);
+    }
+    if (filters?.datacenter !== undefined) {
+      const val = filters.datacenter;
+      conditions.push(sql`(${clickLogs.allParams}->>'isDatacenter')::boolean = ${val}`);
+    }
+    if (filters?.proxy !== undefined) {
+      const val = filters.proxy;
+      conditions.push(sql`(${clickLogs.allParams}->>'isProxy')::boolean = ${val}`);
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const countQuery = db
+      .select({ count: sql<number>`count(*)` })
+      .from(clickLogs)
+      .leftJoin(users, eq(clickLogs.userId, users.id));
+    const [{ count }] = whereClause
+      ? await countQuery.where(whereClause)
+      : await countQuery;
+
+    const logsQuery = db
+      .select({
+        id: clickLogs.id,
+        createdAt: clickLogs.createdAt,
+        userId: clickLogs.userId,
+        userEmail: users.email,
+        userName: sql<string | null>`concat(${users.firstName}, ' ', ${users.lastName})`,
+        offerId: clickLogs.offerId,
+        offerName: offers.name,
+        platform: sql<string | null>`${clickLogs.allParams}->>'platform'`,
+        ipAddress: clickLogs.ipAddress,
+        userAgent: clickLogs.userAgent,
+        country: clickLogs.country,
+        device: clickLogs.device,
+        redirectedTo: clickLogs.redirectedTo,
+        requestUrl: clickLogs.requestUrl,
+        responseTimeMs: clickLogs.responseTimeMs,
+        allParams: clickLogs.allParams,
+      })
+      .from(clickLogs)
+      .leftJoin(users, eq(clickLogs.userId, users.id))
+      .leftJoin(offers, eq(clickLogs.offerId, offers.id));
+
+    const logsResult = whereClause
+      ? await logsQuery.where(whereClause).orderBy(desc(clickLogs.createdAt)).limit(limit).offset(offset)
+      : await logsQuery.orderBy(desc(clickLogs.createdAt)).limit(limit).offset(offset);
+
+    return {
+      logs: logsResult,
       total: Number(count),
     };
   }
