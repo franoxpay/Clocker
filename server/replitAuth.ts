@@ -194,32 +194,8 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 };
 
 export const isAdmin: RequestHandler = async (req, res, next) => {
-  const userId = req.session.userId;
-
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  try {
-    const user = await storage.getUser(userId);
-    if (!user) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    // Primary: trust the isAdmin flag stored in the database
-    const isAdminByFlag = user.isAdmin === true;
-
-    // Fallback: compare against ADMIN_EMAIL env var
-    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-    const isAdminByEmail = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
-
-    if (!isAdminByFlag && !isAdminByEmail) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-
-    (req as any).user = { id: userId };
-    return next();
-  } catch (error) {
-    return res.status(500).json({ message: "Internal server error" });
-  }
+  // Delegates to the centralized permission system.
+  // Import inline to avoid circular dependency with storage.
+  const { requireAdmin } = await import("./auth/permissions");
+  return requireAdmin(req, res, next);
 };

@@ -5,8 +5,9 @@
  *
  * Authentication (any of the following satisfies):
  *   1. X-Internal-Token header matches INTERNAL_HEALTH_TOKEN env var
- *   2. Session user has user.isAdmin === true in the database  ← primary
- *   3. Session user email matches ADMIN_EMAIL env var          ← fallback
+ *   2. requirePermission("admin:monitoring") — delegates to centralized permissions:
+ *        a. users.isAdmin = true in DB          (source: database)
+ *        b. ADMIN_EMAIL env var email match     (source: admin_email_fallback, logs WARNING)
  *
  * Endpoints:
  *   GET /api/internal/health          — full structured report
@@ -15,72 +16,28 @@
 
 import type { Express, Request, Response, NextFunction } from "express";
 import { runHealthChecks, runHealthSummary } from "./runner";
-import { storage } from "../storage";
+import { requirePermission } from "../auth/permissions";
 
-// ─── Auth middleware ────────────────────────────────────────────────────────────
+// ─── Static token fast-path ────────────────────────────────────────────────
 
-async function requireHealthAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
-  // Option 1: static internal token (for external monitors / uptime bots)
-  const internalToken = process.env.INTERNAL_HEALTH_TOKEN;
-  if (internalToken && req.headers["x-internal-token"] === internalToken) {
-    return next();
-  }
-
-  // Option 2 & 3: session-based admin user
-  // req.user is populated by Passport after isAuthenticated, but health routes
-  // don't go through that middleware, so we read the session directly.
-  const userId = req.session?.userId;
-  if (!userId) {
-    console.log("[Health] Auth denied — no session userId");
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
-  try {
-    const user = await storage.getUser(userId);
-    if (!user) {
-      console.log(`[Health] Auth denied — userId ${userId} not found in DB`);
-      res.status(401).json({ error: "Unauthorized" });
-      return;
+function withInternalTokenFallback(
+  handler: (req: Request, res: Response, next: NextFunction) => void
+) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const internalToken = process.env.INTERNAL_HEALTH_TOKEN;
+    if (internalToken && req.headers["x-internal-token"] === internalToken) {
+      return next();
     }
-
-    // Primary: trust the isAdmin flag stored in the database
-    const isAdminByFlag = user.isAdmin === true;
-
-    // Fallback: compare against ADMIN_EMAIL env var (email-based)
-    const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-    const isAdminByEmail = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
-
-    const granted = isAdminByFlag || isAdminByEmail;
-
-    console.log(JSON.stringify({
-      event: "HEALTH_AUTH_CHECK",
-      userId,
-      userEmail: user.email,
-      isAdminByFlag,
-      isAdminByEmail,
-      ADMIN_EMAIL_SET: !!adminEmail,
-      granted,
-      timestamp: new Date().toISOString(),
-    }));
-
-    if (!granted) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-
-    return next();
-  } catch (err: any) {
-    console.error("[Health] Auth check error:", err.message);
-    res.status(500).json({ error: "Internal server error" });
-  }
+    return handler(req, res, next);
+  };
 }
 
-// ─── Routes ────────────────────────────────────────────────────────────────────
+const guardMonitoring = withInternalTokenFallback(requirePermission("admin:monitoring"));
+
+// ─── Routes ────────────────────────────────────────────────────────────────
 
 export function registerHealthRoutes(app: Express): void {
-  // Full health report
-  app.get("/api/internal/health", requireHealthAuth, async (req: Request, res: Response) => {
+  app.get("/api/internal/health", guardMonitoring, async (req: Request, res: Response) => {
     try {
       const report = await runHealthChecks();
 
@@ -104,8 +61,7 @@ export function registerHealthRoutes(app: Express): void {
     }
   });
 
-  // Ultra-light summary (for uptime monitors)
-  app.get("/api/internal/health/summary", requireHealthAuth, async (req: Request, res: Response) => {
+  app.get("/api/internal/health/summary", guardMonitoring, async (req: Request, res: Response) => {
     try {
       const summary = await runHealthSummary();
       const httpStatus = summary.status === "critical" ? 503 : 200;

@@ -643,6 +643,31 @@ export const stripeWebhookEvents = pgTable(
 );
 export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
 
+// Admin permissions table — granular permission grants per user
+// Super admins (users.isAdmin=true) implicitly have all permissions.
+// This table is for future partial-admin roles (e.g. support staff).
+export const adminPermissions = pgTable(
+  "admin_permissions",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    permission: varchar("permission").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [
+    index("admin_permissions_user_idx").on(table.userId),
+    uniqueIndex("admin_permissions_user_perm_idx").on(table.userId, table.permission),
+  ]
+);
+
+export const insertAdminPermissionSchema = createInsertSchema(adminPermissions).omit({
+  id: true,
+  createdAt: true,
+});
+export type AdminPermission = typeof adminPermissions.$inferSelect;
+export type InsertAdminPermission = z.infer<typeof insertAdminPermissionSchema>;
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;

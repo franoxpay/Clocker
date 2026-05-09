@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import { storage } from "../storage";
 import { isAdmin, isAuthenticated } from "../replitAuth";
+import { requireAdmin, checkIsAdmin, getUserPermissions } from "../auth/permissions";
 import { getStripeClient, isStripeConfigured } from "../stripeClient";
 import { sendDomainRemovedEmail, sendEmail, sendTemplatedEmail } from "../email";
 import { verifyDomainDNS } from "../domainUtils";
@@ -2483,6 +2484,65 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       res.send(csvRows);
     } catch (error) {
       console.error("[ADMIN] Error exporting click logs:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ─── GET /api/admin/permissions/me ────────────────────────────────────────
+  // Returns the full permission set for the currently authenticated admin.
+  app.get("/api/admin/permissions/me", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userId = (req as any).user?.id ?? (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const result = await getUserPermissions(userId);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[Permissions] /me error:", err.message);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ─── GET /api/admin/auth-debug ────────────────────────────────────────────
+  // Diagnostic endpoint — shows exactly why a request is granted or denied.
+  // Protected by requireAdmin so only real admins can call it.
+  // Does NOT expose secrets (email is masked after '@').
+  app.get("/api/admin/auth-debug", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const sessionUserId = (req as any).session?.userId ?? null;
+      if (!sessionUserId) {
+        return res.json({
+          sessionUserId: null,
+          loadedUserEmail: null,
+          userIsAdminFromDb: false,
+          adminEmailConfigured: !!process.env.ADMIN_EMAIL,
+          adminEmailMatch: false,
+          granted: false,
+          source: "none",
+          environment: process.env.NODE_ENV ?? "unknown",
+        });
+      }
+
+      const check = await checkIsAdmin(sessionUserId);
+
+      const maskEmail = (email: string | null | undefined) => {
+        if (!email) return null;
+        const [local, domain] = email.split("@");
+        return `${local.slice(0, 2)}***@${domain}`;
+      };
+
+      res.json({
+        sessionUserId,
+        loadedUserEmail: maskEmail(check.user?.email),
+        userIsAdminFromDb: check.userIsAdminFromDb,
+        adminEmailConfigured: check.adminEmailConfigured,
+        adminEmailMatch: check.adminEmailMatch,
+        granted: check.granted,
+        source: check.source,
+        environment: process.env.NODE_ENV ?? "unknown",
+      });
+    } catch (err: any) {
+      console.error("[Permissions] auth-debug error:", err.message);
       res.status(500).json({ message: "Internal server error" });
     }
   });

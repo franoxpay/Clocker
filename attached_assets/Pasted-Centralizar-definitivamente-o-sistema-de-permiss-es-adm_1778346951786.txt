@@ -1,0 +1,95 @@
+Centralizar definitivamente o sistema de permissões admin.
+
+Problema:
+Mesmo após redeploy, /api/internal/health continua sem acesso em produção.
+Também quero preparar o sistema para futuros funcionários/admins com permissões diferentes.
+
+Objetivo:
+Parar de depender de ADMIN_EMAIL como fonte principal.
+A fonte de verdade deve ser o banco.
+
+Implementar:
+
+1. Criar sistema centralizado de permissões:
+server/auth/permissions.ts
+
+Funções:
+- getUserPermissions(userId)
+- isUserAdmin(userId)
+- requireAdmin
+- requirePermission(permission)
+
+2. Usar users.isAdmin como fonte principal.
+
+3. ADMIN_EMAIL deve ser apenas fallback emergencial, com log WARNING.
+
+4. Aplicar a mesma função em todos:
+- server/replitAuth.ts
+- server/health/routes.ts
+- server/routes/admin.routes.ts
+- /api/auth/user
+- qualquer rota /api/admin/*
+
+5. Criar permissões futuras, sem precisar implementar UI completa agora:
+- admin:users
+- admin:billing
+- admin:domains
+- admin:emails
+- admin:monitoring
+- admin:settings
+- admin:click_logs
+- admin:impersonate
+
+6. Se ainda não houver tabela de permissões, preparar schema simples:
+admin_permissions:
+- id
+- userId
+- permission
+- createdAt
+- createdBy
+
+7. Super admin:
+users.isAdmin=true deve ter todas as permissões.
+
+8. Criar endpoint admin:
+GET /api/admin/permissions/me
+
+Deve retornar:
+- userId
+- email
+- isAdmin
+- permissions
+- source: database/admin_email_fallback
+
+9. Criar endpoint diagnóstico temporário protegido:
+GET /api/admin/auth-debug
+
+Retornar:
+- sessionUserId
+- loadedUserEmail
+- userIsAdminFromDb
+- adminEmailConfigured
+- adminEmailMatch
+- granted
+- environment
+
+Não expor secrets.
+
+10. Corrigir /api/internal/health para usar requirePermission("admin:monitoring") ou super admin.
+
+11. Testar em produção:
+- /api/auth/user mostra isAdmin=true
+- /api/admin/permissions/me mostra permissões
+- /api/internal/health retorna 200
+- usuário comum recebe 403
+- sem sessão recebe 401
+
+12. Se continuar falhando:
+verificar se a produção está conectando no mesmo banco onde is_admin=true.
+
+No final entregar:
+- arquivos alterados;
+- fonte final de verdade;
+- endpoints criados;
+- resultado do auth-debug;
+- motivo exato do erro em produção.

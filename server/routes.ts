@@ -1275,7 +1275,9 @@ export async function registerRoutes(
   app.get("/api/admin/subscription-inconsistencies", isAuthenticated, async (req: Request, res: Response) => {
     const userId = (req.user as any)?.id;
     const user = await storage.getUser(userId);
-    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    const { checkIsAdmin } = await import("./auth/permissions");
+    const adminCheck = await checkIsAdmin(userId);
+    if (!adminCheck.granted && !user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
     try {
       const inconsistencies = await storage.getUsersWithSubscriptionInconsistencies();
@@ -1301,7 +1303,9 @@ export async function registerRoutes(
   app.post("/api/admin/subscription-sync/:userId", isAuthenticated, async (req: Request, res: Response) => {
     const currentUserId = (req.user as any)?.id;
     const currentUser = await storage.getUser(currentUserId);
-    if (!currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    const { checkIsAdmin } = await import("./auth/permissions");
+    const adminCheck2 = await checkIsAdmin(currentUserId);
+    if (!adminCheck2.granted && !currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
     try {
       const result = await syncUserSubscriptionState(req.params.userId);
@@ -1314,7 +1318,9 @@ export async function registerRoutes(
   app.post("/api/admin/subscription-sync-all", isAuthenticated, async (req: Request, res: Response) => {
     const currentUserId = (req.user as any)?.id;
     const currentUser = await storage.getUser(currentUserId);
-    if (!currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    const { checkIsAdmin } = await import("./auth/permissions");
+    const adminCheck3 = await checkIsAdmin(currentUserId);
+    if (!adminCheck3.granted && !currentUser?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
     try {
       const summary = await syncAllUsers();
@@ -1331,7 +1337,9 @@ export async function registerRoutes(
   app.post("/api/admin/stripe/create-products", isAuthenticated, async (req: Request, res: Response) => {
     const userId = (req.user as any)?.id;
     const user = await storage.getUser(userId);
-    if (!user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
+    const { checkIsAdmin } = await import("./auth/permissions");
+    const adminCheck4 = await checkIsAdmin(userId);
+    if (!adminCheck4.granted && !user?.isAdmin) return res.status(403).json({ message: "Forbidden" });
 
     try {
       const summary = await syncPlansToStripe();
