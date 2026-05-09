@@ -191,6 +191,9 @@ export interface BotDetectionInput {
   ipAnalysis: {
     isDatacenter: boolean;
     isProxy: boolean;
+    /** True when the IP belongs to a known corporate Secure Web Gateway (Zscaler, Netskope, etc.)
+     *  that confirmed proxy=false — real employee traffic, NOT automated bots. */
+    isCorporateProxy: boolean;
     isp: string;
     as: string;
     reason?: string;
@@ -230,9 +233,21 @@ export function detectBotTraffic(input: BotDetectionInput): BotDetectionResult {
   }
 
   // 2. Datacenter IP — high confidence
-  if (ipAnalysis.isDatacenter) {
+  // Exception: corporate Secure Web Gateways (Zscaler, Netskope, etc.) confirmed proxy=false
+  // are real employee traffic, NOT automated bots. ip-api may flag them as hosting=true due to
+  // their AS registration, but their proxy=false signal takes precedence.
+  if (ipAnalysis.isDatacenter && !ipAnalysis.isCorporateProxy) {
     reasons.push(`datacenter_ip:${ipAnalysis.isp.substring(0, 40)}`);
     confidence = 'high';
+  }
+
+  // 2b. Corporate security proxy — informational only, NOT a bot signal
+  // Log it so operators can see it in server logs, but don't flag as bot.
+  if (ipAnalysis.isCorporateProxy) {
+    console.log(
+      `[BotDetection] CORPORATE_PROXY: ${ipAnalysis.isp.substring(0, 50)} ` +
+      `route=${route} slug=${slug ?? '-'} — proxy=false confirmed, not flagged as datacenter`
+    );
   }
 
   // 3. Proxy IP — medium confidence

@@ -955,10 +955,29 @@ const DATACENTER_ISP_PATTERNS = [
   'HETZNER', 'CLOUDFLARE', 'FACEBOOK', 'TIKTOK', 'BYTEDANCE', 'META'
 ];
 
+// Known corporate Secure Web Gateway / SSE providers.
+// Real employees browse through these transparent proxies by corporate IT policy.
+// They are NOT bot datacenters — ip-api may return hosting=true for some of their nodes,
+// but as long as proxy=false, these are legitimate user connections.
+// Their exit IPs appear in foreign countries (e.g. Zscaler routes BR users via GB/CH nodes).
+// Rule: match by ISP/ORG/AS name + proxy=false → isCorporateProxy=true, isDatacenter=false.
+const CORPORATE_SECURITY_PROXY_PATTERNS = [
+  'ZSCALER',    // Zscaler Internet Access — AS62044, AS55177, AS62563, AS393421, AS17054
+  'NETSKOPE',   // Netskope Security Cloud
+  'SYMANTEC',   // Symantec / Blue Coat ProxySG (legacy SWG)
+  'BLUECOAT',   // Blue Coat ProxySG (Symantec legacy brand)
+  'IBOSS',      // iboss Cloud Security
+  'MENLO',      // Menlo Security Isolation Platform
+  'FORCEPOINT', // Forcepoint Web Security Gateway
+];
+
 interface IpAnalysis {
   country: string;
   isDatacenter: boolean;
   isProxy: boolean;
+  /** True when the IP is a known corporate Secure Web Gateway (SWG/SSE) that confirmed
+   *  proxy=false — real employee traffic routed transparently, NOT automated bots. */
+  isCorporateProxy: boolean;
   isMobile: boolean;
   isp: string;
   org: string;
@@ -980,6 +999,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
         country: "BR",
         isDatacenter: false,
         isProxy: false,
+        isCorporateProxy: false,
         isMobile: false,
         isp: "Local",
         org: "Local",
@@ -996,10 +1016,19 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
     // Check Redis cache
     const redisCached = await getCachedIpInfo(cleanIp);
     if (redisCached) {
+      // Re-run corporate proxy detection on cached data so the rule applies even after cache restore
+      const cachedIspUpper = (redisCached.isp || "").toUpperCase();
+      const cachedOrgUpper = (redisCached.org || "").toUpperCase();
+      const cachedAsUpper  = (redisCached.as  || "").toUpperCase();
+      const cachedIspOrgAs = `${cachedIspUpper} ${cachedOrgUpper} ${cachedAsUpper}`;
+      const cachedIsCorporate = !redisCached.proxy && CORPORATE_SECURITY_PROXY_PATTERNS.some(p => cachedIspOrgAs.includes(p));
       const analysis: IpAnalysis = {
-        country: redisCached.country,
-        isDatacenter: redisCached.hosting,
+        // Corporate proxy exit IPs report foreign country codes — use XX so country check passes
+        country: cachedIsCorporate ? "XX" : redisCached.country,
+        // Corporate proxies are NOT datacenters even when ip-api sets hosting=true
+        isDatacenter: cachedIsCorporate ? false : redisCached.hosting,
         isProxy: redisCached.proxy && !redisCached.mobile,
+        isCorporateProxy: cachedIsCorporate,
         isMobile: redisCached.mobile,
         isp: redisCached.isp,
         org: redisCached.org,
@@ -1019,6 +1048,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
         country: "XX",
         isDatacenter: false,
         isProxy: false,
+        isCorporateProxy: false,
         isMobile: false,
         isp: "",
         org: "",
@@ -1034,6 +1064,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
         country: "XX",
         isDatacenter: false,
         isProxy: false,
+        isCorporateProxy: false,
         isMobile: false,
         isp: "",
         org: "",
@@ -1045,6 +1076,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
     const asUpper = (data.as || "").toUpperCase();
     const ispUpper = (data.isp || "").toUpperCase();
     const orgUpper = (data.org || "").toUpperCase();
+    const ispOrgAs = `${ispUpper} ${orgUpper} ${asUpper}`;
     
     let isDatacenterByPattern = false;
     let patternReason = "";
@@ -1066,43 +1098,60 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
         }
       }
     }
-    
-    // Use ip-api's hosting flag OR our pattern matching
-    const isDatacenter = data.hosting === true || isDatacenterByPattern;
+
+    // Detect corporate Secure Web Gateway / SSE providers.
+    // Condition: ISP/ORG/AS name matches a known corporate proxy AND ip-api says proxy=false.
+    // proxy=false is the key signal: it means the vendor itself has told ip-api this IP is
+    // not being used as a voluntary anonymizing proxy. Corporate gateway = legitimate.
+    const isCorporateProxy = data.proxy !== true &&
+      CORPORATE_SECURITY_PROXY_PATTERNS.some(p => ispOrgAs.includes(p));
+
+    // Use ip-api's hosting flag OR our pattern matching — but NEVER flag corporate proxies
+    // as datacenters, even when ip-api marks their nodes as hosting=true.
+    const isDatacenterRaw = data.hosting === true || isDatacenterByPattern;
+    const isDatacenter = isCorporateProxy ? false : isDatacenterRaw;
 
     // Mobile users going through carrier proxies are real users (very common in LatAm, Asia, Africa)
     // ip-api marks mobile carrier transparent proxies as proxy:true, but these are not VPNs/bots
     // Only block proxy if user is NOT on mobile
     const isProxy = data.proxy === true && data.mobile !== true;
+
+    // Corporate proxy exit IPs report the country of the gateway node, NOT the real user's country.
+    // Zscaler routes Brazilian users through GB/CH exit nodes → ip-api returns country=GB.
+    // Returning XX bypasses the country filter so these legitimate users are not blocked.
+    const country = isCorporateProxy ? "XX" : (data.countryCode || "XX");
     
     const analysis: IpAnalysis = {
-      country: data.countryCode || "XX",
+      country,
       isDatacenter,
       isProxy,
+      isCorporateProxy,
       isMobile: data.mobile === true,
       isp: data.isp || "",
       org: data.org || "",
       as: data.as || "",
-      reason: isDatacenter ? (data.hosting ? "hosting_flag" : patternReason) : undefined
+      reason: isDatacenter ? (data.hosting ? "hosting_flag" : patternReason) : (isCorporateProxy ? "corporate_swg" : undefined)
     };
     
-    // Cache in Redis
+    // Cache in Redis — store raw country/hosting so cache is re-evaluated on restore
     const ipInfoData: IpInfoData = {
-      country: analysis.country,
+      country: data.countryCode || "XX",
       isp: analysis.isp,
       org: analysis.org,
       as: analysis.as,
-      hosting: analysis.isDatacenter,
-      proxy: analysis.isProxy,
-      mobile: analysis.isMobile
+      hosting: isDatacenterRaw,
+      proxy: data.proxy === true,
+      mobile: data.mobile === true
     };
     await cacheIpInfo(cleanIp, ipInfoData);
     
-    // Cache in memory
+    // Cache in memory (evaluated analysis, including isCorporateProxy)
     ipAnalysisCache.set(cleanIp, { data: analysis, timestamp: Date.now() });
     
     if (analysis.isDatacenter || analysis.isProxy) {
-      console.log(`[IP Analysis] ${cleanIp}: DATACENTER=${analysis.isDatacenter} PROXY=${analysis.isProxy} ISP=${analysis.isp} AS=${analysis.as} ${analysis.reason || ''}`);
+      console.log(`[IP Analysis] ${cleanIp}: DATACENTER=${analysis.isDatacenter} PROXY=${analysis.isProxy} CORPORATE=${isCorporateProxy} ISP=${analysis.isp} AS=${analysis.as} ${analysis.reason || ''}`);
+    } else if (isCorporateProxy) {
+      console.log(`[IP Analysis] ${cleanIp}: CORPORATE_PROXY=true ISP=${analysis.isp} AS=${analysis.as} — proxy=false, country overridden to XX`);
     }
     
     return analysis;
@@ -1112,6 +1161,7 @@ async function analyzeIP(ip: string): Promise<IpAnalysis> {
       country: "XX",
       isDatacenter: false,
       isProxy: false,
+      isCorporateProxy: false,
       isMobile: false,
       isp: "",
       org: "",
@@ -3715,7 +3765,24 @@ export async function registerRoutes(
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
           .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
-        console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, bot:${isBotDetected}, params:${failReason}`);
+        console.log(
+          `[Cloak] WHITE redirect for ${slug} (${duration}ms)` +
+          ` | ip=${ip}` +
+          ` | country=${country}` +
+          ` | device=${deviceType}` +
+          ` | ua="${userAgent.substring(0, 80)}"` +
+          ` | paramsValid=${paramsValid}` +
+          ` | xcodeValid=${xcode === offer.xcode}` +
+          ` | fbclValid=${!!(fbcl && fbcl.split('|').length >= 2)}` +
+          ` | countryAllowed=${countryAllowed}` +
+          ` | deviceAllowed=${deviceAllowed}` +
+          ` | isBotDetected=${isBotDetected}` +
+          ` | botReasons=[${botResult.reasons.join('|')}]` +
+          ` | confidence=${botResult.confidence}` +
+          ` | corporate=${ipAnalysis.isCorporateProxy}` +
+          ` | failReason=${failReason || 'none'}` +
+          ` | target=${targetUrl.substring(0, 60)}`
+        );
         return res.redirect(302, targetUrl);
       }
 
@@ -4241,7 +4308,24 @@ export async function registerRoutes(
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
           .catch(err => console.error('[Analytics] incrementOfferClicks failed:', err.message));
-        console.log(`[Cloak] WHITE redirect for ${slug} (${duration}ms) - device:${deviceType}, country:${country}, params:${failReason}`);
+        console.log(
+          `[Cloak] WHITE redirect for ${slug} (${duration}ms)` +
+          ` | ip=${ip}` +
+          ` | country=${country}` +
+          ` | device=${deviceType}` +
+          ` | ua="${userAgent.substring(0, 80)}"` +
+          ` | paramsValid=${paramsValid}` +
+          ` | xcodeValid=${xcode2 === offer.xcode}` +
+          ` | fbclValid=${!!(fbcl2 && fbcl2.split('|').length >= 2)}` +
+          ` | countryAllowed=${countryAllowed}` +
+          ` | deviceAllowed=${deviceAllowed}` +
+          ` | isBotDetected=${isBotDetected2}` +
+          ` | botReasons=[${botResult2.reasons.join('|')}]` +
+          ` | confidence=${botResult2.confidence}` +
+          ` | corporate=${ipAnalysis2.isCorporateProxy}` +
+          ` | failReason=${failReason || 'none'}` +
+          ` | target=${targetUrl.substring(0, 60)}`
+        );
         return res.redirect(302, targetUrl);
       }
 
