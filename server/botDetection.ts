@@ -288,13 +288,18 @@ export function detectBotTraffic(input: BotDetectionInput): BotDetectionResult {
     }
   }
 
-  // 8. Impossible Chrome version
+  // 8. Chrome version check — informational only, does NOT block traffic
+  // High Chrome versions cause false positives on real smartphones (OS updates
+  // ship Chrome faster than MAX_REAL_CHROME_VERSION can be updated).
+  // We log it for diagnostics but never add it to `reasons`.
   const chromeMatch = ua.match(/Chrome\/(\d+)\./);
   if (chromeMatch) {
     const ver = parseInt(chromeMatch[1], 10);
     if (ver > MAX_REAL_CHROME_VERSION) {
-      reasons.push(`fake_chrome_version:${ver}`);
-      if (confidence === 'low') confidence = 'medium';
+      console.log(
+        `[BotDetection] suspicious_chrome_version:${ver} (informational only, not blocking) ` +
+        `slug=${slug ?? '-'} ua="${ua.substring(0, 60)}"`
+      );
     }
   }
 
