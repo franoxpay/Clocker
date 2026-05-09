@@ -586,7 +586,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const lifetimeWhite = offers.reduce((sum, o) => sum + (o.whiteClicks || 0), 0);
 
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-      const isAdminUser = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
+      const isAdminUser = user.isAdmin === true || !!(adminEmail && user.email?.toLowerCase() === adminEmail);
       const isSubscriptionActive = ["active", "trialing"].includes(user.subscriptionStatus ?? "");
       const isTrialing = !!(user.trialEndsAt && new Date(user.trialEndsAt) > new Date());
       const isSuspended = user.suspendedAt !== null;

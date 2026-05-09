@@ -1865,7 +1865,8 @@ export async function registerRoutes(
       const isSubscriptionActive = ['active', 'trialing'].includes(user.subscriptionStatus ?? '');
       
       const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase();
-      const isAdmin = adminEmail && user.email?.toLowerCase() === adminEmail;
+      const isAdminByEmail = !!(adminEmail && user.email?.toLowerCase() === adminEmail);
+      const isAdmin = user.isAdmin === true || isAdminByEmail;
       const isImpersonating = (req as any).user?.isImpersonating === true;
       const originalAdminId = (req as any).user?.originalAdminId ?? null;
 
