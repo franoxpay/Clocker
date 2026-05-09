@@ -1,43 +1,96 @@
 /**
  * server/health/routes.ts
  *
- * Registers health check endpoints under /api/internal/health.
+ * Endpoints de saúde do sistema.
  *
- * Authentication (any of the following satisfies):
- *   1. X-Internal-Token header matches INTERNAL_HEALTH_TOKEN env var
- *   2. requirePermission("admin:monitoring") — delegates to centralized permissions:
- *        a. users.isAdmin = true in DB          (source: database)
- *        b. ADMIN_EMAIL env var email match     (source: admin_email_fallback, logs WARNING)
+ * Autenticação — qualquer uma das condições abaixo libera acesso:
+ *   1. Header X-Internal-Token = INTERNAL_HEALTH_TOKEN  (monitor externo, sem sessão)
+ *   2. Sessão admin válida  →  requireAdmin (mesmo middleware de /api/admin/*)
+ *        a. users.isAdmin = true no banco               (fonte: database)
+ *        b. ADMIN_EMAIL env var como fallback            (fonte: admin_email_fallback, loga WARNING)
+ *
+ * Regra: se o usuário acessa /confg-admin → acessa /api/internal/health.
  *
  * Endpoints:
- *   GET /api/internal/health          — full structured report
- *   GET /api/internal/health/summary  — ultra-light status for external monitors
+ *   GET /api/internal/health         — relatório completo de todos os serviços
+ *   GET /api/internal/health/summary — status ultra-leve para monitores externos
  */
 
 import type { Express, Request, Response, NextFunction } from "express";
 import { runHealthChecks, runHealthSummary } from "./runner";
-import { requirePermission } from "../auth/permissions";
+import { checkIsAdmin } from "../auth/permissions";
+import { storage } from "../storage";
 
-// ─── Static token fast-path ────────────────────────────────────────────────
+// ─── Guard middleware ────────────────────────────────────────────────────────
 
-function withInternalTokenFallback(
-  handler: (req: Request, res: Response, next: NextFunction) => void
-) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    const internalToken = process.env.INTERNAL_HEALTH_TOKEN;
-    if (internalToken && req.headers["x-internal-token"] === internalToken) {
-      return next();
+async function guardHealth(req: Request, res: Response, next: NextFunction) {
+  // 1. Fast-path: token estático para monitor externo
+  const internalToken = process.env.INTERNAL_HEALTH_TOKEN;
+  if (internalToken && req.headers["x-internal-token"] === internalToken) {
+    console.log(JSON.stringify({
+      event: "HEALTH_AUTH_RESULT",
+      granted: true,
+      reason: "internal_token",
+      hasSession: false,
+      sessionUserId: null,
+      userLoaded: false,
+      isAdmin: false,
+      path: req.path,
+      timestamp: new Date().toISOString(),
+    }));
+    return next();
+  }
+
+  // 2. Sessão admin (igual a qualquer rota /api/admin/*)
+  const sessionUserId: string | undefined = (req as any).session?.userId;
+  const hasSession = !!sessionUserId;
+
+  if (!hasSession) {
+    console.log(JSON.stringify({
+      event: "HEALTH_AUTH_RESULT",
+      granted: false,
+      reason: "no_session",
+      hasSession: false,
+      sessionUserId: null,
+      userLoaded: false,
+      isAdmin: false,
+      path: req.path,
+      timestamp: new Date().toISOString(),
+    }));
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const check = await checkIsAdmin(sessionUserId!);
+
+    console.log(JSON.stringify({
+      event: "HEALTH_AUTH_RESULT",
+      granted: check.granted,
+      reason: check.granted ? check.source : "not_admin",
+      hasSession,
+      sessionUserId,
+      userLoaded: !!check.user,
+      isAdmin: check.userIsAdminFromDb,
+      adminEmailFallback: check.adminEmailMatch && !check.userIsAdminFromDb,
+      path: req.path,
+      timestamp: new Date().toISOString(),
+    }));
+
+    if (!check.granted) {
+      return res.status(403).json({ message: "Forbidden" });
     }
-    return handler(req, res, next);
-  };
+
+    return next();
+  } catch (err: any) {
+    console.error("[Health] guardHealth error:", err.message);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 }
 
-const guardMonitoring = withInternalTokenFallback(requirePermission("admin:monitoring"));
-
-// ─── Routes ────────────────────────────────────────────────────────────────
+// ─── Routes ─────────────────────────────────────────────────────────────────
 
 export function registerHealthRoutes(app: Express): void {
-  app.get("/api/internal/health", guardMonitoring, async (req: Request, res: Response) => {
+  app.get("/api/internal/health", guardHealth, async (req: Request, res: Response) => {
     try {
       const report = await runHealthChecks();
 
@@ -49,7 +102,9 @@ export function registerHealthRoutes(app: Express): void {
 
       for (const [name, result] of Object.entries(report.services)) {
         if (result.status !== "healthy") {
-          console.warn(`[Health] Service "${name}" is ${result.status}${result.error ? `: ${result.error}` : ""}`);
+          console.warn(
+            `[Health] Service "${name}" is ${result.status}${result.error ? `: ${result.error}` : ""}`,
+          );
         }
       }
 
@@ -61,7 +116,7 @@ export function registerHealthRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/internal/health/summary", guardMonitoring, async (req: Request, res: Response) => {
+  app.get("/api/internal/health/summary", guardHealth, async (req: Request, res: Response) => {
     try {
       const summary = await runHealthSummary();
       const httpStatus = summary.status === "critical" ? 503 : 200;
