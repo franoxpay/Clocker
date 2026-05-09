@@ -480,6 +480,24 @@ async function reconcileStaleSubscriptions() {
   runWebhookEventCleanup();
   setInterval(runWebhookEventCleanup, 24 * 60 * 60 * 1000); // every 24h
 
+  // ── PARTE 2 — Startup diagnostics ──────────────────────────────────────────
+  {
+    const os = await import("os");
+    const { OFFICIAL_CNAME } = await import("./domainUtils");
+    console.log(JSON.stringify({
+      event: "SERVER_STARTUP_DIAGNOSTICS",
+      processPid: process.pid,
+      hostname: os.hostname(),
+      NODE_ENV: process.env.NODE_ENV,
+      MAIN_DOMAIN: process.env.MAIN_DOMAIN || "(not set)",
+      CNAME_TARGET_ENV: process.env.CNAME_TARGET || "(not set — fallback: clerion.app)",
+      OFFICIAL_CNAME,
+      DISABLE_DOMAIN_AUTO_DEACTIVATION: process.env.DISABLE_DOMAIN_AUTO_DEACTIVATION || "(not set — deactivation ENABLED)",
+      BASE_URL: process.env.BASE_URL || "(not set)",
+      timestamp: new Date().toISOString(),
+    }));
+  }
+
   setupWebSocket(httpServer);
   startDomainMonitor();
   startSubscriptionReminder();

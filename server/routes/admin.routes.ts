@@ -1359,14 +1359,37 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         return res.status(404).json({ message: "Domain not found" });
       }
       
-      const dnsResult = await verifyDomainDNS(domain.subdomain);
+      const dnsResult = await verifyDomainDNS(domain.subdomain, "admin_verify");
+
+      // PARTE 1 — State-change log before write
+      const { OFFICIAL_CNAME: cnameValue } = await import("../domainUtils");
+      const newIsActive = dnsResult.verified ? true : domain.isActive;
+      const newSsl = dnsResult.verified ? "active" : "pending";
+      if (domain.isVerified !== dnsResult.verified || domain.isActive !== newIsActive || domain.sslStatus !== newSsl) {
+        console.log(JSON.stringify({
+          event: "DOMAIN_STATE_CHANGE",
+          changed: true,
+          domain: domain.subdomain,
+          domainId,
+          domainType: "shared",
+          source: "admin_verify",
+          previousState: { isActive: domain.isActive, isVerified: domain.isVerified, sslStatus: domain.sslStatus },
+          newState: { isActive: newIsActive, isVerified: dnsResult.verified, sslStatus: newSsl },
+          OFFICIAL_CNAME_value: cnameValue,
+          resolver: "system",
+          error: dnsResult.error,
+          processPid: process.pid,
+          hostname: require("os").hostname(),
+          timestamp: new Date().toISOString(),
+        }));
+      }
 
       const updated = await storage.updateSharedDomain(domainId, {
         isVerified: dnsResult.verified,
-        isActive: dnsResult.verified ? true : domain.isActive,
+        isActive: newIsActive,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
-        sslStatus: dnsResult.verified ? "active" : "pending",
+        sslStatus: newSsl,
       });
 
       if (dnsResult.verified) {
@@ -1527,14 +1550,37 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         return res.status(404).json({ message: "Domain not found" });
       }
       
-      const dnsResult = await verifyDomainDNS(domain.subdomain);
+      const dnsResult = await verifyDomainDNS(domain.subdomain, "admin_verify");
+
+      // PARTE 1 — State-change log before write
+      const { OFFICIAL_CNAME: cnameValue } = await import("../domainUtils");
+      const newIsActive = dnsResult.verified ? true : domain.isActive;
+      const newSsl = dnsResult.verified ? "active" : "pending";
+      if (domain.isVerified !== dnsResult.verified || domain.isActive !== newIsActive || domain.sslStatus !== newSsl) {
+        console.log(JSON.stringify({
+          event: "DOMAIN_STATE_CHANGE",
+          changed: true,
+          domain: domain.subdomain,
+          domainId,
+          domainType: "user",
+          source: "admin_verify",
+          previousState: { isActive: domain.isActive, isVerified: domain.isVerified, sslStatus: domain.sslStatus },
+          newState: { isActive: newIsActive, isVerified: dnsResult.verified, sslStatus: newSsl },
+          OFFICIAL_CNAME_value: cnameValue,
+          resolver: "system",
+          error: dnsResult.error,
+          processPid: process.pid,
+          hostname: require("os").hostname(),
+          timestamp: new Date().toISOString(),
+        }));
+      }
 
       const updated = await storage.updateDomain(domainId, {
         isVerified: dnsResult.verified,
-        isActive: dnsResult.verified ? true : domain.isActive,
+        isActive: newIsActive,
         lastCheckedAt: new Date(),
         lastVerificationError: dnsResult.error || null,
-        sslStatus: dnsResult.verified ? "active" : "pending",
+        sslStatus: newSsl,
       });
 
       if (dnsResult.verified) {

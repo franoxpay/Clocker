@@ -1,0 +1,141 @@
+Quero fazer uma auditoria operacional REAL do sistema de domínios para descobrir exatamente quem está marcando domínios válidos como inactive.
+
+IMPORTANTE:
+O .env já está correto:
+CNAME_TARGET=clerion.app
+
+Então NÃO assumir mais que o problema é env incorreto.
+
+OBJETIVO:
+descobrir:
+- qual código está desativando;
+- qual valor de OFFICIAL_CNAME está realmente em memória;
+- qual resolver falhou;
+- e porque verify manual e monitor discordam.
+
+IMPLEMENTAR:
+
+PARTE 1 — Instrumentação completa
+
+Toda vez que um domínio mudar:
+- isActive
+- isVerified
+- sslStatus
+
+logar:
+
+{
+  domain,
+  source,
+  previousState,
+  newState,
+  OFFICIAL_CNAME,
+  resolver,
+  error,
+  processPid,
+  hostname,
+  timestamp
+}
+
+source deve ser:
+- monitor
+- admin_verify
+- user_verify
+- create_flow
+- restore_flow
+
+PARTE 2 — Startup diagnostics
+
+No startup:
+logar:
+- process.pid
+- hostname
+- NODE_ENV
+- MAIN_DOMAIN
+- CNAME_TARGET
+- OFFICIAL_CNAME
+
+E repetir isso:
+- no monitor;
+- no verify manual;
+- no domainUtils;
+- no domainMonitor.
+
+Quero confirmar se TODOS os módulos estão lendo o mesmo valor.
+
+PARTE 3 — Hardcoded scan
+
+Fazer varredura completa no backend procurando:
+- cleryon.com
+- clerion.app
+
+Listar:
+- arquivos;
+- linhas;
+- contexto;
+- se é:
+  - frontend display
+  - comparação lógica
+  - log
+  - fallback
+  - email
+  - monitor
+  - verify
+
+Objetivo:
+garantir que nenhuma comparação lógica ainda usa cleryon.com.
+
+PARTE 4 — Resolver diagnostics
+
+Quando verify falhar:
+logar:
+- resolver usado;
+- resposta raw;
+- cnameRecords;
+- normalized;
+- expected;
+- transient/permanent;
+- DNS error code.
+
+PARTE 5 — Divergence detection
+
+Se:
+- verify manual = success
+E
+- monitor = fail
+
+salvar ALERTA CRÍTICO:
+"DIVERGENT DNS VALIDATION"
+
+com:
+- domínio;
+- resolver manual;
+- resolver monitor;
+- OFFICIAL_CNAME;
+- respostas completas.
+
+PARTE 6 — Proteção operacional imediata
+
+Adicionar:
+DISABLE_DOMAIN_AUTO_DEACTIVATION=true
+
+Quando ativo:
+- monitor continua verificando;
+- continua logando;
+- MAS NÃO altera isActive=false.
+
+Ativar isso temporariamente até identificar a causa real.
+
+PARTE 7 — Resultado esperado
+
+Quero descobrir:
+- exatamente qual processo;
+- qual função;
+- qual comparação;
+- qual resolver;
+- e qual valor de OFFICIAL_CNAME
+
+está causando:
+"CNAME points to clerion.app instead of cleryon.com"
+
+mesmo com env correto atualmente.
