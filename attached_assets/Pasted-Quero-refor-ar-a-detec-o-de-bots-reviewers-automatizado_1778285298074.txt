@@ -1,0 +1,146 @@
+Quero reforçar a detecção de bots/reviewers automatizados do Facebook no fluxo atual, sem mudar a lógica principal.
+
+Contexto:
+O fluxo atual usa fbcl={{campaign.name}}|{{campaign.id}}&xcode=OFFER_XCODE.
+A biblioteca de anúncios/direct sem esses parâmetros já cai em WHITE.
+O foco agora é melhorar proteção contra bots/reviewers automatizados, headless, crawlers e scanners.
+
+IMPORTANTE:
+- Não alterar regra principal de Facebook.
+- Não adicionar token TTL agora.
+- Não criar challenge pesado agora.
+- Não alterar billing, admin, Stripe, emails ou dashboard.
+- Não quebrar tráfego humano real do Facebook.
+
+Objetivo:
+Fortalecer a decisão WHITE para tráfego automatizado e manter BLACK para humano válido.
+
+Faça exatamente isto:
+
+1. Auditar os detectores atuais de bot no fluxo Facebook:
+- user-agent patterns;
+- datacenter/proxy IP;
+- rate limit;
+- fake Chrome version;
+- HeadlessChrome;
+- Playwright;
+- Puppeteer;
+- Selenium;
+- CFNetwork;
+- facebookexternalhit;
+- Facebot;
+- macros não resolvidas.
+
+2. Criar função centralizada se ainda não existir:
+detectFacebookBotTraffic(req, context)
+
+Ela deve retornar:
+- isBot: boolean
+- reasons: string[]
+- confidence: low | medium | high
+
+3. Aplicar essa função de forma igual nas rotas:
+- /:slug
+- /r/:slug
+
+4. Garantir que qualquer isBot=true leve para WHITE.
+
+5. Melhorar a lista de detecção para incluir:
+- facebookexternalhit
+- Facebot
+- Meta-ExternalAgent
+- Meta-ExternalFetcher
+- WhatsApp crawler
+- Instagram crawler se existir
+- HeadlessChrome
+- Playwright
+- Puppeteer
+- Selenium
+- PhantomJS
+- curl
+- wget
+- python-requests
+- axios default
+- node-fetch
+- undici
+- Go-http-client
+- Java
+- okhttp
+- PostmanRuntime
+- Chrome com versão impossível
+- UA vazio
+- UA muito curto
+- UA com typo suspeito como Bulid
+- navigator/webdriver signals se já existirem no fluxo
+
+6. Melhorar detecção de IP:
+- datacenter;
+- hosting;
+- proxy;
+- VPN conhecido se a API retornar;
+- ASN suspeito, se já disponível.
+
+7. Não bloquear humano normal apenas por ausência de referrer.
+O bloqueio principal continua sendo:
+- params inválidos;
+- bot detectado;
+- país/device fora da regra.
+
+8. Melhorar logs de decisão:
+- finalDecision: BLACK/WHITE
+- botReasons
+- confidence
+- platform=facebook
+- route
+- slug
+- device
+- country
+- ipType se existir
+
+9. Não logar dados sensíveis.
+
+10. Adicionar testes:
+- Facebook crawler;
+- Meta ExternalAgent;
+- Meta ExternalFetcher;
+- WhatsApp preview;
+- Instagram crawler;
+- HeadlessChrome;
+- Playwright;
+- Puppeteer;
+- Selenium;
+- curl;
+- wget;
+- python requests;
+- axios;
+- node-fetch;
+- Chrome Android real;
+- Safari iPhone real;
+- Facebook in-app browser real;
+- Android Chrome real.
+
+11. Resultado esperado:
+Bots/crawlers/scanners → WHITE
+Humano real com fbcl+xcode válidos → BLACK
+
+12. Medir falsos positivos:
+Garantir que:
+- Facebook in-app browser humano não cai WHITE por engano;
+- Chrome Android real não cai WHITE por engano;
+- Safari iPhone real não cai WHITE por engano.
+
+Critérios de aceite:
+- detectores centralizados;
+- /:slug e /r/:slug iguais;
+- bots conhecidos vão WHITE;
+- humano real válido vai BLACK;
+- logs mostram motivo;
+- nenhum impacto em billing/admin/outros módulos.
+
+No final me entregue:
+- arquivos alterados;
+- nova função criada;
+- lista de bots detectados;
+- matriz de testes;
+- falsos positivos encontrados;
+- riscos restantes.

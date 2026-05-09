@@ -8,6 +8,7 @@ import { getStripeClient, getStripePublishableKey, isStripeConfigured, ensureStr
 import { sql } from "drizzle-orm";
 import { db } from "./db";
 import { tiktok2Telemetry, passwordResetTokens } from "@shared/schema";
+import { checkIPRateLimit, detectBotTraffic } from "./botDetection";
 import { verifyDomainDNS } from "./domainUtils";
 import { resetConsecutiveFailures } from "./domainMonitor";
 import { registerAdminRoutes, seedDefaultEmailTemplates } from "./routes/admin.routes";
@@ -3341,47 +3342,6 @@ export async function registerRoutes(
 
 
 
-  // Rate limiting for bot detection - track clicks per IP
-  const ipClickTracker = new Map<string, { count: number; firstClick: number; lastClick: number }>();
-  const RATE_LIMIT_WINDOW_MS = 180000; // 3 minute window
-  const RATE_LIMIT_MAX_CLICKS = 15; // Max 15 clicks per IP per 3 minutes
-  const RATE_LIMIT_CLEANUP_INTERVAL = 300000; // Clean up every 5 minutes
-
-  // Clean up old entries periodically
-  setInterval(() => {
-    const now = Date.now();
-    for (const [ip, data] of ipClickTracker.entries()) {
-      if (now - data.lastClick > RATE_LIMIT_WINDOW_MS * 2) {
-        ipClickTracker.delete(ip);
-      }
-    }
-  }, RATE_LIMIT_CLEANUP_INTERVAL);
-
-  function checkIPRateLimit(ip: string): { isRateLimited: boolean; clickCount: number } {
-    const now = Date.now();
-    const tracker = ipClickTracker.get(ip);
-    
-    if (!tracker) {
-      ipClickTracker.set(ip, { count: 1, firstClick: now, lastClick: now });
-      return { isRateLimited: false, clickCount: 1 };
-    }
-    
-    // Reset if window has passed
-    if (now - tracker.firstClick > RATE_LIMIT_WINDOW_MS) {
-      ipClickTracker.set(ip, { count: 1, firstClick: now, lastClick: now });
-      return { isRateLimited: false, clickCount: 1 };
-    }
-    
-    // Increment and check
-    tracker.count++;
-    tracker.lastClick = now;
-    
-    return { 
-      isRateLimited: tracker.count > RATE_LIMIT_MAX_CLICKS, 
-      clickCount: tracker.count 
-    };
-  }
-
   // Helper function to extract domain from request headers
   // Checks multiple headers that reverse proxies like EasyPanel, Nginx, Traefik may use
   function extractDomainFromRequest(req: Request): string {
@@ -3593,129 +3553,24 @@ export async function registerRoutes(
       
       let paramsValid = false;
       let failReason = "";
-      let isBotDetected = false;
 
-      // ==========================================
-      // ADVANCED BOT DETECTION FOR TIKTOK
-      // ==========================================
-      
-      // 0. Rate limiting - block IPs with too many clicks in a short time
-      // This catches bot floods like 55 clicks in 1 minute
+      // ── CENTRALIZED BOT DETECTION (/r/:slug) ─────────────────────────────
       const rateLimitResult = checkIPRateLimit(ip);
-      if (rateLimitResult.isRateLimited) {
-        isBotDetected = true;
-        failReason = `rate_limited:${rateLimitResult.clickCount}_clicks_per_minute`;
-        console.log(`[Cloak] BOT DETECTED - Rate limited: ${ip} - ${rateLimitResult.clickCount} clicks in 1 minute`);
-      }
-      
-      // 0b. Datacenter/Hosting IP detection - block traffic from cloud providers
-      // This catches TikTok/Facebook crawlers and VPS-based bots
-      if (!isBotDetected) {
-        const ipAnalysis = await analyzeIP(ip);
-        
-        if (ipAnalysis.isDatacenter) {
-          isBotDetected = true;
-          failReason = `datacenter_ip:${ipAnalysis.isp.substring(0, 30)}`;
-          console.log(`[Cloak] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis.isp} AS: ${ipAnalysis.as} Reason: ${ipAnalysis.reason}`);
-        }
-        
-        if (ipAnalysis.isProxy) {
-          isBotDetected = true;
-          failReason = `proxy_ip:${ipAnalysis.isp.substring(0, 30)}`;
-          console.log(`[Cloak] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis.isp}`);
-        }
-      }
-      
-      // 1. Detect TikTok page verification bots by User-Agent
-      const tiktokBotPatterns = [
-        'thirdLandingPageFeInfra',     // TikTok page verification bot
-        'TikTokBot',                    // Generic TikTok bot
-        'bytespider',                   // ByteDance spider
-        'Bytespider',
-        'PetalBot',                     // Huawei crawler
-        'Googlebot',                    // Google crawler
-        'bingbot',                      // Bing crawler
-        'facebookexternalhit',          // Facebook external crawler
-        'Twitterbot',                   // Twitter crawler
-        'LinkedInBot',                  // LinkedIn crawler
-        'Slackbot',                     // Slack crawler
-        'WhatsApp',                     // WhatsApp crawler
-        'TelegramBot',                  // Telegram crawler
-        'HeadlessChrome',               // Headless browser
-        'PhantomJS',                    // Headless browser
-        'Puppeteer',                    // Puppeteer automation
-        'Playwright',                   // Playwright automation
-      ];
-      
-      // Detect Facebook internal app HTTP client (not a real user browser)
-      // Pattern: "Facebook/[version] CFNetwork/[version] Darwin/[version]"
-      // These are background requests made by the Facebook iOS/macOS app itself
-      const isFacebookInternalApp = /^Facebook\/\d+/.test(userAgent) && userAgent.includes('CFNetwork');
+      const ipAnalysis      = await analyzeIP(ip);
+      const botResult       = detectBotTraffic({
+        userAgent,
+        rateLimitResult,
+        ipAnalysis,
+        ttclid:   ttclid   ?? undefined,
+        cname:    cname    ?? undefined,
+        route:    '/r/:slug',
+        slug,
+        platform: offer.platform,
+      });
+      const isBotDetected = botResult.isBot;
+      if (isBotDetected) failReason = botResult.primaryReason;
+      // ─────────────────────────────────────────────────────────────────────
 
-      const userAgentLower = userAgent.toLowerCase();
-      for (const pattern of tiktokBotPatterns) {
-        if (userAgent.includes(pattern) || userAgentLower.includes(pattern.toLowerCase())) {
-          isBotDetected = true;
-          failReason = `bot_detected:${pattern}`;
-          console.log(`[Cloak] BOT DETECTED - Pattern: ${pattern} - UA: ${userAgent.substring(0, 100)}`);
-          break;
-        }
-      }
-
-      if (!isBotDetected && isFacebookInternalApp) {
-        isBotDetected = true;
-        failReason = `bot_detected:facebook_internal_app`;
-        console.log(`[Cloak] BOT DETECTED - Facebook internal app HTTP client - UA: ${userAgent.substring(0, 100)}`);
-      }
-      
-      // 2. Detect unresolved TikTok macros (bots use template URLs)
-      const unresolvedMacros = [
-        '__CLICKID__',
-        '__CID__',
-        '__AID__',
-        '__AID_NAME__',
-        '__CAMPAIGN_NAME__',
-        '__CAMPAIGN_ID__',
-        '__DOMAIN__',
-        '__PLACEMENT__',
-        '{{clickid}}',
-        '{{campaign_name}}',
-        '${CLICKID}',
-        '${CAMPAIGN}',
-      ];
-      
-      if (!isBotDetected && ttclid) {
-        for (const macro of unresolvedMacros) {
-          if (ttclid.includes(macro) || (cname && cname.includes(macro))) {
-            isBotDetected = true;
-            failReason = `unresolved_macro:${macro}`;
-            console.log(`[Cloak] BOT DETECTED - Unresolved macro: ${macro} in ttclid/cname`);
-            break;
-          }
-        }
-      }
-      
-      // 3b. Detect fake Chrome versions (bots use future versions that don't exist)
-      // Current stable Chrome is around 131-132, anything above 135 is suspicious
-      if (!isBotDetected) {
-        const chromeVersionMatch = userAgent.match(/Chrome\/(\d+)\./);
-        if (chromeVersionMatch) {
-          const chromeVersion = parseInt(chromeVersionMatch[1], 10);
-          if (chromeVersion > 135) {
-            isBotDetected = true;
-            failReason = `fake_chrome_version:${chromeVersion}`;
-            console.log(`[Cloak] BOT DETECTED - Fake Chrome version: ${chromeVersion} (versions above 135 don't exist yet)`);
-          }
-        }
-      }
-      
-      // 3c. Detect User-Agent typos (bots often have "Bulid" instead of "Build")
-      if (!isBotDetected && userAgent.includes('Bulid')) {
-        isBotDetected = true;
-        failReason = 'ua_typo:Bulid';
-        console.log(`[Cloak] BOT DETECTED - User-Agent typo: "Bulid" instead of "Build"`);
-      }
-      
       if (offer.platform === "tiktok") {
         // ==========================================
         // TIKTOK 2 - SIMPLIFIED VALIDATION (NO JS CHALLENGE)
@@ -4234,96 +4089,24 @@ export async function registerRoutes(
       
       let paramsValid = false;
       let failReason = "";
-      let isBotDetected2 = false;
 
-      // ── BOT DETECTION (standardized — matches /r/:slug) ──────────────────
-
-      // 0. Rate limiting — same thresholds as /r/:slug (BUG #2 FIX)
+      // ── CENTRALIZED BOT DETECTION (/:slug) ───────────────────────────────
       const rateLimitResult2 = checkIPRateLimit(ip);
-      if (rateLimitResult2.isRateLimited) {
-        isBotDetected2 = true;
-        failReason = `rate_limited:${rateLimitResult2.clickCount}_clicks_per_minute`;
-        console.log(`[Cloak /:slug] BOT DETECTED - Rate limited: ${ip} - ${rateLimitResult2.clickCount} clicks in window`);
-      }
-
-      // 0b. Datacenter/proxy IP detection
-      if (!isBotDetected2) {
-        const ipAnalysis2 = await analyzeIP(ip);
-        if (ipAnalysis2.isDatacenter) {
-          isBotDetected2 = true;
-          failReason = `datacenter_ip:${ipAnalysis2.isp.substring(0, 30)}`;
-          console.log(`[Cloak /:slug] BOT DETECTED - Datacenter IP: ${ip} ISP: ${ipAnalysis2.isp} AS: ${ipAnalysis2.as}`);
-        } else if (ipAnalysis2.isProxy) {
-          isBotDetected2 = true;
-          failReason = `proxy_ip:${ipAnalysis2.isp.substring(0, 30)}`;
-          console.log(`[Cloak /:slug] BOT DETECTED - Proxy IP: ${ip} ISP: ${ipAnalysis2.isp}`);
-        }
-      }
-
-      // 1. Known bot User-Agent patterns
-      const botUAPatterns2 = [
-        'thirdLandingPageFeInfra', 'TikTokBot', 'bytespider', 'Bytespider',
-        'PetalBot', 'Googlebot', 'bingbot', 'facebookexternalhit',
-        'Twitterbot', 'LinkedInBot', 'Slackbot', 'WhatsApp',
-        'TelegramBot', 'HeadlessChrome', 'PhantomJS', 'Puppeteer', 'Playwright',
-      ];
-      const userAgentLower2 = userAgent.toLowerCase();
-      if (!isBotDetected2) {
-        for (const pattern of botUAPatterns2) {
-          if (userAgent.includes(pattern) || userAgentLower2.includes(pattern.toLowerCase())) {
-            isBotDetected2 = true;
-            failReason = `bot_detected:${pattern}`;
-            console.log(`[Cloak /:slug] BOT DETECTED - Pattern: ${pattern} - UA: ${userAgent.substring(0, 100)}`);
-            break;
-          }
-        }
-      }
-
-      // 2. Facebook internal app HTTP client (background, not a real browser)
-      if (!isBotDetected2 && /^Facebook\/\d+/.test(userAgent) && userAgent.includes('CFNetwork')) {
-        isBotDetected2 = true;
-        failReason = `bot_detected:facebook_internal_app`;
-        console.log(`[Cloak /:slug] BOT DETECTED - Facebook internal app HTTP client - UA: ${userAgent.substring(0, 100)}`);
-      }
-
-      // 3. Fake Chrome version (bots may report versions that don't exist yet)
-      if (!isBotDetected2) {
-        const chromeMatch2 = userAgent.match(/Chrome\/(\d+)\./);
-        if (chromeMatch2) {
-          const chromeVer2 = parseInt(chromeMatch2[1], 10);
-          if (chromeVer2 > 135) {
-            isBotDetected2 = true;
-            failReason = `fake_chrome_version:${chromeVer2}`;
-            console.log(`[Cloak /:slug] BOT DETECTED - Fake Chrome version: ${chromeVer2}`);
-          }
-        }
-      }
-
-      // 4. User-Agent typo ("Bulid" instead of "Build") — known bot fingerprint
-      if (!isBotDetected2 && userAgent.includes('Bulid')) {
-        isBotDetected2 = true;
-        failReason = 'ua_typo:Bulid';
-        console.log(`[Cloak /:slug] BOT DETECTED - User-Agent typo: "Bulid"`);
-      }
-
-      // 5. Unresolved TikTok macros in ttclid (template URLs not expanded)
-      const ttclid2ForMacro = fixedQuery2.ttclid || rawQuery2.ttclid;
-      const cname2ForMacro  = fixedQuery2.cname  || rawQuery2.cname;
-      if (!isBotDetected2 && ttclid2ForMacro) {
-        const unresolvedMacros2 = [
-          '__CLICKID__', '__CID__', '__AID__', '__AID_NAME__',
-          '__CAMPAIGN_NAME__', '__CAMPAIGN_ID__', '__DOMAIN__', '__PLACEMENT__',
-          '{{clickid}}', '{{campaign_name}}', '${CLICKID}', '${CAMPAIGN}',
-        ];
-        for (const macro of unresolvedMacros2) {
-          if (ttclid2ForMacro.includes(macro) || (cname2ForMacro && cname2ForMacro.includes(macro))) {
-            isBotDetected2 = true;
-            failReason = `unresolved_macro:${macro}`;
-            console.log(`[Cloak /:slug] BOT DETECTED - Unresolved macro: ${macro}`);
-            break;
-          }
-        }
-      }
+      const ipAnalysis2      = await analyzeIP(ip);
+      const ttclid2ForMacro  = fixedQuery2.ttclid || rawQuery2.ttclid;
+      const cname2ForMacro   = fixedQuery2.cname  || rawQuery2.cname;
+      const botResult2       = detectBotTraffic({
+        userAgent,
+        rateLimitResult: rateLimitResult2,
+        ipAnalysis:      ipAnalysis2,
+        ttclid:  ttclid2ForMacro ?? undefined,
+        cname:   cname2ForMacro  ?? undefined,
+        route:   '/:slug',
+        slug,
+        platform: offer.platform,
+      });
+      const isBotDetected2 = botResult2.isBot;
+      if (isBotDetected2) failReason = botResult2.primaryReason;
       // ─────────────────────────────────────────────────────────────────────
 
       if (offer.platform === "tiktok" && !isBotDetected2) {
