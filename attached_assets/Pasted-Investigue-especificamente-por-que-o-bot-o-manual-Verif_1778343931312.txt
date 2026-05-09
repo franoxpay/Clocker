@@ -1,0 +1,106 @@
+Investigue especificamente por que o botão manual "Verificar DNS" falha em domínios que aparecem ativos ao recarregar a página.
+
+Contexto:
+- DISABLE_DOMAIN_AUTO_DEACTIVATION já existe.
+- OFFICIAL_CNAME está centralizado.
+- Logs estruturados foram adicionados.
+- O problema observado agora:
+  1. Usuário dá F5 e o domínio aparece ativo;
+  2. Usuário clica no botão de verificar/atualizar DNS;
+  3. o domínio volta para erro "No CNAME record found" ou erro de DNS.
+
+Hipótese:
+O endpoint de verificação manual usa uma lógica frágil/diferente do monitor.
+
+Quero diagnóstico e correção.
+
+Faça exatamente isto:
+
+1. Auditar todos os endpoints manuais:
+- POST /api/domains/:id/verify
+- POST /api/admin/domains/:id/verify
+- POST /api/admin/shared-domains/:id/verify
+- qualquer botão de "Verificar" no frontend.
+
+2. Confirmar qual função cada endpoint chama:
+- domainUtils.ts?
+- domainMonitor.ts?
+- função antiga?
+- função centralizada?
+
+3. Comparar:
+- manual verify;
+- monitor verify.
+
+Verificar diferenças:
+- resolver usado;
+- retry;
+- timeout;
+- fallback HTTP;
+- normalize;
+- CNAME chain;
+- trailing dot;
+- cache;
+- error handling.
+
+4. Se o verify manual ainda usa lógica simples:
+corrigir para usar a mesma lógica robusta do monitor.
+
+Regra:
+O botão "Verificar" e o monitor automático devem usar a MESMA função de verificação DNS.
+
+5. O botão manual NÃO deve desativar domínio imediatamente por falha transitória.
+
+Se a falha for:
+- ETIMEOUT
+- SERVFAIL
+- ECONNRESET
+- DNS temporary failure
+- resolver timeout
+
+Então:
+- não marcar isActive=false;
+- manter estado atual;
+- salvar lastVerificationError;
+- mostrar mensagem: "DNS instável, tente novamente em alguns minutos."
+
+6. Só marcar erro/inativo em verify manual se for falha permanente confirmada:
+- CNAME realmente ausente em múltiplos resolvers;
+- CNAME aponta para destino errado;
+- domínio inexistente.
+
+7. Adicionar resultado detalhado no response do verify:
+- resolverResults;
+- expectedCname;
+- foundCnames;
+- errorType: transient/permanent;
+- source: user_verify/admin_verify;
+- checkedAt.
+
+8. Frontend:
+Mostrar mensagem melhor:
+- "Verificado com sucesso"
+- "DNS ainda propagando"
+- "CNAME encontrado, mas aponta para X"
+- "Nenhum CNAME encontrado em múltiplos resolvers"
+
+9. Não quebrar shared domains.
+10. Não alterar EasyPanel.
+11. Não alterar cloaker.
+
+11. Testar:
+- domínio válido → verify manual OK;
+- domínio recém configurado propagando → não desativa imediatamente;
+- resolver falhando → não desativa imediatamente;
+- CNAME errado → erro claro;
+- CNAME ausente real → erro claro;
+- shared domain válido → OK;
+- shared domain com transient DNS → mantém ativo.
+
+No final me entregue:
+- causa exata;
+- endpoint afetado;
+- função antiga vs nova;
+- logs reais;
+- correção aplicada;
+- resultado dos testes.

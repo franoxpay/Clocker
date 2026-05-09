@@ -2538,51 +2538,76 @@ export async function registerRoutes(
 
       const dnsResult = await verifyDomainDNS(domain.subdomain, "user_verify");
 
-      // PARTE 1 — State-change log before write
-      const { OFFICIAL_CNAME: cnameValue } = await import("./domainUtils");
-      const newIsActive = dnsResult.verified ? true : domain.isActive;
-      const newSsl = dnsResult.verified ? "active" : "pending";
-      if (domain.isVerified !== dnsResult.verified || domain.isActive !== newIsActive || domain.sslStatus !== newSsl) {
-        console.log(JSON.stringify({
-          event: "DOMAIN_STATE_CHANGE",
-          changed: true,
-          domain: domain.subdomain,
-          domainId,
-          domainType: "user",
-          source: "user_verify",
-          previousState: { isActive: domain.isActive, isVerified: domain.isVerified, sslStatus: domain.sslStatus },
-          newState: { isActive: newIsActive, isVerified: dnsResult.verified, sslStatus: newSsl },
-          OFFICIAL_CNAME_value: cnameValue,
-          resolver: "system",
-          error: dnsResult.error,
-          processPid: process.pid,
-          hostname: require("os").hostname(),
-          timestamp: new Date().toISOString(),
-        }));
-      }
-
-      const updated = await storage.updateDomain(domainId, {
-        isVerified: dnsResult.verified,
-        isActive: newIsActive,
-        lastCheckedAt: new Date(),
-        lastVerificationError: dnsResult.error || null,
-        sslStatus: newSsl,
-      });
+      // Build rich response payload (always returned, even on failure)
+      const richPayload = {
+        verified: dnsResult.verified,
+        errorType: dnsResult.errorType,
+        error: dnsResult.error || null,
+        transient: dnsResult.allTransient,
+        resolverResults: dnsResult.resolverResults,
+        foundCnames: dnsResult.foundCnames,
+        expectedCname: dnsResult.expectedCname,
+        source: dnsResult.source,
+        checkedAt: dnsResult.checkedAt,
+        resolverUsed: dnsResult.resolverUsed,
+      };
 
       if (dnsResult.verified) {
-        // Reset automatic monitor's failure counter so a successful manual check
-        // immediately clears any accumulated strike count.
-        resetConsecutiveFailures("user", domainId);
-      }
-
-      if (!dnsResult.verified) {
-        return res.status(400).json({
-          message: dnsResult.error || "DNS verification failed",
-          domain: updated
+        // ── SUCCESS ────────────────────────────────────────────
+        console.log(JSON.stringify({
+          event: "DOMAIN_STATE_CHANGE", changed: true,
+          domain: domain.subdomain, domainId, domainType: "user", source: "user_verify",
+          previousState: { isActive: domain.isActive, isVerified: domain.isVerified },
+          newState: { isActive: true, isVerified: true, sslStatus: "active" },
+          OFFICIAL_CNAME_value: dnsResult.expectedCname, resolver: dnsResult.resolverUsed,
+          processPid: process.pid, hostname: require("os").hostname(),
+          timestamp: new Date().toISOString(),
+        }));
+        const updated = await storage.updateDomain(domainId, {
+          isVerified: true, isActive: true,
+          lastCheckedAt: new Date(), lastVerificationError: null, sslStatus: "active",
         });
+        resetConsecutiveFailures("user", domainId);
+        return res.json({ ...richPayload, domain: updated });
       }
 
-      res.json(updated);
+      if (dnsResult.allTransient) {
+        // ── TRANSIENT FAILURE: preserve current state, save error note only ──
+        console.log(JSON.stringify({
+          event: "MANUAL_VERIFY_TRANSIENT",
+          domain: domain.subdomain, domainId, source: "user_verify",
+          error: dnsResult.error, resolverUsed: dnsResult.resolverUsed,
+          note: "State preserved — domain NOT deactivated for transient DNS failure",
+          processPid: process.pid, hostname: require("os").hostname(),
+          timestamp: new Date().toISOString(),
+        }));
+        await storage.updateDomain(domainId, {
+          lastCheckedAt: new Date(),
+          lastVerificationError: `[DNS instável] ${dnsResult.error}`,
+        });
+        const current = await storage.getDomain(domainId);
+        return res.json({ ...richPayload, domain: current });
+      }
+
+      // ── PERMANENT / MISMATCH FAILURE ───────────────────────
+      // Mark isVerified=false so the user sees the problem, but do NOT set isActive=false.
+      // The monitor handles deactivation after repeated confirmed failures.
+      console.log(JSON.stringify({
+        event: "DOMAIN_STATE_CHANGE", changed: domain.isVerified !== false,
+        domain: domain.subdomain, domainId, domainType: "user", source: "user_verify",
+        previousState: { isActive: domain.isActive, isVerified: domain.isVerified },
+        newState: { isActive: domain.isActive, isVerified: false },
+        OFFICIAL_CNAME_value: dnsResult.expectedCname, resolver: dnsResult.resolverUsed,
+        error: dnsResult.error, errorType: dnsResult.errorType,
+        processPid: process.pid, hostname: require("os").hostname(),
+        timestamp: new Date().toISOString(),
+      }));
+      const updated = await storage.updateDomain(domainId, {
+        isVerified: false,
+        lastCheckedAt: new Date(),
+        lastVerificationError: dnsResult.error || "DNS verification failed",
+      });
+      return res.json({ ...richPayload, domain: updated });
     } catch (error) {
       console.error("Error verifying domain:", error);
       res.status(500).json({ message: "Internal server error" });

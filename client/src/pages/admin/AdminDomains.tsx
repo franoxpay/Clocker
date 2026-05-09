@@ -150,30 +150,65 @@ export default function AdminDomains() {
 
   const verifyDomainMutation = useMutation({
     mutationFn: async ({ id, type }: { id: number; type: 'user' | 'shared' }) => {
-      const endpoint = type === 'shared' 
+      const endpoint = type === 'shared'
         ? `/api/admin/shared-domains/${id}/verify`
         : `/api/admin/domains/${id}/verify`;
       const res = await apiRequest("POST", endpoint);
-      return res.json() as Promise<{ verified: boolean; error: string | null; domain: any }>;
+      return res.json() as Promise<{
+        verified: boolean;
+        errorType: "none" | "transient" | "mismatch" | "permanent";
+        error: string | null;
+        transient: boolean;
+        foundCnames: string[];
+        expectedCname: string;
+        resolverUsed?: string;
+        domain: any;
+      }>;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/shared-domains/inactive"] });
+
       if (data.verified) {
         toast({
-          title: language === "pt-BR" ? "Domínio ativo" : "Domain active",
-          description: language === "pt-BR" ? "DNS verificado com sucesso — domínio está ativo" : "DNS verified successfully — domain is active",
+          title: language === "pt-BR" ? "DNS verificado" : "DNS verified",
+          description: language === "pt-BR"
+            ? `Domínio ativo — verificado via resolver '${data.resolverUsed || "system"}'`
+            : `Domain active — verified via '${data.resolverUsed || "system"}' resolver`,
         });
-      } else {
+        return;
+      }
+
+      if (data.transient || data.errorType === "transient") {
         toast({
-          title: language === "pt-BR" ? "Domínio marcado como inativo" : "Domain marked as inactive",
-          description: data.error 
-            ? (language === "pt-BR" ? `DNS inválido: ${data.error}` : `Invalid DNS: ${data.error}`)
-            : (language === "pt-BR" ? "Nenhum CNAME apontando para clerion.app foi encontrado" : "No CNAME pointing to clerion.app was found"),
+          title: language === "pt-BR" ? "DNS ainda propagando" : "DNS still propagating",
+          description: language === "pt-BR"
+            ? "DNS instável — estado do domínio preservado. Tente novamente em alguns minutos."
+            : "DNS unstable — domain state preserved. Try again in a few minutes.",
+          variant: "default",
+        });
+        return;
+      }
+
+      if (data.errorType === "mismatch" && data.foundCnames.length > 0) {
+        toast({
+          title: language === "pt-BR" ? "CNAME incorreto" : "Wrong CNAME",
+          description: language === "pt-BR"
+            ? `CNAME aponta para '${data.foundCnames[0]}' em vez de '${data.expectedCname}'`
+            : `CNAME points to '${data.foundCnames[0]}' instead of '${data.expectedCname}'`,
           variant: "destructive",
         });
+        return;
       }
+
+      toast({
+        title: language === "pt-BR" ? "CNAME não encontrado" : "CNAME not found",
+        description: language === "pt-BR"
+          ? `Nenhum CNAME encontrado em múltiplos resolvers. Configure o apontamento para ${data.expectedCname}`
+          : `No CNAME found across multiple resolvers. Configure pointing to ${data.expectedCname}`,
+        variant: "destructive",
+      });
     },
     onError: (error: Error) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/domains"] });

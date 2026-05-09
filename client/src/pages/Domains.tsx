@@ -159,55 +159,69 @@ export default function Domains() {
     mutationFn: async (id: number) => {
       setVerifyingId(id);
       const res = await apiRequest("POST", `/api/domains/${id}/verify`);
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Verification failed");
-      }
-      return res.json();
+      // Always parse the body — endpoint returns 200 for all outcomes (verified, transient, permanent)
+      return res.json() as Promise<{
+        verified: boolean;
+        errorType: "none" | "transient" | "mismatch" | "permanent";
+        error: string | null;
+        transient: boolean;
+        foundCnames: string[];
+        expectedCname: string;
+        resolverUsed?: string;
+        domain: any;
+      }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
       setVerifyingId(null);
+
+      if (data.verified) {
+        toast({
+          title: language === "pt-BR" ? "DNS verificado" : "DNS verified",
+          description: language === "pt-BR"
+            ? "Domínio ativo e funcionando corretamente."
+            : "Domain is active and working correctly.",
+        });
+        return;
+      }
+
+      if (data.transient || data.errorType === "transient") {
+        toast({
+          title: language === "pt-BR" ? "DNS ainda propagando" : "DNS still propagating",
+          description: language === "pt-BR"
+            ? "DNS instável ou ainda em propagação — o domínio foi mantido ativo. Tente novamente em alguns minutos."
+            : "DNS is unstable or still propagating — domain kept active. Try again in a few minutes.",
+          variant: "default",
+        });
+        return;
+      }
+
+      if (data.errorType === "mismatch" && data.foundCnames.length > 0) {
+        toast({
+          title: language === "pt-BR" ? "CNAME incorreto" : "Wrong CNAME",
+          description: language === "pt-BR"
+            ? `CNAME aponta para '${data.foundCnames[0]}' em vez de '${data.expectedCname}'`
+            : `CNAME points to '${data.foundCnames[0]}' instead of '${data.expectedCname}'`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // permanent — no CNAME found
       toast({
-        title: t("common.success"),
-        description: language === "pt-BR" 
-          ? "DNS verificado com sucesso! Domínio ativo." 
-          : "DNS verified successfully! Domain active.",
+        title: language === "pt-BR" ? "CNAME não encontrado" : "CNAME not found",
+        description: language === "pt-BR"
+          ? `Nenhum CNAME encontrado em múltiplos servidores DNS. Adicione um CNAME apontando para ${data.expectedCname}`
+          : `No CNAME found across multiple DNS resolvers. Add a CNAME pointing to ${data.expectedCname}`,
+        variant: "destructive",
       });
     },
-    onError: (error: Error) => {
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/domains"] });
       setVerifyingId(null);
-      
-      const errorMessages: Record<string, { pt: string; en: string }> = {
-        "No CNAME record configured for this domain": {
-          pt: "Registro CNAME não encontrado. Configure o DNS no seu provedor.",
-          en: "CNAME record not found. Configure DNS at your provider."
-        },
-        "Domain not found - DNS not configured": {
-          pt: "Domínio não encontrado. Verifique se o DNS foi configurado corretamente.",
-          en: "Domain not found. Check if DNS was configured correctly."
-        },
-        "DNS server error - try again later": {
-          pt: "Erro no servidor DNS. Tente novamente mais tarde.",
-          en: "DNS server error. Try again later."
-        },
-        "No CNAME record found": {
-          pt: "Registro CNAME não encontrado. Configure o apontamento DNS.",
-          en: "CNAME record not found. Configure DNS pointing."
-        }
-      };
-      
-      const translated = errorMessages[error.message];
-      const description = translated 
-        ? (language === "pt-BR" ? translated.pt : translated.en)
-        : (language === "pt-BR" 
-            ? `Verificação falhou: ${error.message}` 
-            : `Verification failed: ${error.message}`);
-      
       toast({
-        title: language === "pt-BR" ? "DNS não verificado" : "DNS not verified",
-        description,
+        title: language === "pt-BR" ? "Erro na verificação" : "Verification error",
+        description: language === "pt-BR" ? "Erro ao verificar DNS. Tente novamente." : "Error checking DNS. Please try again.",
         variant: "destructive",
       });
     },
