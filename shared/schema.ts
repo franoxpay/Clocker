@@ -386,7 +386,7 @@ export const commissions = pgTable(
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
     affiliateUserId: varchar("affiliate_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     referredUserId: varchar("referred_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-    couponId: integer("coupon_id").notNull().references(() => coupons.id, { onDelete: "cascade" }),
+    couponId: integer("coupon_id").references(() => coupons.id, { onDelete: "set null" }),
     couponUsageId: integer("coupon_usage_id").references(() => couponUsages.id, { onDelete: "set null" }),
     stripeSubscriptionId: varchar("stripe_subscription_id"),
     stripeInvoiceId: varchar("stripe_invoice_id"),
@@ -407,6 +407,7 @@ export const commissions = pgTable(
     index("commissions_referred_idx").on(table.referredUserId),
     index("commissions_status_idx").on(table.status),
     index("commissions_created_idx").on(table.createdAt),
+    uniqueIndex("commissions_stripe_invoice_idx").on(table.stripeInvoiceId),
   ]
 );
 

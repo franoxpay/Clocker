@@ -13,6 +13,7 @@ import { startSubscriptionReminder } from "./subscriptionReminder";
 import { getRedisClient } from "./redis";
 import { startBackupScheduler } from "./scripts/backupScheduler";
 import { startLimitEnforcer } from "./limitEnforcer";
+import { pool } from "./db";
 
 const app = express();
 app.set('trust proxy', true);
@@ -363,6 +364,52 @@ app.use((req, res, next) => {
   next();
 });
 
+async function runSafeMigrations() {
+  const client = await pool.connect();
+  try {
+    console.log("[Migration] Running safe schema migrations...");
+
+    // Fix: make commissions.coupon_id nullable (was NOT NULL)
+    await client.query(`ALTER TABLE commissions ALTER COLUMN coupon_id DROP NOT NULL`);
+
+    // Fix: drop old CASCADE FK on coupon_id and replace with SET NULL
+    const fkRes = await client.query(`
+      SELECT tc.constraint_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name
+      WHERE tc.table_name = 'commissions'
+        AND tc.constraint_type = 'FOREIGN KEY'
+        AND kcu.column_name = 'coupon_id'
+      LIMIT 1
+    `);
+    if (fkRes.rows.length > 0) {
+      const oldFk = fkRes.rows[0].constraint_name;
+      await client.query(`ALTER TABLE commissions DROP CONSTRAINT "${oldFk}"`);
+    }
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE commissions ADD CONSTRAINT commissions_coupon_id_fk
+          FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE SET NULL;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
+    `);
+
+    // Fix: add unique partial index on stripe_invoice_id (nulls excluded to allow multiple nulls)
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS commissions_stripe_invoice_idx
+        ON commissions(stripe_invoice_id)
+        WHERE stripe_invoice_id IS NOT NULL
+    `);
+
+    console.log("[Migration] Safe schema migrations complete.");
+  } catch (err: any) {
+    console.error("[Migration] Error during safe migrations:", err.message);
+  } finally {
+    client.release();
+  }
+}
+
 async function ensureFreePlanExists() {
   try {
     const freePlan = await storage.getFreePlan();
@@ -461,6 +508,7 @@ async function reconcileStaleSubscriptions() {
     console.log("[Redis] Initializing connection...");
   }
   
+  await runSafeMigrations();
   await ensureFreePlanExists();
   reconcileStaleSubscriptions().catch((err: any) =>
     console.error("[Reconcile] Unhandled error:", err.message)

@@ -3348,35 +3348,64 @@ export class DatabaseStorage implements IStorage {
   }): Promise<AffiliateWithdrawal> {
     const { affiliateUserId, amount, paymentMethod, paymentReference, notes, adminId } = params;
 
-    const preview = await this.previewWithdrawal(affiliateUserId, amount);
-    if (!preview.valid) {
-      throw new Error(preview.error || 'invalid_withdrawal');
-    }
+    return await db.transaction(async (tx) => {
+      // Lock all pending commissions for this affiliate to prevent concurrent withdrawals
+      const pending = await tx
+        .select()
+        .from(commissions)
+        .where(and(eq(commissions.affiliateUserId, affiliateUserId), eq(commissions.status, 'pending')))
+        .orderBy(commissions.createdAt)
+        .for('update');
 
-    const [withdrawal] = await db
-      .insert(affiliateWithdrawals)
-      .values({
-        affiliateUserId,
-        amount,
-        status: 'paid',
-        paymentMethod,
-        paymentReference,
-        notes,
-        paidAt: new Date(),
-        paidByAdminId: adminId,
-      })
-      .returning();
+      if (amount <= 0) {
+        throw new Error('invalid_amount');
+      }
 
-    const commissionIds = preview.selectedCommissions.map(c => c.id);
-    if (commissionIds.length > 0) {
-      await db
-        .update(commissions)
-        .set({ status: 'paid', paidAt: new Date(), paidByAdminId: adminId, withdrawalId: withdrawal.id })
-        .where(inArray(commissions.id, commissionIds));
-    }
+      const totalPending = pending.reduce((sum, c) => sum + c.amount, 0);
+      if (totalPending === 0 || amount > totalPending) {
+        throw new Error('insufficient_balance');
+      }
 
-    console.log(`[Withdrawal] Created withdrawal ${withdrawal.id} for affiliate ${affiliateUserId}: R$${(amount / 100).toFixed(2)}, ${commissionIds.length} commissions marked paid`);
-    return withdrawal;
+      // Greedy selection: pick commissions in chronological order until amount is met exactly
+      const selected: Commission[] = [];
+      let accumulated = 0;
+      for (const commission of pending) {
+        if (accumulated + commission.amount <= amount) {
+          selected.push(commission);
+          accumulated += commission.amount;
+          if (accumulated === amount) break;
+        }
+      }
+
+      if (accumulated !== amount) {
+        throw new Error('partial_commission');
+      }
+
+      const [withdrawal] = await tx
+        .insert(affiliateWithdrawals)
+        .values({
+          affiliateUserId,
+          amount,
+          status: 'paid',
+          paymentMethod,
+          paymentReference,
+          notes,
+          paidAt: new Date(),
+          paidByAdminId: adminId,
+        })
+        .returning();
+
+      const commissionIds = selected.map(c => c.id);
+      if (commissionIds.length > 0) {
+        await tx
+          .update(commissions)
+          .set({ status: 'paid', paidAt: new Date(), paidByAdminId: adminId, withdrawalId: withdrawal.id })
+          .where(inArray(commissions.id, commissionIds));
+      }
+
+      console.log(`[Withdrawal] Created withdrawal ${withdrawal.id} for affiliate ${affiliateUserId}: R$${(amount / 100).toFixed(2)}, ${commissionIds.length} commissions marked paid`);
+      return withdrawal;
+    });
   }
 
   async getWithdrawal(id: number): Promise<AffiliateWithdrawal | undefined> {
@@ -3440,22 +3469,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async cancelWithdrawal(id: number, adminId: string, reason: string): Promise<AffiliateWithdrawal | undefined> {
-    const [withdrawal] = await db.select().from(affiliateWithdrawals).where(eq(affiliateWithdrawals.id, id));
-    if (!withdrawal || withdrawal.status !== 'paid') return undefined;
+    return await db.transaction(async (tx) => {
+      const [withdrawal] = await tx
+        .select()
+        .from(affiliateWithdrawals)
+        .where(eq(affiliateWithdrawals.id, id))
+        .for('update');
 
-    await db
-      .update(commissions)
-      .set({ status: 'pending', paidAt: null, paidByAdminId: null, withdrawalId: null })
-      .where(eq(commissions.withdrawalId, id));
+      if (!withdrawal || withdrawal.status !== 'paid') return undefined;
 
-    const [updated] = await db
-      .update(affiliateWithdrawals)
-      .set({ status: 'cancelled', cancelledAt: new Date(), cancelledByAdminId: adminId, cancelReason: reason })
-      .where(eq(affiliateWithdrawals.id, id))
-      .returning();
+      // Only revert commissions that are still 'paid' — skip any already reversed by other means
+      await tx
+        .update(commissions)
+        .set({ status: 'pending', paidAt: null, paidByAdminId: null, withdrawalId: null })
+        .where(and(eq(commissions.withdrawalId, id), eq(commissions.status, 'paid')));
 
-    console.log(`[Withdrawal] Cancelled withdrawal ${id} by admin ${adminId}: ${reason}. Commissions reverted to pending.`);
-    return updated;
+      const [updated] = await tx
+        .update(affiliateWithdrawals)
+        .set({ status: 'cancelled', cancelledAt: new Date(), cancelledByAdminId: adminId, cancelReason: reason })
+        .where(eq(affiliateWithdrawals.id, id))
+        .returning();
+
+      console.log(`[Withdrawal] Cancelled withdrawal ${id} by admin ${adminId}: ${reason}. Commissions reverted to pending.`);
+      return updated;
+    });
   }
 
   async getAdminCommissionsDashboard() {
