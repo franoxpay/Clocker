@@ -53,7 +53,7 @@ import type { Coupon, Plan, User } from "@shared/schema";
 import {
   Plus, Pencil, Trash2, Tag, DollarSign, Users, TrendingUp, Check,
   RotateCcw, Download, ChevronLeft, ChevronRight, Activity, RefreshCw,
-  ExternalLink, AlertCircle,
+  ExternalLink, AlertCircle, ShieldAlert,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -92,6 +92,8 @@ interface EnrichedCommission {
   paidByAdminId: string | null;
   reversedAt: string | null;
   reversedReason: string | null;
+  riskFlag: boolean;
+  riskReason: string | null;
   commissionDurationMonths: number | null;
 }
 
@@ -105,6 +107,8 @@ interface AdminDashboard {
   recurringThisMonth: number;
   recurringAmountThisMonth: number;
   totalAffiliatesWithPending: number;
+  atRiskCount: number;
+  atRiskAmount: number;
 }
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
@@ -150,6 +154,7 @@ export default function AdminReferrals() {
   const [filterAffiliate, setFilterAffiliate] = useState("all");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterRiskOnly, setFilterRiskOnly] = useState(false);
   const [page, setPage] = useState(1);
   const LIMIT = 25;
 
@@ -229,6 +234,7 @@ export default function AdminReferrals() {
     if (filterAffiliate && filterAffiliate !== "all") params.set("affiliateId", filterAffiliate);
     if (filterDateFrom) params.set("dateFrom", filterDateFrom);
     if (filterDateTo) params.set("dateTo", filterDateTo);
+    if (filterRiskOnly) params.set("riskOnly", "true");
     return `/api/admin/commissions?${params.toString()}`;
   };
 
@@ -307,6 +313,7 @@ export default function AdminReferrals() {
     setFilterAffiliate("all");
     setFilterDateFrom("");
     setFilterDateTo("");
+    setFilterRiskOnly(false);
     setPage(1);
   };
 
@@ -753,7 +760,29 @@ export default function AdminReferrals() {
                   value={String(dashboard?.reversedCount ?? 0)}
                   color="bg-gray-100 dark:bg-gray-900/30 text-gray-600 dark:text-gray-400"
                 />
+                <DashboardMetricCard
+                  icon={ShieldAlert}
+                  label={language === "pt-BR" ? "Pagas em Risco" : "At-Risk (Paid)"}
+                  value={String(dashboard?.atRiskCount ?? 0)}
+                  color="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-500"
+                />
+                <DashboardMetricCard
+                  icon={ShieldAlert}
+                  label={language === "pt-BR" ? "Valor em Risco" : "At-Risk Amount"}
+                  value={formatCurrency(dashboard?.atRiskAmount ?? 0)}
+                  color="bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-500"
+                />
               </div>
+              {(dashboard?.atRiskCount ?? 0) > 0 && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>
+                    {language === "pt-BR"
+                      ? `${dashboard?.atRiskCount} comissão(ões) pagas estão em risco por refund/chargeback e precisam de revisão manual.`
+                      : `${dashboard?.atRiskCount} paid commission(s) are at risk due to refund/chargeback and need manual review.`}
+                  </span>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground text-center">
                 {language === "pt-BR" ? "Atualizado em tempo real com base nos pagamentos Stripe" : "Updated in real-time based on Stripe payments"}
               </p>
@@ -830,6 +859,19 @@ export default function AdminReferrals() {
                     data-testid="input-filter-date-to"
                   />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">{language === "pt-BR" ? "Risco" : "Risk"}</Label>
+                  <Button
+                    variant={filterRiskOnly ? "default" : "outline"}
+                    size="sm"
+                    className={`h-8 text-xs gap-1 ${filterRiskOnly ? "bg-amber-500 hover:bg-amber-600 border-amber-500" : ""}`}
+                    onClick={() => { setFilterRiskOnly(v => !v); setPage(1); }}
+                    data-testid="button-filter-risk"
+                  >
+                    <ShieldAlert className="w-3 h-3" />
+                    {language === "pt-BR" ? "Em Risco" : "At Risk"}
+                  </Button>
+                </div>
                 <Button variant="ghost" size="sm" onClick={resetFilters} className="h-8 text-xs">
                   {language === "pt-BR" ? "Limpar" : "Clear"}
                 </Button>
@@ -880,7 +922,11 @@ export default function AdminReferrals() {
                   </TableHeader>
                   <TableBody>
                     {commissionsData.commissions.map((c) => (
-                      <TableRow key={c.id} data-testid={`row-commission-${c.id}`}>
+                      <TableRow
+                        key={c.id}
+                        data-testid={`row-commission-${c.id}`}
+                        className={c.riskFlag && c.status === "paid" ? "bg-amber-50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-950/30" : ""}
+                      >
                         <TableCell>
                           <EmailCell email={c.affiliateEmail} id={c.affiliateUserId} />
                         </TableCell>
@@ -902,7 +948,23 @@ export default function AdminReferrals() {
                           ) : "—"}
                         </TableCell>
                         <TableCell><TypeBadge type={c.type || ""} /></TableCell>
-                        <TableCell><StatusBadge status={c.status} /></TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <StatusBadge status={c.status} />
+                            {c.riskFlag && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <ShieldAlert className="w-3.5 h-3.5 text-amber-500 shrink-0" data-testid={`icon-risk-${c.id}`} />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{language === "pt-BR" ? `Em risco: ${c.riskReason ?? "refund/dispute"}` : `At risk: ${c.riskReason ?? "refund/dispute"}`}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm font-medium">
                           {formatCurrency(c.amount)}
                         </TableCell>
@@ -1319,6 +1381,21 @@ export default function AdminReferrals() {
                   <div>
                     <p className="text-xs text-muted-foreground">{language === "pt-BR" ? "Meses de comissão" : "Commission months"}</p>
                     <p>{detailCommission.commissionDurationMonths}</p>
+                  </div>
+                )}
+                {detailCommission.riskFlag && (
+                  <div className="col-span-2 mt-2 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 flex items-start gap-2">
+                    <ShieldAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-amber-800 dark:text-amber-300 text-sm">
+                        {language === "pt-BR" ? "Comissão em Risco" : "Commission At Risk"}
+                      </p>
+                      <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                        {language === "pt-BR"
+                          ? `Esta comissão foi paga mas está associada a um ${detailCommission.riskReason ?? "refund/dispute"} na Stripe. Revise manualmente antes de ignorar.`
+                          : `This commission was paid but is linked to a ${detailCommission.riskReason ?? "refund/dispute"} event on Stripe. Review manually before dismissing.`}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

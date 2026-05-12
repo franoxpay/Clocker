@@ -2144,8 +2144,9 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
       const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
 
+      const riskOnly = req.query.riskOnly === "true";
       const result = await storage.getAllCommissionsFiltered({
-        page, limit, status, type, affiliateUserId, dateFrom, dateTo,
+        page, limit, status, type, affiliateUserId, dateFrom, dateTo, riskOnly,
       });
       res.json(result);
     } catch (error) {

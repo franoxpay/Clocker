@@ -99,6 +99,15 @@ export class WebhookHandlers {
         case 'invoice.payment_succeeded':
           await this.handlePaymentSucceeded(event.data.object);
           break;
+        case 'charge.refunded':
+          await this.handleChargeRefunded(event.data.object);
+          break;
+        case 'charge.dispute.created':
+          await this.handleDisputeCreated(event.data.object);
+          break;
+        case 'charge.dispute.closed':
+          await this.handleDisputeClosed(event.data.object);
+          break;
         default:
           console.log(`[Stripe Webhook] Unhandled event type: ${event.type}`);
       }
@@ -507,6 +516,139 @@ export class WebhookHandlers {
     } catch (error: any) {
       console.error(`[Stripe Webhook] Error reversing commissions for user ${userId}:`, error.message);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Commission refund / dispute handlers
+  // Logic: pending → reversed automatically; paid → flagged as "at risk"
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Central method called by all refund/dispute events.
+   * Finds the commission tied to the given Stripe invoice, then:
+   *   pending  → reverseCommission (automatic)
+   *   paid     → flagCommissionAsRisk (manual review needed)
+   *   reversed → skip (already reversed)
+   *   riskFlag → skip if already flagged (idempotent)
+   */
+  private static async processCommissionRefundEvent(
+    invoiceId: string,
+    reason: 'refund' | 'chargeback' | 'dispute',
+    eventRef: string,
+  ): Promise<void> {
+    const commission = await storage.getCommissionByInvoiceId(invoiceId);
+
+    if (!commission) {
+      console.log(`[Commission Refund] No commission found for invoiceId: ${invoiceId} — event: ${eventRef}`);
+      return;
+    }
+
+    const { id, status, riskFlag } = commission as any;
+    const oldStatus = status as string;
+
+    if (oldStatus === 'reversed') {
+      console.log(`[Commission Refund] Commission ${id} already reversed — skipping (event: ${eventRef})`);
+      return;
+    }
+
+    if (oldStatus === 'pending') {
+      await storage.reverseCommission(id, reason);
+      console.log(
+        `[Commission Refund] ✓ REVERSED — commissionId: ${id}, invoiceId: ${invoiceId}, ` +
+        `reason: ${reason}, oldStatus: pending → reversed, event: ${eventRef}`,
+      );
+    } else if (oldStatus === 'paid') {
+      if (riskFlag) {
+        console.log(`[Commission Refund] Commission ${id} already risk-flagged — skipping (event: ${eventRef})`);
+        return;
+      }
+      await storage.flagCommissionAsRisk(id, reason);
+      console.log(
+        `[Commission Refund] ⚠ FLAGGED AS RISK — commissionId: ${id}, invoiceId: ${invoiceId}, ` +
+        `reason: ${reason}, status: paid (no auto-reverse, manual review needed), event: ${eventRef}`,
+      );
+    } else {
+      console.log(`[Commission Refund] Commission ${id} has unexpected status "${oldStatus}" — skipping (event: ${eventRef})`);
+    }
+  }
+
+  private static async handleChargeRefunded(charge: any): Promise<void> {
+    const invoiceId = charge.invoice as string | null;
+    const chargeId = charge.id as string;
+
+    console.log(`[Stripe Webhook] charge.refunded — chargeId: ${chargeId}, invoiceId: ${invoiceId ?? 'none'}`);
+
+    if (!invoiceId) {
+      console.log('[Commission Refund] charge.refunded has no invoice attached — skipping commission logic');
+      return;
+    }
+
+    await this.processCommissionRefundEvent(invoiceId, 'refund', `charge.refunded:${chargeId}`);
+  }
+
+  private static async handleDisputeCreated(dispute: any): Promise<void> {
+    const disputeId = dispute.id as string;
+    const chargeId = dispute.charge as string | null;
+
+    console.log(`[Stripe Webhook] charge.dispute.created — disputeId: ${disputeId}, chargeId: ${chargeId ?? 'none'}`);
+
+    if (!chargeId) {
+      console.log('[Commission Refund] dispute has no charge — skipping');
+      return;
+    }
+
+    let invoiceId: string | null = null;
+    try {
+      const stripe = await getStripeClient();
+      const stripeCharge = await stripe.charges.retrieve(chargeId);
+      invoiceId = stripeCharge.invoice as string | null;
+    } catch (err: any) {
+      console.error('[Commission Refund] Error fetching charge for dispute.created:', err.message);
+      return;
+    }
+
+    if (!invoiceId) {
+      console.log(`[Commission Refund] dispute charge ${chargeId} has no invoice — skipping`);
+      return;
+    }
+
+    await this.processCommissionRefundEvent(invoiceId, 'chargeback', `charge.dispute.created:${disputeId}`);
+  }
+
+  private static async handleDisputeClosed(dispute: any): Promise<void> {
+    const disputeId = dispute.id as string;
+    const disputeStatus = dispute.status as string;
+    const chargeId = dispute.charge as string | null;
+
+    console.log(`[Stripe Webhook] charge.dispute.closed — disputeId: ${disputeId}, status: ${disputeStatus}`);
+
+    // Only reverse if the merchant LOST the dispute
+    if (disputeStatus !== 'lost') {
+      console.log(`[Commission Refund] dispute.closed with status "${disputeStatus}" — no action needed`);
+      return;
+    }
+
+    if (!chargeId) {
+      console.log('[Commission Refund] dispute has no charge — skipping');
+      return;
+    }
+
+    let invoiceId: string | null = null;
+    try {
+      const stripe = await getStripeClient();
+      const stripeCharge = await stripe.charges.retrieve(chargeId);
+      invoiceId = stripeCharge.invoice as string | null;
+    } catch (err: any) {
+      console.error('[Commission Refund] Error fetching charge for dispute.closed:', err.message);
+      return;
+    }
+
+    if (!invoiceId) {
+      console.log(`[Commission Refund] dispute charge ${chargeId} has no invoice — skipping`);
+      return;
+    }
+
+    await this.processCommissionRefundEvent(invoiceId, 'dispute', `charge.dispute.closed(lost):${disputeId}`);
   }
 
   private static async handlePaymentFailed(invoice: any): Promise<void> {

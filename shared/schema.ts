@@ -369,6 +369,8 @@ export const commissions = pgTable(
     paidByAdminId: varchar("paid_by_admin_id").references(() => users.id, { onDelete: "set null" }),
     reversedAt: timestamp("reversed_at"),
     reversedReason: varchar("reversed_reason"),
+    riskFlag: boolean("risk_flag").default(false).notNull(),
+    riskReason: varchar("risk_reason"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

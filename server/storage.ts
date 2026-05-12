@@ -418,6 +418,7 @@ export interface IStorage {
     affiliateUserId?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    riskOnly?: boolean;
   }): Promise<{
     commissions: Array<Commission & {
       affiliateEmail: string | null;
@@ -442,12 +443,15 @@ export interface IStorage {
     recurringThisMonth: number;
     recurringAmountThisMonth: number;
     totalAffiliatesWithPending: number;
+    atRiskCount: number;
+    atRiskAmount: number;
   }>;
   createCommission(commission: InsertCommission): Promise<Commission>;
   updateCommission(id: number, data: Partial<InsertCommission>): Promise<Commission | undefined>;
   markCommissionAsPaid(id: number, adminId: string): Promise<Commission | undefined>;
   reverseCommission(id: number, reason: string): Promise<Commission | undefined>;
-  
+  flagCommissionAsRisk(id: number, reason: string): Promise<Commission | undefined>;
+
   // Affiliate reports
   getAffiliateStats(affiliateUserId: string): Promise<{
     totalReferrals: number;
@@ -3132,8 +3136,9 @@ export class DatabaseStorage implements IStorage {
     affiliateUserId?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    riskOnly?: boolean;
   }) {
-    const { page, limit, status, type, affiliateUserId, dateFrom, dateTo } = params;
+    const { page, limit, status, type, affiliateUserId, dateFrom, dateTo, riskOnly } = params;
     const offset = (page - 1) * limit;
 
     const conditions: any[] = [];
@@ -3142,6 +3147,7 @@ export class DatabaseStorage implements IStorage {
     if (affiliateUserId) conditions.push(eq(commissions.affiliateUserId, affiliateUserId));
     if (dateFrom) conditions.push(gte(commissions.createdAt, dateFrom));
     if (dateTo) conditions.push(lte(commissions.createdAt, dateTo));
+    if (riskOnly) conditions.push(eq(commissions.riskFlag, true));
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult] = await db
@@ -3166,6 +3172,8 @@ export class DatabaseStorage implements IStorage {
         paidByAdminId: commissions.paidByAdminId,
         reversedAt: commissions.reversedAt,
         reversedReason: commissions.reversedReason,
+        riskFlag: commissions.riskFlag,
+        riskReason: commissions.riskReason,
         couponCode: coupons.code,
         commissionDurationMonths: coupons.commissionDurationMonths,
       })
@@ -3213,6 +3221,8 @@ export class DatabaseStorage implements IStorage {
         paidByAdminId: commissions.paidByAdminId,
         reversedAt: commissions.reversedAt,
         reversedReason: commissions.reversedReason,
+        riskFlag: commissions.riskFlag,
+        riskReason: commissions.riskReason,
         couponCode: coupons.code,
         commissionDurationMonths: coupons.commissionDurationMonths,
       })
@@ -3236,6 +3246,15 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async flagCommissionAsRisk(id: number, reason: string): Promise<Commission | undefined> {
+    const [updated] = await db
+      .update(commissions)
+      .set({ riskFlag: true, riskReason: reason })
+      .where(eq(commissions.id, id))
+      .returning();
+    return updated;
+  }
+
   async getAdminCommissionsDashboard() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -3250,6 +3269,8 @@ export class DatabaseStorage implements IStorage {
         reversedAmount: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.status} = 'reversed'), 0)::int`,
         recurringThisMonth: sql<number>`count(*) filter (where ${commissions.type} = 'recurring' and ${commissions.createdAt} >= ${startOfMonth})::int`,
         recurringAmountThisMonth: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.type} = 'recurring' and ${commissions.createdAt} >= ${startOfMonth}), 0)::int`,
+        atRiskCount: sql<number>`count(*) filter (where ${commissions.riskFlag} = true and ${commissions.status} = 'paid')::int`,
+        atRiskAmount: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.riskFlag} = true and ${commissions.status} = 'paid'), 0)::int`,
       })
       .from(commissions);
 
@@ -3268,6 +3289,8 @@ export class DatabaseStorage implements IStorage {
       recurringThisMonth: stats?.recurringThisMonth ?? 0,
       recurringAmountThisMonth: stats?.recurringAmountThisMonth ?? 0,
       totalAffiliatesWithPending: affiliateResult?.count ?? 0,
+      atRiskCount: stats?.atRiskCount ?? 0,
+      atRiskAmount: stats?.atRiskAmount ?? 0,
     };
   }
 
