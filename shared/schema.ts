@@ -338,7 +338,7 @@ export const couponUsages = pgTable(
   "coupon_usages",
   {
     id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-    couponId: integer("coupon_id").notNull().references(() => coupons.id, { onDelete: "cascade" }),
+    couponId: integer("coupon_id").references(() => coupons.id, { onDelete: "set null" }),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
     stripeSubscriptionId: varchar("stripe_subscription_id"),
     appliedAt: timestamp("applied_at").defaultNow().notNull(),

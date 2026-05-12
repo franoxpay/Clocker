@@ -196,6 +196,14 @@ export class WebhookHandlers {
       updateData.suspendedAt = null;
       updateData.suspensionReason = null;
       updateData.gracePeriodEndsAt = null;
+      // B1 fix: new subscription replaces any previous pending downgrade
+      updateData.pendingPlanId = null;
+      updateData.pendingPlanChangeAt = null;
+      updateData.pendingPlanChangeType = null;
+    }
+
+    if (updateData.pendingPlanId === null) {
+      console.log(`[PendingPlan] Cleared stale pending downgrade for user ${userId} on new checkout`);
     }
 
     await storage.updateUser(userId, updateData);

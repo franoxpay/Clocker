@@ -1,0 +1,110 @@
+Corrigir os 2 bugs finais encontrados na auditoria adversarial.
+
+NÃO alterar arquitetura.
+Correções cirúrgicas e seguras apenas.
+
+========================
+BUG B1 — pendingPlan sobrevivendo cancelamento/resubscribe
+========================
+
+Problema:
+Usuário:
+1. agenda downgrade;
+2. cancela subscription;
+3. resubscreve em outro plano;
+4. pendingPlan antigo continua salvo;
+5. próxima renovação aplica downgrade antigo silenciosamente.
+
+Isso é crítico.
+
+Corrigir:
+
+1. Em TODOS os caminhos que encerram/removem/substituem uma assinatura:
+- limpar:
+  - pendingPlanId
+  - pendingPlanChangeAt
+  - pendingPlanChangeType
+
+Revisar principalmente:
+- handleSubscriptionDeleted
+- downgradeUserToFreePlan
+- checkout.session.completed
+- novo checkout/subscription
+- force plan replacement
+- admin flows
+
+2. Regra:
+Sempre que uma NOVA subscription é criada ou o usuário volta para free:
+→ pending downgrade antigo deve morrer.
+
+3. Adicionar logs:
+[PendingPlan] Cleared stale pending downgrade for user X
+
+4. Testar:
+- downgrade pendente;
+- cancelamento;
+- nova assinatura;
+- renewal;
+- garantir que plano antigo NÃO reaparece.
+
+========================
+BUG B2 — couponUsage cascade
+========================
+
+Problema:
+couponUsages.couponId usa onDelete: cascade.
+Deletar cupom:
+- apaga couponUsages;
+- user.hasUsedCoupon continua true;
+- histórico fica inconsistente.
+
+Corrigir:
+
+1. Alterar FK:
+couponUsages.couponId:
+- remover cascade;
+- usar SET NULL ou RESTRICT.
+
+Preferência:
+SET NULL.
+
+2. Tornar couponId nullable se necessário.
+
+3. Garantir:
+- histórico de coupon usage preservado;
+- usuário continua bloqueado corretamente;
+- admin consegue auditar uso antigo.
+
+4. Testar:
+- usuário usa cupom;
+- deletar cupom;
+- couponUsage permanece;
+- couponId vira null;
+- hasUsedCoupon continua coerente.
+
+========================
+VALIDAÇÃO FINAL
+========================
+
+Após corrigir:
+- rerodar cenário adversarial B1;
+- rerodar cenário B2;
+- confirmar sem regressão em:
+  - afiliados;
+  - comissão;
+  - downgrade;
+  - upgrade;
+  - renewals;
+  - withdrawals.
+
+========================
+ENTREGA
+========================
+
+Entregar:
+- arquivos alterados;
+- migrations;
+- testes executados;
+- logs adicionados;
+- resultado dos cenários;
+- veredicto final.

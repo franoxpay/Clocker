@@ -3828,6 +3828,10 @@ export class DatabaseStorage implements IStorage {
       subscriptionStatus: 'inactive',
       stripeSubscriptionId: null,
       gracePeriodEndsAt: null,
+      // B1 fix: always clear any stale pending downgrade when subscription ends
+      pendingPlanId: null,
+      pendingPlanChangeAt: null,
+      pendingPlanChangeType: null,
     };
     if (freePlan) {
       updateData.planId = freePlan.id;
@@ -3835,6 +3839,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(users).set({ ...updateData, updatedAt: new Date() }).where(eq(users.id, userId));
     await this.deactivateUserOffers(userId);
     console.log(`[SubscriptionEnforcement] Downgraded user ${userId} to free plan`);
+    console.log(`[PendingPlan] Cleared stale pending downgrade for user ${userId}`);
   }
 
   async restoreUserSubscription(userId: string, planId: number, subscriptionStatus: string): Promise<void> {

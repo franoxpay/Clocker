@@ -407,6 +407,34 @@ async function runSafeMigrations() {
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan_change_at timestamp`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan_change_type varchar`);
 
+    // B2 fix: make coupon_usages.coupon_id nullable and switch FK from CASCADE to SET NULL
+    // so that deleting a coupon preserves the usage history (coupon_id becomes null)
+    await client.query(`ALTER TABLE coupon_usages ALTER COLUMN coupon_id DROP NOT NULL`);
+    const cuFkRes = await client.query(`
+      SELECT tc.constraint_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON kcu.constraint_name = tc.constraint_name
+       AND kcu.table_name = tc.table_name
+      WHERE tc.table_name = 'coupon_usages'
+        AND tc.constraint_type = 'FOREIGN KEY'
+        AND kcu.column_name = 'coupon_id'
+      LIMIT 1
+    `);
+    if (cuFkRes.rows.length > 0) {
+      const oldCuFk = cuFkRes.rows[0].constraint_name;
+      await client.query(`ALTER TABLE coupon_usages DROP CONSTRAINT "${oldCuFk}"`);
+      console.log(`[Migration] Dropped old CASCADE FK on coupon_usages.coupon_id (${oldCuFk})`);
+    }
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TABLE coupon_usages ADD CONSTRAINT coupon_usages_coupon_id_fk
+          FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE SET NULL;
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
+    `);
+    console.log("[Migration] coupon_usages.coupon_id FK changed to SET NULL — usage history is now preserved on coupon deletion.");
+
     console.log("[Migration] Safe schema migrations complete.");
   } catch (err: any) {
     console.error("[Migration] Error during safe migrations:", err.message);
