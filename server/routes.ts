@@ -3465,18 +3465,10 @@ export async function registerRoutes(
           });
         }
 
-        // Record coupon usage if coupon was applied
-        if (validatedCoupon) {
-          await storage.createCouponUsage({
-            couponId: validatedCoupon.id,
-            userId,
-            stripeSubscriptionId: subscription.id,
-            discountApplied: validatedCoupon.discountType === 'percentage' 
-              ? Math.round(plan.price * (validatedCoupon.discountValue / 100))
-              : validatedCoupon.discountValue,
-          });
-        }
-        
+        // NOTE: coupon usage is recorded exclusively in the checkout.session.completed webhook
+        // (processCouponUsageAndCommission) to avoid race conditions and duplicate key errors.
+        // Do NOT create coupon usage here — the webhook handles it with full deduplication.
+
         await storage.updateUser(userId, {
           stripeSubscriptionId: subscription.id,
           planId: plan.id,

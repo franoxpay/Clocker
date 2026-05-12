@@ -1,0 +1,124 @@
+Corrigir os 3 blockers finais antes da produção no sistema de pagamentos/afiliados.
+
+NÃO alterar arquitetura principal.
+Fazer correções cirúrgicas e seguras.
+
+========================
+BUG 1 — discountApplied
+========================
+
+Arquivo:
+routes.ts linha ~3474
+
+Problema:
+Está usando:
+discountApplied
+
+Mas o schema correto é:
+discountAmountApplied
+
+Corrigir:
+- substituir pelo nome correto;
+- revisar TODOS os lugares onde createCouponUsage é chamado;
+- garantir consistência total.
+
+========================
+BUG 2 — dupla gravação de coupon usage
+========================
+
+Problema:
+Novo assinante com cartão salvo:
+- grava coupon usage inline em routes.ts;
+- webhook checkout.session.completed tenta gravar novamente.
+
+Mesmo com UNIQUE INDEX:
+- gera exceção silenciosa;
+- pode impedir criação de comissão afiliada.
+
+Objetivo:
+Existir UMA única fonte de verdade.
+
+Implementar:
+- remover gravação inline duplicada;
+OU
+- transformar em upsert/idempotente correto;
+OU
+- deixar exclusivamente no webhook.
+
+Regra:
+coupon usage e comissão devem ser criados apenas UMA vez.
+
+Garantir:
+- afiliado continua recebendo comissão;
+- sem race condition;
+- sem duplicate key errors silenciosos.
+
+========================
+BUG 3 — 3DS no upgrade
+========================
+
+Problema:
+Upgrade retorna requiresAction=true,
+frontend redireciona:
+?checkout=pending&secret=...
+
+Mas Subscription.tsx não possui fluxo para concluir o 3DS.
+
+Resultado:
+- payment_intent fica incomplete;
+- plano não troca;
+- usuário fica travado.
+
+Implementar fluxo correto Stripe 3DS.
+
+Opção preferida:
+stripe.confirmCardPayment(clientSecret)
+
+Fluxo desejado:
+1. backend retorna:
+- requiresAction
+- clientSecret
+
+2. frontend:
+- detecta checkout=pending;
+- chama confirmCardPayment;
+- aguarda confirmação;
+- mostra loading;
+- trata erro;
+- trata cancelamento;
+- trata sucesso.
+
+3. após sucesso:
+- atualizar usuário;
+- atualizar plano;
+- mostrar toast de sucesso.
+
+4. se falhar:
+- plano permanece antigo;
+- mostrar erro claro;
+- permitir retry.
+
+========================
+EXTRA — VALIDAR
+========================
+
+Após corrigir:
+- upgrade normal;
+- upgrade 3DS;
+- upgrade recusado;
+- cupom + cartão salvo;
+- comissão afiliado;
+- webhook duplicado;
+- downgrade pendente.
+
+========================
+ENTREGA
+========================
+
+Entregar:
+- arquivos alterados;
+- como ficou o fluxo;
+- como 3DS funciona agora;
+- como evitou duplicidade;
+- testes executados;
+- veredicto final.

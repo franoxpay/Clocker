@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useSearch } from "wouter";
+import { loadStripe } from "@stripe/stripe-js";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -166,6 +167,8 @@ export default function Subscription() {
   });
   const [couponError, setCouponError] = useState<string | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [confirming3DS, setConfirming3DS] = useState(false);
+  const stripePromiseRef = useRef<Promise<any> | null>(null);
 
   // Clear saved coupon when user gets a subscription
   useEffect(() => {
@@ -366,17 +369,72 @@ export default function Subscription() {
       
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.url) {
         window.location.href = data.url;
       } else if (data.requiresAction && data.clientSecret) {
-        toast({
-          title: language === "pt-BR" ? "Confirmação necessária" : "Confirmation required",
-          description: language === "pt-BR" 
-            ? "Por favor, complete a verificação no seu banco para finalizar o pagamento."
-            : "Please complete the verification with your bank to finalize payment.",
-        });
-        window.location.href = `/subscription?checkout=pending&secret=${data.clientSecret}`;
+        // ── 3DS challenge flow ──────────────────────────────────────────────
+        // Backend returned a payment intent that needs 3DS authentication.
+        // We confirm it directly here using Stripe.js — no page redirect needed.
+        setConfirming3DS(true);
+        try {
+          // Lazily fetch publishable key and load Stripe.js (cached in ref)
+          if (!stripePromiseRef.current) {
+            const pkRes = await fetch('/api/stripe/publishable-key', { credentials: 'include' });
+            const { publishableKey } = await pkRes.json();
+            stripePromiseRef.current = loadStripe(publishableKey);
+          }
+          const stripe = await stripePromiseRef.current;
+          if (!stripe) throw new Error('Stripe.js failed to load');
+
+          const { error, paymentIntent } = await stripe.confirmCardPayment(data.clientSecret);
+
+          if (error) {
+            // User cancelled or card was declined in the 3DS popup
+            const msg = error.code === 'payment_intent_authentication_failure'
+              ? (language === "pt-BR"
+                  ? "Autenticação 3DS falhou. Verifique o seu banco e tente novamente."
+                  : "3DS authentication failed. Please check with your bank and try again.")
+              : (language === "pt-BR"
+                  ? `Pagamento não autorizado: ${error.message}`
+                  : `Payment not authorized: ${error.message}`);
+            setCheckoutError({ message: msg, showAddCard: false });
+            return;
+          }
+
+          if (paymentIntent?.status === 'succeeded') {
+            // Payment confirmed — refresh user data and show upgrade toast
+            await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
+            await queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
+            localStorage.removeItem('pendingCoupon');
+            setCouponApplied(null);
+            toast({
+              title: language === "pt-BR" ? "Upgrade realizado!" : "Upgrade complete!",
+              description: language === "pt-BR"
+                ? "Autenticação concluída. Seu plano foi atualizado imediatamente."
+                : "Authentication complete. Your plan has been upgraded immediately.",
+            });
+          } else {
+            setCheckoutError({
+              message: language === "pt-BR"
+                ? "O pagamento não foi concluído. Tente novamente."
+                : "Payment was not completed. Please try again.",
+              showAddCard: false,
+            });
+          }
+        } catch (err: any) {
+          setCheckoutError({
+            message: language === "pt-BR"
+              ? "Erro ao processar autenticação 3DS. Tente novamente."
+              : "Error processing 3DS authentication. Please try again.",
+            showAddCard: false,
+          });
+        } finally {
+          setConfirming3DS(false);
+        }
+        return;
       } else if (data.success) {
         queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
@@ -627,6 +685,22 @@ export default function Subscription() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* ── 3DS authentication overlay ──────────────────────────────────── */}
+      {confirming3DS && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+          <p className="text-lg font-medium">
+            {language === "pt-BR"
+              ? "Aguardando autenticação 3DS…"
+              : "Waiting for 3DS authentication…"}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {language === "pt-BR"
+              ? "Conclua a verificação na janela do seu banco."
+              : "Complete the verification in your bank's window."}
+          </p>
+        </div>
+      )}
       {checkoutStatus === "success" && (
         <Alert className="border-green-500 bg-green-500/10">
           <CheckCircle className="h-4 w-4 text-green-500" />
