@@ -53,7 +53,7 @@ import type { Coupon, Plan, User } from "@shared/schema";
 import {
   Plus, Pencil, Trash2, Tag, DollarSign, Users, TrendingUp, Check,
   RotateCcw, Download, ChevronLeft, ChevronRight, Activity, RefreshCw,
-  ExternalLink, AlertCircle, ShieldAlert,
+  ExternalLink, AlertCircle, ShieldAlert, Banknote, XCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -111,6 +111,33 @@ interface AdminDashboard {
   atRiskAmount: number;
 }
 
+interface WithdrawalPreview {
+  valid: boolean;
+  error?: string;
+  selectedCommissions: Array<{ id: number; amount: number; createdAt: string }>;
+  exactAmount: number;
+  totalPending: number;
+  remainingBalance: number;
+}
+
+interface AdminWithdrawal {
+  id: number;
+  affiliateUserId: string;
+  affiliateEmail: string | null;
+  amount: number;
+  status: string;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+  notes: string | null;
+  paidAt: string | null;
+  paidByAdminId: string | null;
+  paidByEmail: string | null;
+  cancelledAt: string | null;
+  cancelledByAdminId: string | null;
+  cancelReason: string | null;
+  createdAt: string;
+}
+
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const defaultFormData: CouponFormData = {
@@ -147,6 +174,20 @@ export default function AdminReferrals() {
   const [reversingCommission, setReversingCommission] = useState<EnrichedCommission | null>(null);
   const [reverseReason, setReverseReason] = useState("");
   const [detailCommission, setDetailCommission] = useState<EnrichedCommission | null>(null);
+
+  // withdrawal state
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+  const [withdrawAffiliate, setWithdrawAffiliate] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawMethod, setWithdrawMethod] = useState("");
+  const [withdrawReference, setWithdrawReference] = useState("");
+  const [withdrawNotes, setWithdrawNotes] = useState("");
+  const [withdrawPreview, setWithdrawPreview] = useState<WithdrawalPreview | null>(null);
+  const [cancellingWithdrawal, setCancellingWithdrawal] = useState<AdminWithdrawal | null>(null);
+  const [cancelWithdrawalReason, setCancelWithdrawalReason] = useState("");
+  const [wPage, setWPage] = useState(1);
+  const [wFilterAffiliate, setWFilterAffiliate] = useState("all");
+  const [wFilterStatus, setWFilterStatus] = useState("all");
 
   // filters
   const [filterStatus, setFilterStatus] = useState("all");
@@ -213,6 +254,19 @@ export default function AdminReferrals() {
       "admin.noAffiliate": { "pt-BR": "Sem afiliado", en: "No affiliate" },
       "admin.selectAffiliate": { "pt-BR": "Selecionar afiliado", en: "Select affiliate" },
       "admin.optional": { "pt-BR": "(opcional)", en: "(optional)" },
+      "admin.withdrawals": { "pt-BR": "Retiradas", en: "Withdrawals" },
+      "admin.registerWithdrawal": { "pt-BR": "Registrar Retirada", en: "Register Withdrawal" },
+      "admin.withdrawalAmount": { "pt-BR": "Valor (R$)", en: "Amount (R$)" },
+      "admin.paymentMethod": { "pt-BR": "Método de Pagamento", en: "Payment Method" },
+      "admin.paymentReference": { "pt-BR": "Referência (ex: chave PIX, comprovante)", en: "Reference (e.g. PIX key, receipt)" },
+      "admin.withdrawalNotes": { "pt-BR": "Notas internas", en: "Internal notes" },
+      "admin.previewWithdrawal": { "pt-BR": "Calcular Prévia", en: "Preview" },
+      "admin.confirmWithdrawal": { "pt-BR": "Confirmar Retirada", en: "Confirm Withdrawal" },
+      "admin.cancelWithdrawal": { "pt-BR": "Cancelar Retirada", en: "Cancel Withdrawal" },
+      "admin.cancelWithdrawalReason": { "pt-BR": "Motivo do cancelamento", en: "Cancellation reason" },
+      "admin.pix": { "pt-BR": "PIX", en: "PIX" },
+      "admin.bankTransfer": { "pt-BR": "Transferência Bancária", en: "Bank Transfer" },
+      "admin.other": { "pt-BR": "Outro", en: "Other" },
     };
     return tr[key]?.[language] || key;
   };
@@ -261,6 +315,21 @@ export default function AdminReferrals() {
 
   const { data: usersData } = useQuery<{ users: User[]; total: number }>({
     queryKey: ["/api/admin/users?page=1&limit=100"],
+  });
+
+  const buildWithdrawalsKey = () => {
+    const params = new URLSearchParams({ page: String(wPage), limit: "25" });
+    if (wFilterAffiliate && wFilterAffiliate !== "all") params.set("affiliateId", wFilterAffiliate);
+    if (wFilterStatus && wFilterStatus !== "all") params.set("status", wFilterStatus);
+    return `/api/admin/withdrawals?${params.toString()}`;
+  };
+
+  const { data: withdrawalsData, isLoading: withdrawalsLoading } = useQuery<{
+    withdrawals: AdminWithdrawal[];
+    total: number;
+  }>({
+    queryKey: [buildWithdrawalsKey()],
+    enabled: activeTab === "retiradas",
   });
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -328,10 +397,20 @@ export default function AdminReferrals() {
   };
 
   const totalPages = Math.max(1, Math.ceil((commissionsData?.total || 0) / LIMIT));
+  const wTotalPages = Math.max(1, Math.ceil((withdrawalsData?.total || 0) / 25));
 
   const affiliateOptions = usersData?.users.filter(u =>
     coupons.some(c => c.affiliateUserId === u.id)
   ) || [];
+
+  const resetWithdrawForm = () => {
+    setWithdrawAffiliate("");
+    setWithdrawAmount("");
+    setWithdrawMethod("");
+    setWithdrawReference("");
+    setWithdrawNotes("");
+    setWithdrawPreview(null);
+  };
 
   // ─── Mutations ────────────────────────────────────────────────────────────
 
@@ -424,6 +503,67 @@ export default function AdminReferrals() {
       toast({ title: language === "pt-BR" ? "Comissão estornada" : "Commission reversed" });
     },
     onError: () => toast({ title: language === "pt-BR" ? "Erro ao estornar" : "Error reversing", variant: "destructive" }),
+  });
+
+  const previewWithdrawalMutation = useMutation({
+    mutationFn: async ({ affiliateUserId, amount }: { affiliateUserId: string; amount: number }) => {
+      const res = await apiRequest("POST", "/api/admin/withdrawals/preview", { affiliateUserId, amount });
+      return res.json() as Promise<WithdrawalPreview>;
+    },
+    onSuccess: (data) => setWithdrawPreview(data),
+    onError: () => toast({ title: language === "pt-BR" ? "Erro ao calcular prévia" : "Error calculating preview", variant: "destructive" }),
+  });
+
+  const createWithdrawalMutation = useMutation({
+    mutationFn: async () => {
+      const amountCents = Math.round(parseFloat(withdrawAmount.replace(",", ".")) * 100);
+      const res = await apiRequest("POST", "/api/admin/withdrawals", {
+        affiliateUserId: withdrawAffiliate,
+        amount: amountCents,
+        paymentMethod: withdrawMethod || null,
+        paymentReference: withdrawReference || null,
+        notes: withdrawNotes || null,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Error");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/commissions/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: [buildWithdrawalsKey()] });
+      setIsWithdrawOpen(false);
+      resetWithdrawForm();
+      toast({
+        title: language === "pt-BR"
+          ? `Retirada registrada! ${data.commissionsMarkedPaid} comissões marcadas como pagas.`
+          : `Withdrawal registered! ${data.commissionsMarkedPaid} commissions marked as paid.`,
+      });
+    },
+    onError: (error: any) => toast({
+      title: error.message || (language === "pt-BR" ? "Erro ao registrar retirada" : "Error registering withdrawal"),
+      variant: "destructive",
+    }),
+  });
+
+  const cancelWithdrawalMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+      const res = await apiRequest("POST", `/api/admin/withdrawals/${id}/cancel`, { reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [buildWithdrawalsKey()] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/commissions/dashboard"] });
+      setCancellingWithdrawal(null);
+      setCancelWithdrawalReason("");
+      toast({
+        title: language === "pt-BR"
+          ? "Retirada cancelada. Comissões revertidas para pendente."
+          : "Withdrawal cancelled. Commissions reverted to pending.",
+      });
+    },
+    onError: () => toast({ title: language === "pt-BR" ? "Erro ao cancelar retirada" : "Error cancelling withdrawal", variant: "destructive" }),
   });
 
   // ─── Sub-components ───────────────────────────────────────────────────────
@@ -694,6 +834,10 @@ export default function AdminReferrals() {
           <TabsTrigger value="reports" data-testid="tab-reports">
             <TrendingUp className="w-4 h-4 mr-2" />
             {t("admin.reports")}
+          </TabsTrigger>
+          <TabsTrigger value="retiradas" data-testid="tab-retiradas">
+            <Banknote className="w-4 h-4 mr-2" />
+            {t("admin.withdrawals")}
           </TabsTrigger>
         </TabsList>
 
@@ -1233,6 +1377,288 @@ export default function AdminReferrals() {
             </>
           )}
         </TabsContent>
+        {/* ── RETIRADAS TAB ─────────────────────────────────────────────── */}
+        <TabsContent value="retiradas" className="space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              <Select value={wFilterAffiliate} onValueChange={(v) => { setWFilterAffiliate(v); setWPage(1); }}>
+                <SelectTrigger className="h-8 w-[200px]" data-testid="select-withdrawal-affiliate">
+                  <SelectValue placeholder={t("admin.selectAffiliate")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === "pt-BR" ? "Todos os afiliados" : "All affiliates"}</SelectItem>
+                  {affiliateOptions.map(u => (
+                    <SelectItem key={u.id} value={u.id}>{u.email || u.id}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={wFilterStatus} onValueChange={(v) => { setWFilterStatus(v); setWPage(1); }}>
+                <SelectTrigger className="h-8 w-[140px]" data-testid="select-withdrawal-status">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{language === "pt-BR" ? "Todos" : "All"}</SelectItem>
+                  <SelectItem value="paid">{t("admin.paid")}</SelectItem>
+                  <SelectItem value="cancelled">{language === "pt-BR" ? "Cancelado" : "Cancelled"}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Dialog open={isWithdrawOpen} onOpenChange={(o) => { setIsWithdrawOpen(o); if (!o) resetWithdrawForm(); }}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-register-withdrawal">
+                  <Banknote className="w-4 h-4 mr-2" />
+                  {t("admin.registerWithdrawal")}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Banknote className="w-4 h-4" />
+                    {t("admin.registerWithdrawal")}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.affiliate")}</Label>
+                    <Select value={withdrawAffiliate} onValueChange={(v) => { setWithdrawAffiliate(v); setWithdrawPreview(null); }}>
+                      <SelectTrigger data-testid="select-withdraw-affiliate">
+                        <SelectValue placeholder={t("admin.selectAffiliate")} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {usersData?.users.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.email || u.id}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.withdrawalAmount")}</Label>
+                    <Input
+                      placeholder="0,00"
+                      value={withdrawAmount}
+                      onChange={(e) => { setWithdrawAmount(e.target.value); setWithdrawPreview(null); }}
+                      data-testid="input-withdrawal-amount"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.paymentMethod")} <span className="text-muted-foreground text-xs">{t("admin.optional")}</span></Label>
+                    <Select value={withdrawMethod} onValueChange={setWithdrawMethod}>
+                      <SelectTrigger data-testid="select-withdrawal-method">
+                        <SelectValue placeholder={language === "pt-BR" ? "Selecionar método" : "Select method"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pix">{t("admin.pix")}</SelectItem>
+                        <SelectItem value="bank_transfer">{t("admin.bankTransfer")}</SelectItem>
+                        <SelectItem value="other">{t("admin.other")}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.paymentReference")} <span className="text-muted-foreground text-xs">{t("admin.optional")}</span></Label>
+                    <Input
+                      placeholder={language === "pt-BR" ? "Ex: chave PIX, código de transação" : "E.g. PIX key, transaction code"}
+                      value={withdrawReference}
+                      onChange={(e) => setWithdrawReference(e.target.value)}
+                      data-testid="input-withdrawal-reference"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>{t("admin.withdrawalNotes")} <span className="text-muted-foreground text-xs">{t("admin.optional")}</span></Label>
+                    <Input
+                      placeholder={language === "pt-BR" ? "Notas internas sobre este pagamento" : "Internal notes about this payment"}
+                      value={withdrawNotes}
+                      onChange={(e) => setWithdrawNotes(e.target.value)}
+                      data-testid="input-withdrawal-notes"
+                    />
+                  </div>
+
+                  {/* Preview Button */}
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={!withdrawAffiliate || !withdrawAmount || previewWithdrawalMutation.isPending}
+                    onClick={() => {
+                      const amountCents = Math.round(parseFloat(withdrawAmount.replace(",", ".")) * 100);
+                      if (!isNaN(amountCents) && amountCents > 0 && withdrawAffiliate) {
+                        previewWithdrawalMutation.mutate({ affiliateUserId: withdrawAffiliate, amount: amountCents });
+                      }
+                    }}
+                    data-testid="button-preview-withdrawal"
+                  >
+                    {previewWithdrawalMutation.isPending
+                      ? (language === "pt-BR" ? "Calculando..." : "Calculating...")
+                      : t("admin.previewWithdrawal")}
+                  </Button>
+
+                  {/* Preview Result */}
+                  {withdrawPreview && (
+                    <div className={`rounded-lg border p-4 space-y-2 text-sm ${withdrawPreview.valid ? "border-green-300 bg-green-50 dark:bg-green-950/20" : "border-amber-300 bg-amber-50 dark:bg-amber-950/20"}`}>
+                      <div className="flex items-center gap-2 font-semibold">
+                        {withdrawPreview.valid ? (
+                          <><Check className="w-4 h-4 text-green-600" /><span className="text-green-700 dark:text-green-400">{language === "pt-BR" ? "Prévia válida" : "Valid preview"}</span></>
+                        ) : (
+                          <><AlertCircle className="w-4 h-4 text-amber-600" /><span className="text-amber-700 dark:text-amber-400">{language === "pt-BR" ? "Não é possível processar" : "Cannot process"}</span></>
+                        )}
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{language === "pt-BR" ? "Saldo pendente total:" : "Total pending balance:"}</span>
+                          <span className="font-mono font-medium">R$ {(withdrawPreview.totalPending / 100).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{language === "pt-BR" ? "Comissões selecionadas:" : "Selected commissions:"}</span>
+                          <span className="font-medium">{withdrawPreview.selectedCommissions.length}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{language === "pt-BR" ? "Valor exato a pagar:" : "Exact amount to pay:"}</span>
+                          <span className="font-mono font-medium">R$ {(withdrawPreview.exactAmount / 100).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{language === "pt-BR" ? "Saldo restante após retirada:" : "Remaining balance after:"}</span>
+                          <span className="font-mono font-medium">R$ {(withdrawPreview.remainingBalance / 100).toFixed(2)}</span>
+                        </div>
+                        {!withdrawPreview.valid && withdrawPreview.error === "partial_commission" && (
+                          <p className="text-amber-700 dark:text-amber-400 mt-2 leading-snug">
+                            {language === "pt-BR"
+                              ? `O valor informado não corresponde a um conjunto exato de comissões inteiras. Use R$ ${(withdrawPreview.exactAmount / 100).toFixed(2)} para cobrir as comissões selecionadas.`
+                              : `The amount doesn't match an exact set of whole commissions. Use R$ ${(withdrawPreview.exactAmount / 100).toFixed(2)} to cover the selected commissions.`}
+                          </p>
+                        )}
+                        {!withdrawPreview.valid && withdrawPreview.error === "insufficient_balance" && (
+                          <p className="text-amber-700 dark:text-amber-400 mt-2">
+                            {language === "pt-BR"
+                              ? "Saldo pendente insuficiente para este valor."
+                              : "Insufficient pending balance for this amount."}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={() => { setIsWithdrawOpen(false); resetWithdrawForm(); }}>
+                      {t("admin.cancel")}
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      disabled={!withdrawPreview?.valid || createWithdrawalMutation.isPending}
+                      onClick={() => createWithdrawalMutation.mutate()}
+                      data-testid="button-confirm-withdrawal"
+                    >
+                      {createWithdrawalMutation.isPending
+                        ? (language === "pt-BR" ? "Registrando..." : "Registering...")
+                        : t("admin.confirmWithdrawal")}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* Withdrawals Table */}
+          {withdrawalsLoading ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : !withdrawalsData?.withdrawals.length ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Banknote className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                <p className="font-medium">{language === "pt-BR" ? "Nenhuma retirada registrada" : "No withdrawals registered"}</p>
+                <p className="text-sm mt-1">{language === "pt-BR" ? "Use o botão acima para registrar um pagamento a um afiliado" : "Use the button above to register a payment to an affiliate"}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>{t("admin.affiliate")}</TableHead>
+                      <TableHead>{t("admin.amount")}</TableHead>
+                      <TableHead>{t("admin.paymentMethod")}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Referência" : "Reference"}</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Data" : "Date"}</TableHead>
+                      <TableHead>{t("admin.actions")}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {withdrawalsData.withdrawals.map((w) => (
+                      <TableRow key={w.id} data-testid={`row-withdrawal-${w.id}`}>
+                        <TableCell className="text-xs text-muted-foreground">#{w.id}</TableCell>
+                        <TableCell>
+                          <EmailCell email={w.affiliateEmail} id={w.affiliateUserId} />
+                        </TableCell>
+                        <TableCell className="font-mono font-medium text-sm">
+                          R$ {(w.amount / 100).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-sm capitalize">
+                          {w.paymentMethod === "pix" ? "PIX"
+                            : w.paymentMethod === "bank_transfer" ? (language === "pt-BR" ? "Transf. Bancária" : "Bank Transfer")
+                            : w.paymentMethod || "—"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground max-w-[150px] truncate">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="cursor-default">{w.paymentReference || "—"}</span>
+                              </TooltipTrigger>
+                              {w.paymentReference && <TooltipContent><p>{w.paymentReference}</p></TooltipContent>}
+                            </Tooltip>
+                          </TooltipProvider>
+                        </TableCell>
+                        <TableCell>
+                          {w.status === "paid" ? (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-0">
+                              <Check className="w-3 h-3 mr-1" />{t("admin.paid")}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0">
+                              <XCircle className="w-3 h-3 mr-1" />{language === "pt-BR" ? "Cancelado" : "Cancelled"}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                          {format(new Date(w.createdAt), "dd/MM/yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          {w.status === "paid" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                              onClick={() => setCancellingWithdrawal(w)}
+                              data-testid={`button-cancel-withdrawal-${w.id}`}
+                            >
+                              <XCircle className="w-3.5 h-3.5 mr-1" />
+                              {t("admin.cancel")}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {wTotalPages > 1 && (
+                  <div className="flex items-center justify-between p-3 border-t text-sm text-muted-foreground">
+                    <span>{withdrawalsData.total} {language === "pt-BR" ? "retiradas" : "withdrawals"}</span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="outline" size="icon" className="h-8 w-8" disabled={wPage <= 1} onClick={() => setWPage(p => p - 1)}>
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <span className="px-2">{wPage}/{wTotalPages}</span>
+                      <Button variant="outline" size="icon" className="h-8 w-8" disabled={wPage >= wTotalPages} onClick={() => setWPage(p => p + 1)}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* ── DIALOGS ──────────────────────────────────────────────────────── */}
@@ -1401,6 +1827,49 @@ export default function AdminReferrals() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel withdrawal */}
+      <Dialog open={!!cancellingWithdrawal} onOpenChange={(o) => { if (!o) { setCancellingWithdrawal(null); setCancelWithdrawalReason(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-red-500" />
+              {t("admin.cancelWithdrawal")}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              {language === "pt-BR"
+                ? `Cancelar a retirada de ${cancellingWithdrawal ? formatCurrency(cancellingWithdrawal.amount) : ""} do afiliado ${cancellingWithdrawal?.affiliateEmail || ""}? As comissões vinculadas serão revertidas para "Pendente".`
+                : `Cancel the withdrawal of ${cancellingWithdrawal ? formatCurrency(cancellingWithdrawal.amount) : ""} for affiliate ${cancellingWithdrawal?.affiliateEmail || ""}? Linked commissions will be reverted to "Pending".`}
+            </p>
+            <div className="space-y-1.5">
+              <Label>{t("admin.cancelWithdrawalReason")}</Label>
+              <Input
+                placeholder={language === "pt-BR" ? "Informe o motivo do cancelamento" : "Enter cancellation reason"}
+                value={cancelWithdrawalReason}
+                onChange={(e) => setCancelWithdrawalReason(e.target.value)}
+                data-testid="input-cancel-withdrawal-reason"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => { setCancellingWithdrawal(null); setCancelWithdrawalReason(""); }}>
+                {t("admin.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={!cancelWithdrawalReason.trim() || cancelWithdrawalMutation.isPending}
+                onClick={() => cancellingWithdrawal && cancelWithdrawalMutation.mutate({ id: cancellingWithdrawal.id, reason: cancelWithdrawalReason })}
+                data-testid="button-confirm-cancel-withdrawal"
+              >
+                {cancelWithdrawalMutation.isPending
+                  ? (language === "pt-BR" ? "Cancelando..." : "Cancelling...")
+                  : t("admin.cancelWithdrawal")}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

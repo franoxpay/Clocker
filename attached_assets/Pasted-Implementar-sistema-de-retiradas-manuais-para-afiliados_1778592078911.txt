@@ -1,0 +1,130 @@
+Implementar sistema de retiradas manuais para afiliados.
+
+Contexto:
+As comissões são pagas por fora, manualmente.
+Preciso que o admin consiga registrar um saque/pagamento manual e abater do saldo pendente do afiliado.
+
+Objetivo:
+Criar controle de retiradas para que o saldo pendente fique correto.
+
+Implementar:
+
+1. Criar tabela affiliate_withdrawals
+
+Campos:
+- id
+- affiliateUserId
+- amount
+- status: paid / cancelled
+- paymentMethod: pix / bank_transfer / other
+- paymentReference
+- notes
+- paidAt
+- paidByAdminId
+- createdAt
+- cancelledAt
+- cancelledByAdminId
+- cancelReason
+
+2. Fluxo admin
+
+No painel admin de Indicações/Afiliados:
+Adicionar botão:
+“Registrar pagamento / saque”
+
+O admin escolhe:
+- afiliado;
+- valor;
+- método;
+- referência;
+- observação.
+
+3. Ao registrar saque:
+- criar linha em affiliate_withdrawals;
+- selecionar comissões pending daquele afiliado até alcançar o valor;
+- marcar essas comissões como paid;
+- preencher paidAt e paidByAdminId;
+- vincular comissões ao withdrawalId se necessário.
+
+4. Se o valor do saque for menor que uma comissão:
+Opção recomendada:
+- não permitir pagamento parcial de uma comissão;
+- mostrar erro explicando que o valor precisa cobrir comissões inteiras;
+OU
+- implementar partialPaidAmount.
+
+Para simplicidade agora:
+NÃO permitir parcial.
+Pagar apenas comissões inteiras.
+
+5. Mostrar resumo antes de confirmar:
+- saldo pendente total;
+- valor a pagar;
+- quantas comissões serão marcadas como pagas;
+- valor exato que será abatido;
+- saldo restante.
+
+6. Painel do seller:
+Adicionar seção:
+“Retiradas”
+
+Mostrar:
+- data;
+- valor;
+- método;
+- status;
+- referência;
+- observação.
+
+7. Painel admin:
+Adicionar aba:
+“Retiradas”
+
+Mostrar:
+- afiliado;
+- valor;
+- método;
+- status;
+- pago por;
+- data;
+- referência;
+- observação.
+
+8. Cancelamento de retirada:
+Se admin cancelar uma retirada:
+- status = cancelled;
+- as comissões vinculadas voltam para pending;
+- registrar motivo.
+
+9. Segurança:
+- só admin pode registrar/cancelar;
+- afiliado só vê suas retiradas;
+- não permitir saque maior que saldo pendente;
+- não permitir valor <= 0;
+- não permitir cancelar retirada já contestada se houver regra futura.
+
+10. Métricas:
+Atualizar cards:
+- saldo pendente;
+- total pago;
+- total retirado;
+- retiradas canceladas.
+
+11. Testar:
+- registrar saque exato;
+- registrar saque maior que saldo pendente;
+- registrar saque menor que comissão individual;
+- cancelar saque;
+- seller vê retirada;
+- admin vê retirada;
+- comissões marcadas paid;
+- comissões voltam pending ao cancelar.
+
+No final entregar:
+- arquivos alterados;
+- tabela criada;
+- endpoints criados;
+- fluxo de saque;
+- como o saldo é abatido;
+- telas alteradas;
+- riscos restantes.

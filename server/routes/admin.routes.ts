@@ -2613,4 +2613,99 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // ==========================================
+  // AFFILIATE WITHDRAWALS (ADMIN)
+  // ==========================================
+
+  app.post("/api/admin/withdrawals/preview", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        affiliateUserId: z.string().min(1),
+        amount: z.number().int().positive(),
+      });
+      const { affiliateUserId, amount } = schema.parse(req.body);
+      const preview = await storage.previewWithdrawal(affiliateUserId, amount);
+      res.json(preview);
+    } catch (error: any) {
+      if (error.name === "ZodError") return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      console.error("Error previewing withdrawal:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/withdrawals", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const schema = z.object({
+        affiliateUserId: z.string().min(1),
+        amount: z.number().int().positive(),
+        paymentMethod: z.string().nullable().optional(),
+        paymentReference: z.string().nullable().optional(),
+        notes: z.string().nullable().optional(),
+      });
+      const data = schema.parse(req.body);
+      const adminId = req.user!.id;
+
+      // Validate amount vs pending balance
+      const preview = await storage.previewWithdrawal(data.affiliateUserId, data.amount);
+      if (!preview.valid) {
+        const messages: Record<string, string> = {
+          invalid_amount: "O valor deve ser maior que zero",
+          insufficient_balance: "Saldo pendente insuficiente",
+          partial_commission: `O valor não cobre um número exato de comissões inteiras. Valor exato disponível: R$ ${(preview.exactAmount / 100).toFixed(2)}`,
+        };
+        return res.status(400).json({ message: messages[preview.error!] || preview.error, preview });
+      }
+
+      const withdrawal = await storage.createWithdrawal({
+        affiliateUserId: data.affiliateUserId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod ?? null,
+        paymentReference: data.paymentReference ?? null,
+        notes: data.notes ?? null,
+        adminId,
+      });
+      res.status(201).json({ withdrawal, commissionsMarkedPaid: preview.selectedCommissions.length });
+    } catch (error: any) {
+      if (error.name === "ZodError") return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      console.error("Error creating withdrawal:", error);
+      res.status(400).json({ message: error.message || "Internal server error" });
+    }
+  });
+
+  app.get("/api/admin/withdrawals", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 25;
+      const affiliateUserId = req.query.affiliateId as string | undefined;
+      const status = req.query.status as string | undefined;
+      const result = await storage.getAllWithdrawalsFiltered({ page, limit, affiliateUserId, status });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching withdrawals:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/withdrawals/:id/cancel", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid withdrawal ID" });
+
+      const schema = z.object({ reason: z.string().min(1) });
+      const { reason } = schema.parse(req.body);
+      const adminId = req.user!.id;
+
+      const withdrawal = await storage.getWithdrawal(id);
+      if (!withdrawal) return res.status(404).json({ message: "Withdrawal not found" });
+      if (withdrawal.status !== "paid") return res.status(400).json({ message: "Only paid withdrawals can be cancelled" });
+
+      const updated = await storage.cancelWithdrawal(id, adminId, reason);
+      res.json(updated);
+    } catch (error: any) {
+      if (error.name === "ZodError") return res.status(400).json({ message: "Reason is required" });
+      console.error("Error cancelling withdrawal:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 }

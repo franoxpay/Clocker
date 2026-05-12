@@ -28,7 +28,8 @@ Key data models include:
 - **AdminSettings**: Platform-wide configuration.
 - **Coupons**: Discount coupons with affiliate tracking, supporting percentage or fixed discounts, plan restrictions, and expiration dates.
 - **CouponUsages**: Tracks when users apply coupons, linking to Stripe subscriptions.
-- **Commissions**: Affiliate commission records with status tracking (pending, paid, reversed) and payout management.
+- **Commissions**: Affiliate commission records with status tracking (pending, paid, reversed) and payout management. Includes `withdrawalId` FK linking paid commissions to a withdrawal record.
+- **AffiliateWithdrawals**: Manual payout records created by admins. Tracks amount, method (pix/bank_transfer/other), reference, notes, status (paid/cancelled), and links to the commissions that were paid out.
 
 ### Referral/Affiliate System
 The platform includes a complete affiliate/referral system:

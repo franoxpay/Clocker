@@ -351,6 +351,34 @@ export const couponUsages = pgTable(
   ]
 );
 
+// Affiliate Withdrawals - Retiradas manuais de afiliados
+export const affiliateWithdrawals = pgTable(
+  "affiliate_withdrawals",
+  {
+    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    affiliateUserId: varchar("affiliate_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    amount: integer("amount").notNull(), // em centavos — soma exata das comissões pagas
+    status: varchar("status").default("paid").notNull(), // 'paid' | 'cancelled'
+    paymentMethod: varchar("payment_method"), // 'pix' | 'bank_transfer' | 'other'
+    paymentReference: varchar("payment_reference"),
+    notes: text("notes"),
+    paidAt: timestamp("paid_at").defaultNow(),
+    paidByAdminId: varchar("paid_by_admin_id").references(() => users.id, { onDelete: "set null" }),
+    cancelledAt: timestamp("cancelled_at"),
+    cancelledByAdminId: varchar("cancelled_by_admin_id").references(() => users.id, { onDelete: "set null" }),
+    cancelReason: text("cancel_reason"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("withdrawals_affiliate_idx").on(table.affiliateUserId),
+    index("withdrawals_status_idx").on(table.status),
+    index("withdrawals_created_idx").on(table.createdAt),
+  ]
+);
+
+export type AffiliateWithdrawal = typeof affiliateWithdrawals.$inferSelect;
+export type InsertAffiliateWithdrawal = typeof affiliateWithdrawals.$inferInsert;
+
 // Commissions table - Comissões de afiliados
 export const commissions = pgTable(
   "commissions",
@@ -367,6 +395,7 @@ export const commissions = pgTable(
     status: varchar("status").default("pending").notNull(), // 'pending' | 'paid' | 'reversed'
     paidAt: timestamp("paid_at"),
     paidByAdminId: varchar("paid_by_admin_id").references(() => users.id, { onDelete: "set null" }),
+    withdrawalId: integer("withdrawal_id").references(() => affiliateWithdrawals.id, { onDelete: "set null" }),
     reversedAt: timestamp("reversed_at"),
     reversedReason: varchar("reversed_reason"),
     riskFlag: boolean("risk_flag").default(false).notNull(),

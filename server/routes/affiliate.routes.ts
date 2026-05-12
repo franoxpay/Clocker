@@ -160,4 +160,16 @@ export function registerAffiliateRoutes(app: Express): void {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // Get withdrawal history for current user (as affiliate/seller)
+  app.get("/api/affiliate/withdrawals", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const withdrawals = await storage.getWithdrawalsByAffiliateId(userId);
+      res.json(withdrawals);
+    } catch (error) {
+      console.error("Error fetching affiliate withdrawals:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 }

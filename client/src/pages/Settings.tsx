@@ -32,7 +32,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp, RefreshCw, Activity, RotateCcw } from "lucide-react";
+import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp, RefreshCw, Activity, RotateCcw, Banknote } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
 
@@ -72,6 +72,19 @@ interface AffiliateStats {
     usageCount: number;
     commissionDurationMonths: number | null;
   } | null;
+}
+
+interface AffiliateWithdrawal {
+  id: number;
+  amount: number;
+  status: string;
+  paymentMethod: string | null;
+  paymentReference: string | null;
+  notes: string | null;
+  paidAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  createdAt: string;
 }
 
 interface CommissionDetail {
@@ -117,6 +130,10 @@ export default function Settings() {
 
   const { data: commissionsDetail = [], isLoading: commissionsDetailLoading } = useQuery<CommissionDetail[]>({
     queryKey: ["/api/affiliate/commissions-detail"],
+  });
+
+  const { data: affiliateWithdrawals = [] } = useQuery<AffiliateWithdrawal[]>({
+    queryKey: ["/api/affiliate/withdrawals"],
   });
 
   const changePasswordMutation = useMutation({
@@ -795,6 +812,78 @@ export default function Settings() {
                         </Table>
                       );
                     })()}
+                  </CardContent>
+                </Card>
+
+                {/* ── Withdrawal history ──────────────────────────────── */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Banknote className="w-4 h-4" />
+                      {language === "pt-BR" ? "Histórico de Retiradas" : "Withdrawal History"}
+                    </CardTitle>
+                    <CardDescription>
+                      {language === "pt-BR"
+                        ? "Pagamentos recebidos pelo programa de afiliados"
+                        : "Payments received from the affiliate program"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {affiliateWithdrawals.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground">
+                        <Banknote className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm">
+                          {language === "pt-BR" ? "Nenhuma retirada registrada ainda" : "No withdrawals registered yet"}
+                        </p>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>{language === "pt-BR" ? "Data" : "Date"}</TableHead>
+                            <TableHead>{language === "pt-BR" ? "Valor" : "Amount"}</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>{language === "pt-BR" ? "Método" : "Method"}</TableHead>
+                            <TableHead>{language === "pt-BR" ? "Referência" : "Reference"}</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {affiliateWithdrawals.map((w) => (
+                            <TableRow key={w.id} data-testid={`row-withdrawal-${w.id}`}>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {format(new Date(w.createdAt), "dd/MM/yyyy", {
+                                  locale: language === "pt-BR" ? ptBR : enUS,
+                                })}
+                              </TableCell>
+                              <TableCell className="font-mono font-medium">
+                                R$ {(w.amount / 100).toFixed(2)}
+                              </TableCell>
+                              <TableCell>
+                                <Badge
+                                  className={
+                                    w.status === "paid"
+                                      ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-0"
+                                      : "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0"
+                                  }
+                                >
+                                  {w.status === "paid"
+                                    ? (language === "pt-BR" ? "Pago" : "Paid")
+                                    : (language === "pt-BR" ? "Cancelado" : "Cancelled")}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-sm capitalize">
+                                {w.paymentMethod === "pix" ? "PIX"
+                                  : w.paymentMethod === "bank_transfer" ? (language === "pt-BR" ? "Transf. Bancária" : "Bank Transfer")
+                                  : w.paymentMethod || "—"}
+                              </TableCell>
+                              <TableCell className="text-sm font-mono text-muted-foreground max-w-[200px] truncate">
+                                {w.paymentReference || "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    )}
                   </CardContent>
                 </Card>
               </>

@@ -17,10 +17,12 @@ import {
   removedDomains,
   coupons,
   couponUsages,
+  affiliateWithdrawals,
   commissions,
   emailLogs,
   emailTemplates,
   stripeWebhookEvents,
+  type AffiliateWithdrawal,
   type StripeWebhookEvent,
   type User,
   type InsertUser,
@@ -451,6 +453,36 @@ export interface IStorage {
   markCommissionAsPaid(id: number, adminId: string): Promise<Commission | undefined>;
   reverseCommission(id: number, reason: string): Promise<Commission | undefined>;
   flagCommissionAsRisk(id: number, reason: string): Promise<Commission | undefined>;
+
+  // Withdrawal functions
+  previewWithdrawal(affiliateUserId: string, amount: number): Promise<{
+    valid: boolean;
+    error?: string;
+    selectedCommissions: Commission[];
+    exactAmount: number;
+    totalPending: number;
+    remainingBalance: number;
+  }>;
+  createWithdrawal(params: {
+    affiliateUserId: string;
+    amount: number;
+    paymentMethod: string | null;
+    paymentReference: string | null;
+    notes: string | null;
+    adminId: string;
+  }): Promise<AffiliateWithdrawal>;
+  getWithdrawal(id: number): Promise<AffiliateWithdrawal | undefined>;
+  getWithdrawalsByAffiliateId(affiliateUserId: string): Promise<AffiliateWithdrawal[]>;
+  getAllWithdrawalsFiltered(params: {
+    page: number;
+    limit: number;
+    affiliateUserId?: string;
+    status?: string;
+  }): Promise<{
+    withdrawals: Array<AffiliateWithdrawal & { affiliateEmail: string | null; paidByEmail: string | null }>;
+    total: number;
+  }>;
+  cancelWithdrawal(id: number, adminId: string, reason: string): Promise<AffiliateWithdrawal | undefined>;
 
   // Affiliate reports
   getAffiliateStats(affiliateUserId: string): Promise<{
@@ -3223,6 +3255,7 @@ export class DatabaseStorage implements IStorage {
         reversedReason: commissions.reversedReason,
         riskFlag: commissions.riskFlag,
         riskReason: commissions.riskReason,
+        withdrawalId: commissions.withdrawalId,
         couponCode: coupons.code,
         commissionDurationMonths: coupons.commissionDurationMonths,
       })
@@ -3252,6 +3285,176 @@ export class DatabaseStorage implements IStorage {
       .set({ riskFlag: true, riskReason: reason })
       .where(eq(commissions.id, id))
       .returning();
+    return updated;
+  }
+
+  // ==================== WITHDRAWALS ====================
+
+  async previewWithdrawal(affiliateUserId: string, amount: number) {
+    if (amount <= 0) {
+      return { valid: false, error: 'invalid_amount', selectedCommissions: [] as Commission[], exactAmount: 0, totalPending: 0, remainingBalance: 0 };
+    }
+
+    const pending = await db
+      .select()
+      .from(commissions)
+      .where(and(eq(commissions.affiliateUserId, affiliateUserId), eq(commissions.status, 'pending')))
+      .orderBy(commissions.createdAt);
+
+    const totalPending = pending.reduce((sum, c) => sum + c.amount, 0);
+
+    if (totalPending === 0 || amount > totalPending) {
+      return { valid: false, error: 'insufficient_balance', selectedCommissions: [] as Commission[], exactAmount: 0, totalPending, remainingBalance: 0 };
+    }
+
+    const selected: Commission[] = [];
+    let accumulated = 0;
+
+    for (const commission of pending) {
+      if (accumulated + commission.amount <= amount) {
+        selected.push(commission as Commission);
+        accumulated += commission.amount;
+        if (accumulated === amount) break;
+      }
+    }
+
+    if (accumulated !== amount) {
+      return {
+        valid: false,
+        error: 'partial_commission',
+        selectedCommissions: selected,
+        exactAmount: accumulated,
+        totalPending,
+        remainingBalance: totalPending - accumulated,
+      };
+    }
+
+    return {
+      valid: true,
+      selectedCommissions: selected,
+      exactAmount: accumulated,
+      totalPending,
+      remainingBalance: totalPending - accumulated,
+    };
+  }
+
+  async createWithdrawal(params: {
+    affiliateUserId: string;
+    amount: number;
+    paymentMethod: string | null;
+    paymentReference: string | null;
+    notes: string | null;
+    adminId: string;
+  }): Promise<AffiliateWithdrawal> {
+    const { affiliateUserId, amount, paymentMethod, paymentReference, notes, adminId } = params;
+
+    const preview = await this.previewWithdrawal(affiliateUserId, amount);
+    if (!preview.valid) {
+      throw new Error(preview.error || 'invalid_withdrawal');
+    }
+
+    const [withdrawal] = await db
+      .insert(affiliateWithdrawals)
+      .values({
+        affiliateUserId,
+        amount,
+        status: 'paid',
+        paymentMethod,
+        paymentReference,
+        notes,
+        paidAt: new Date(),
+        paidByAdminId: adminId,
+      })
+      .returning();
+
+    const commissionIds = preview.selectedCommissions.map(c => c.id);
+    if (commissionIds.length > 0) {
+      await db
+        .update(commissions)
+        .set({ status: 'paid', paidAt: new Date(), paidByAdminId: adminId, withdrawalId: withdrawal.id })
+        .where(inArray(commissions.id, commissionIds));
+    }
+
+    console.log(`[Withdrawal] Created withdrawal ${withdrawal.id} for affiliate ${affiliateUserId}: R$${(amount / 100).toFixed(2)}, ${commissionIds.length} commissions marked paid`);
+    return withdrawal;
+  }
+
+  async getWithdrawal(id: number): Promise<AffiliateWithdrawal | undefined> {
+    const [row] = await db.select().from(affiliateWithdrawals).where(eq(affiliateWithdrawals.id, id));
+    return row;
+  }
+
+  async getWithdrawalsByAffiliateId(affiliateUserId: string): Promise<AffiliateWithdrawal[]> {
+    return db
+      .select()
+      .from(affiliateWithdrawals)
+      .where(eq(affiliateWithdrawals.affiliateUserId, affiliateUserId))
+      .orderBy(desc(affiliateWithdrawals.createdAt));
+  }
+
+  async getAllWithdrawalsFiltered(params: { page: number; limit: number; affiliateUserId?: string; status?: string }) {
+    const { page, limit, affiliateUserId, status } = params;
+    const offset = (page - 1) * limit;
+    const conditions: any[] = [];
+    if (affiliateUserId) conditions.push(eq(affiliateWithdrawals.affiliateUserId, affiliateUserId));
+    if (status) conditions.push(eq(affiliateWithdrawals.status, status));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(affiliateWithdrawals)
+      .where(whereClause);
+
+    const rows = await db
+      .select()
+      .from(affiliateWithdrawals)
+      .where(whereClause)
+      .orderBy(desc(affiliateWithdrawals.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    if (rows.length === 0) return { withdrawals: [], total: 0 };
+
+    const allUserIds = [
+      ...new Set([
+        ...rows.map(r => r.affiliateUserId),
+        ...rows.map(r => r.paidByAdminId).filter(Boolean) as string[],
+      ])
+    ];
+
+    const userRows = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(inArray(users.id, allUserIds));
+
+    const userMap = new Map(userRows.map(u => [u.id, u.email]));
+
+    return {
+      withdrawals: rows.map(r => ({
+        ...r,
+        affiliateEmail: userMap.get(r.affiliateUserId) ?? null,
+        paidByEmail: r.paidByAdminId ? (userMap.get(r.paidByAdminId) ?? null) : null,
+      })),
+      total: countResult?.count ?? 0,
+    };
+  }
+
+  async cancelWithdrawal(id: number, adminId: string, reason: string): Promise<AffiliateWithdrawal | undefined> {
+    const [withdrawal] = await db.select().from(affiliateWithdrawals).where(eq(affiliateWithdrawals.id, id));
+    if (!withdrawal || withdrawal.status !== 'paid') return undefined;
+
+    await db
+      .update(commissions)
+      .set({ status: 'pending', paidAt: null, paidByAdminId: null, withdrawalId: null })
+      .where(eq(commissions.withdrawalId, id));
+
+    const [updated] = await db
+      .update(affiliateWithdrawals)
+      .set({ status: 'cancelled', cancelledAt: new Date(), cancelledByAdminId: adminId, cancelReason: reason })
+      .where(eq(affiliateWithdrawals.id, id))
+      .returning();
+
+    console.log(`[Withdrawal] Cancelled withdrawal ${id} by admin ${adminId}: ${reason}. Commissions reverted to pending.`);
     return updated;
   }
 
