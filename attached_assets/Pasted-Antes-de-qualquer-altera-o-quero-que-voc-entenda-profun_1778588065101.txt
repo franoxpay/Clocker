@@ -1,0 +1,121 @@
+Antes de qualquer alteração, quero que você entenda profundamente a arquitetura e o propósito do projeto inteiro.
+
+NÃO implemente nada ainda.
+NÃO faça mudanças ainda.
+Primeiro faça uma leitura estrutural completa do sistema.
+
+Objetivo:
+Entender como o projeto funciona, quais são os módulos principais, quais regras de negócio existem e como frontend/backend se conectam.
+
+Faça uma auditoria inicial completa lendo os arquivos mais importantes.
+
+Quero que você analise:
+
+1. Estrutura geral do projeto
+- pastas principais;
+- separação frontend/backend;
+- rotas;
+- serviços;
+- jobs/schedulers;
+- auth;
+- banco;
+- monitoramento;
+- cloaker;
+- domínio;
+- billing;
+- afiliados;
+- emails.
+
+2. Backend
+Mapear:
+- server/index.ts
+- server/routes.ts
+- server/replitAuth.ts
+- server/storage.ts
+- server/domainMonitor.ts
+- server/limitEnforcer.ts
+- server/email.ts
+- server/webhookHandlers.ts
+- server/auth/*
+- server/routes/*
+- qualquer serviço crítico.
+
+3. Frontend
+Mapear:
+- App.tsx
+- sidebar/layout
+- páginas admin
+- páginas usuário
+- React Query
+- auth flow
+- componentes compartilhados
+- sistema de permissões.
+
+4. Banco de dados
+Ler:
+- shared/schema.ts
+- tabelas principais;
+- relações;
+- entidades críticas.
+
+5. Cloaker / tráfego
+Entender:
+- roteamento black/white;
+- detecção de bots;
+- verificação de IP;
+- Facebook/TikTok params;
+- logs;
+- click tracking.
+
+6. Billing
+Entender:
+- Stripe;
+- assinaturas;
+- planos;
+- grace period;
+- usuários manuais;
+- métricas financeiras.
+
+7. Domínios
+Entender:
+- domínio próprio;
+- domínio compartilhado;
+- monitor DNS;
+- SSL;
+- ativação/desativação;
+- verificações.
+
+8. Sistema admin
+Entender:
+- auth;
+- permissões;
+- impersonação;
+- monitoramento;
+- logs;
+- emails;
+- billing.
+
+9. Sistema de emails
+Entender:
+- templates;
+- logs;
+- resend;
+- automações;
+- webhooks.
+
+10. Resultado esperado
+Quero um relatório completo contendo:
+- arquitetura geral;
+- fluxo do sistema;
+- módulos críticos;
+- como tudo se conecta;
+- riscos técnicos;
+- pontos frágeis;
+- duplicações;
+- código legado;
+- áreas sensíveis;
+- melhorias prioritárias.
+
+IMPORTANTE:
+Não altere nada ainda.
+Primeiro entenda o projeto inteiro com profundidade.
