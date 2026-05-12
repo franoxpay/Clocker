@@ -1,0 +1,89 @@
+Quero uma auditoria focada somente em:
+1. Sistema de indicações/afiliados
+2. Pagamentos/Stripe
+3. Upgrade e downgrade de plano
+
+Não implementar nada ainda.
+Apenas auditar.
+
+Verificar:
+
+1. Indicações
+- comissão inicial;
+- comissão recorrente;
+- refund/chargeback;
+- retiradas;
+- saldo pendente/pago;
+- duplicidade;
+- segurança.
+
+2. Upgrade
+Confirmar:
+- upgrade troca o plano imediatamente?
+- Stripe cobra diferença/proration?
+- banco atualiza na hora?
+- se pagamento falhar, o que acontece?
+- comissão afiliada considera upgrade?
+- usuário recebe mensagem clara antes/depois?
+
+3. Downgrade
+Confirmar regra atual:
+- downgrade acontece na hora?
+- ou fica agendado para fim do ciclo?
+- usuário mantém plano atual até acabar?
+- banco salva downgrade pendente?
+- Stripe agenda mudança no próximo ciclo?
+- mensagem explica isso ao usuário?
+
+Regra desejada:
+- Upgrade: aplicar imediatamente e cobrar diferença.
+- Downgrade: não aplicar imediatamente; manter plano atual até o fim do ciclo e mudar só na próxima renovação.
+
+4. Falha de pagamento
+Verificar:
+- upgrade com cartão recusado;
+- downgrade com erro;
+- invoice.payment_failed;
+- grace period;
+- suspensão;
+- mensagens no painel;
+- emails enviados.
+
+5. UI/Mensagens
+Verificar se o usuário vê mensagens claras:
+- upgrade imediato;
+- downgrade no fim do ciclo;
+- cobrança proporcional;
+- falha no cartão;
+- período de carência;
+- suspensão.
+
+6. Admin
+Verificar:
+- admin vê plano atual;
+- plano futuro/downgrade pendente;
+- status Stripe;
+- invoices;
+- falhas.
+
+7. Stripe
+Verificar:
+- subscription update;
+- proration_behavior;
+- payment_behavior;
+- pending_update;
+- cancel_at_period_end;
+- webhook relevante;
+- customer.subscription.updated;
+- invoice.payment_succeeded;
+- invoice.payment_failed.
+
+8. Resultado final
+Entregar:
+- regra atual real;
+- bugs encontrados;
+- riscos;
+- se upgrade está correto;
+- se downgrade está correto;
+- se mensagens existem;
+- o que precisa corrigir antes de produção.
