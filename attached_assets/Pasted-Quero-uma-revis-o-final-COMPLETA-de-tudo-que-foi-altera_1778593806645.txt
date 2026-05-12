@@ -1,0 +1,125 @@
+Quero uma revisão final COMPLETA de tudo que foi alterado no sistema de afiliados/indicação/comissões/retiradas.
+
+Objetivo:
+Validar se toda a lógica está correta, consistente e segura antes de considerar finalizado.
+
+NÃO implementar novas features agora.
+Apenas revisar profundamente.
+
+Revisar:
+
+1. Fluxo completo de afiliado
+- geração de cupom;
+- tracking;
+- cadastro do indicado;
+- assinatura;
+- criação de comissão;
+- recorrência;
+- reversão;
+- retirada;
+- cancelamento de retirada.
+
+2. Comissão recorrente
+Confirmar:
+- invoice.payment_succeeded;
+- billing_reason;
+- deduplicação;
+- durationMonths;
+- renewals;
+- invoiceId;
+- subscriptionId;
+- idempotência.
+
+3. Refund/chargeback
+Confirmar:
+- pending → reversed;
+- paid → riskFlag;
+- disputa ganha → sem ação;
+- duplicidade de webhook;
+- invoice inexistente.
+
+4. Retiradas
+Confirmar:
+- seleção correta de comissões;
+- sem parcial;
+- soma correta;
+- cancelamento restaura pending;
+- withdrawalId consistente;
+- saldo pendente correto depois.
+
+5. Banco de dados
+Auditar:
+- affiliate_withdrawals;
+- commissions;
+- coupon_usages;
+- índices;
+- FKs;
+- nullable incorreto;
+- risco de orphan rows;
+- risco de race condition.
+
+6. Painel seller
+Confirmar:
+- métricas corretas;
+- saldo pendente correto;
+- histórico consistente;
+- meses restantes corretos;
+- retiradas corretas.
+
+7. Painel admin
+Confirmar:
+- filtros;
+- CSV;
+- dashboard;
+- reversão;
+- risco;
+- cards;
+- totais.
+
+8. Segurança
+Verificar:
+- usuário vendo dados de outro;
+- endpoint sem auth;
+- admin bypass;
+- race conditions;
+- saque duplicado;
+- webhook replay;
+- dupla comissão;
+- retirada maior que saldo.
+
+9. Performance
+Verificar:
+- N+1;
+- joins;
+- queries pesadas;
+- paginação;
+- índices ausentes.
+
+10. Casos extremos
+Testar mentalmente:
+- renewal chega antes do checkout;
+- refund após saque;
+- cancelamento após recurring;
+- charge sem invoice;
+- invoice sem couponUsage;
+- afiliado removido;
+- usuário manual;
+- Stripe retry;
+- webhook fora de ordem.
+
+11. Revisão arquitetural
+Confirmar:
+- fluxo ficou limpo;
+- sem duplicação;
+- sem lógica morta;
+- sem código legado conflitante.
+
+12. Resultado final
+Me entregar:
+- o que está correto;
+- bugs encontrados;
+- inconsistências;
+- riscos restantes;
+- melhorias futuras;
+- prioridade de cada risco;
+- se o sistema está pronto para produção ou não.
