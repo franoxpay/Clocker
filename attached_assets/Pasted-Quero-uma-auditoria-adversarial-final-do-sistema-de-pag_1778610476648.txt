@@ -1,0 +1,90 @@
+Quero uma auditoria adversarial final do sistema de pagamentos/planos/afiliados.
+
+Objetivo:
+Tentar encontrar qualquer falha escondida que auditorias anteriores não pegaram.
+
+Não implemente nada.
+Pense como QA financeiro, atacante, Stripe webhook duplicado, usuário malicioso e admin descuidado.
+
+Revisar profundamente:
+
+1. Estados impossíveis
+Procurar combinações inválidas:
+- user.planId diferente do price atual da Stripe;
+- pendingPlanId preenchido sem subscription ativa;
+- subscriptionStatus active sem stripeSubscriptionId;
+- commission paid sem withdrawalId;
+- withdrawal paid sem comissões vinculadas;
+- couponUsage sem coupon;
+- commission sem invoice;
+- user hasUsedCoupon=true mas sem couponUsage.
+
+2. Corridas e duplicidade
+Simular mentalmente:
+- duplo clique em checkout;
+- upgrade duas vezes em 10s;
+- downgrade seguido de upgrade;
+- admin change-plan durante downgrade pendente;
+- webhook chegando durante mudança manual;
+- dois webhooks iguais;
+- dois admins pagando retirada;
+- refund durante saque.
+
+3. Webhooks fora de ordem
+Validar:
+- invoice.payment_succeeded antes de checkout.session.completed;
+- subscription.updated antes de invoice.paid;
+- subscription.deleted antes de refund;
+- dispute.created depois de comissão paga;
+- retry de evento com erro parcial.
+
+4. Stripe live/test
+Verificar:
+- eventos test não contaminam receita live;
+- webhook secret live configurado;
+- priceId live correto nos planos;
+- customer/subscription test não misturado com live.
+
+5. Integridade financeira
+Procurar:
+- cobrança dupla;
+- plano liberado sem pagamento;
+- comissão criada sem pagamento;
+- comissão paga duas vezes;
+- saque maior que saldo;
+- cancelamento gerando crédito indevido;
+- downgrade aplicado antes do prazo.
+
+6. Banco/migrations
+Verificar:
+- migrations startup idempotentes;
+- índices criados corretamente;
+- FKs corretas;
+- constraints não quebram dados antigos;
+- rollback seguro;
+- NULLs esperados.
+
+7. UI enganosa
+Verificar:
+- usuário vendo plano errado;
+- toast de sucesso antes de confirmação real;
+- seller vendo saldo errado;
+- admin vendo métricas erradas;
+- pagamento pending parecendo pago.
+
+8. Segurança
+Verificar:
+- usuário acessando dados de afiliado de outro;
+- usuário manipulando planId no request;
+- usuário usando cupom próprio;
+- usuário alterando pendingPlanId;
+- endpoint admin exposto sem auth.
+
+9. Resultado esperado
+Entregar:
+- inconsistências encontradas;
+- bugs reais;
+- falsos positivos descartados;
+- riscos remanescentes;
+- checklist final;
+- veredicto honesto: pronto ou não pronto para produção.
