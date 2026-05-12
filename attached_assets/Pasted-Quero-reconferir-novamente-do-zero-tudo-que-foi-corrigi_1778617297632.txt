@@ -1,0 +1,97 @@
+Quero reconferir novamente, do zero, tudo que foi corrigido em pagamentos, planos, afiliados e retiradas.
+
+Não implemente nada.
+Apenas audite e valide novamente.
+
+Revisar exatamente:
+
+1. Upgrade
+- usa subscriptions.update;
+- não cria assinatura duplicada;
+- cobra proration corretamente;
+- 3DS funciona;
+- cartão recusado não troca plano;
+- limpa pendingPlan antigo.
+
+2. Downgrade
+- agenda corretamente;
+- não muda planId antes da renovação;
+- mantém limites atuais;
+- aplica somente na renovação;
+- pendingPlan é limpo em cancelamento, resubscribe e admin change-plan.
+
+3. Webhooks
+- checkout.session.completed;
+- invoice.payment_succeeded;
+- invoice.payment_failed;
+- customer.subscription.updated;
+- customer.subscription.deleted;
+- charge.refunded;
+- dispute.created;
+- dispute.closed;
+- idempotência;
+- eventos fora de ordem.
+
+4. Afiliados
+- coupon usage criado só no webhook;
+- comissão one_time;
+- comissão recurring;
+- deduplicação por invoiceId;
+- refund/chargeback;
+- riskFlag;
+- cancelamento de assinatura;
+- cupom deletado preserva histórico.
+
+5. Retiradas
+- createWithdrawal em transação;
+- SELECT FOR UPDATE;
+- sem saque duplicado;
+- cancelWithdrawal em transação;
+- reversed não volta pending;
+- withdrawalId correto.
+
+6. Banco/migrations
+- pendingPlanId/At/Type;
+- affiliate_withdrawals;
+- commissions.withdrawalId;
+- couponUsages.couponId SET NULL;
+- commissions.couponId SET NULL;
+- unique partial index stripeInvoiceId;
+- migrations idempotentes.
+
+7. Segurança financeira
+Procurar novamente:
+- cobrança dupla;
+- assinatura órfã;
+- plano liberado sem pagamento;
+- downgrade antigo reaparecendo;
+- comissão duplicada;
+- saldo errado;
+- saque duplicado;
+- histórico apagado.
+
+8. UI
+- upgrade mostra mensagem certa;
+- downgrade mostra mensagem certa;
+- 3DS mostra loading;
+- erro de cartão mostra erro;
+- admin vê plano pendente;
+- seller vê saldo e retiradas.
+
+9. Rodar testes ou simulações:
+- novo checkout com cupom;
+- upgrade normal;
+- upgrade 3DS;
+- upgrade recusado;
+- downgrade;
+- cancelamento + resubscribe;
+- cupom deletado;
+- invoice duplicado;
+- retirada simultânea;
+- cancelamento de retirada.
+
+Entrega:
+- resultado de cada área;
+- bugs encontrados;
+- riscos restantes;
+- veredicto final honesto: pronto ou não pronto para produção.
