@@ -1,0 +1,151 @@
+Quero uma auditoria final EXTREMAMENTE detalhada antes da produção.
+
+Escopo:
+- pagamentos;
+- upgrade/downgrade;
+- Stripe;
+- afiliados;
+- comissões;
+- retiradas;
+- webhooks;
+- UI de assinatura;
+- admin financeiro.
+
+NÃO implementar nada ainda.
+Apenas validar.
+
+Verificar profundamente:
+
+1. Stripe
+- checkout novo;
+- assinatura existente;
+- upgrade;
+- downgrade;
+- 3DS;
+- cartão recusado;
+- payment_intent;
+- invoice;
+- subscription item;
+- priceId;
+- customerId;
+- subscriptionId;
+- idempotencyKey.
+
+2. Upgrade
+Confirmar:
+- não cria segunda subscription;
+- usa subscriptions.update;
+- cobra proration;
+- só atualiza planId se pagamento confirmar;
+- limpa pending downgrade;
+- UI mostra mensagem correta;
+- 3DS funciona.
+
+3. Downgrade
+Confirmar:
+- não cobra agora;
+- não troca planId agora;
+- salva pendingPlanId;
+- mantém limites atuais;
+- aplica na renovação;
+- webhook não aplica antes;
+- admin vê pendente;
+- usuário vê pendente.
+
+4. Webhooks
+Verificar todos:
+- checkout.session.completed;
+- invoice.payment_succeeded;
+- invoice.payment_failed;
+- customer.subscription.updated;
+- customer.subscription.deleted;
+- charge.refunded;
+- charge.dispute.created;
+- charge.dispute.closed.
+
+Verificar:
+- idempotência;
+- retries;
+- eventos fora de ordem;
+- erro no meio do handler;
+- evento test vs live;
+- webhook secret.
+
+5. Afiliados
+Confirmar:
+- coupon usage criado só no webhook;
+- comissão one_time;
+- comissão recurring;
+- deduplicação por invoice;
+- refund;
+- chargeback;
+- riskFlag;
+- cancelamento;
+- saldos.
+
+6. Retiradas
+Confirmar:
+- transaction;
+- SELECT FOR UPDATE;
+- concorrência;
+- rollback;
+- cancelamento;
+- comissões reversed não voltam pending;
+- withdrawalId correto.
+
+7. Banco
+Auditar schema:
+- pendingPlanId;
+- pendingPlanChangeAt;
+- pendingPlanChangeType;
+- withdrawalId;
+- stripeInvoiceId unique partial;
+- couponId nullable;
+- FK on delete;
+- índices;
+- migrations startup.
+
+8. UI
+Testar mensagens:
+- upgrade imediato;
+- downgrade agendado;
+- 3DS;
+- erro cartão;
+- grace period;
+- pending plan;
+- admin detail;
+- seller dashboard.
+
+9. Segurança financeira
+Procurar qualquer caso que cause:
+- cobrança dupla;
+- plano errado;
+- downgrade antecipado;
+- comissão duplicada;
+- saldo errado;
+- saque duplicado;
+- perda de histórico.
+
+10. Testes obrigatórios
+Executar ou simular:
+- novo checkout com cupom;
+- checkout com cartão salvo;
+- upgrade normal;
+- upgrade 3DS;
+- upgrade recusado;
+- downgrade;
+- renewal aplicando downgrade;
+- webhook duplicado;
+- refund;
+- chargeback;
+- retirada simultânea;
+- cancelamento de retirada.
+
+Entregar:
+- resultado por cenário;
+- arquivos revisados;
+- bugs encontrados;
+- riscos restantes;
+- blockers;
+- veredicto final claro:
+  PRONTO ou NÃO PRONTO para produção.
