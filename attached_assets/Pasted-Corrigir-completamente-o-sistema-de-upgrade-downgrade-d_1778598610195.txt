@@ -1,0 +1,222 @@
+Corrigir completamente o sistema de upgrade/downgrade de planos Stripe antes da produção.
+
+Objetivo:
+Parar de criar novas subscriptions e implementar fluxo profissional correto.
+
+IMPORTANTE:
+- NÃO quebrar webhooks atuais;
+- NÃO quebrar grace period;
+- NÃO quebrar afiliados;
+- NÃO quebrar limitEnforcer;
+- preservar IDs atuais.
+
+========================
+REGRAS FINAIS DE NEGÓCIO
+========================
+
+UPGRADE:
+- aplica imediatamente;
+- usa a MESMA assinatura Stripe;
+- cobra diferença proporcional agora;
+- libera recursos imediatamente.
+
+DOWNGRADE:
+- NÃO aplica imediatamente;
+- usuário mantém plano atual até fim do ciclo;
+- mudança ocorre apenas na próxima renovação;
+- sem cobrança imediata;
+- sem perder período pago.
+
+========================
+PARTE 1 — AUDITORIA
+========================
+
+Antes de alterar:
+1. localizar todos os fluxos que mudam plano:
+- checkout user
+- admin
+- auto-upgrade
+- webhooks
+- limitEnforcer
+- force payment
+- subscription handlers
+
+2. localizar:
+- subscriptions.create
+- subscriptions.update
+- cancel_at_period_end
+- pending_update
+- proration_behavior
+
+3. mapear:
+- como stripeSubscriptionId é salvo;
+- quando atualiza user.planId;
+- quando atualiza subscriptionStatus;
+- quais webhooks dependem disso.
+
+========================
+PARTE 2 — UPGRADE
+========================
+
+Corrigir fluxo user-initiated upgrade:
+
+SE usuário já possui:
+- stripeSubscriptionId válido;
+- assinatura ativa/trialing/past_due;
+
+ENTÃO:
+- usar stripe.subscriptions.update;
+- NÃO usar subscriptions.create.
+
+Implementar:
+- troca do item price;
+- proration_behavior: "always_invoice";
+- payment_behavior: "pending_if_incomplete" OU estratégia correta;
+- expand latest_invoice.payment_intent.
+
+Após sucesso:
+- atualizar planId imediatamente;
+- atualizar limites imediatamente;
+- registrar log.
+
+Se pagamento falhar:
+- NÃO trocar planId;
+- NÃO liberar recursos;
+- mostrar erro claro;
+- manter plano antigo intacto.
+
+========================
+PARTE 3 — DOWNGRADE
+========================
+
+Implementar downgrade agendado corretamente.
+
+Adicionar no banco:
+- pendingPlanId
+- pendingPlanChangeAt
+- pendingPlanChangeType
+
+Fluxo:
+
+SE novo plano < plano atual:
+- NÃO atualizar planId agora;
+- NÃO alterar limites agora;
+- NÃO trocar imediatamente no Stripe.
+
+Implementar scheduling correto:
+Opção preferida:
+- subscription schedules
+OU
+- pending_update
+OU
+- cancel_at_period_end com troca no webhook.
+
+Objetivo:
+Stripe mantém plano atual até fim do ciclo.
+Na renovação:
+- troca automaticamente para o novo plano.
+
+Salvar no banco:
+- pendingPlanId;
+- data efetiva;
+- tipo downgrade.
+
+========================
+PARTE 4 — WEBHOOKS
+========================
+
+Garantir:
+
+invoice.payment_succeeded:
+- se houver downgrade pendente
+- e ciclo renovou
+→ aplicar novo plano localmente.
+
+customer.subscription.updated:
+- sincronizar pending updates;
+- sincronizar mudança de price.
+
+customer.subscription.deleted:
+- não quebrar.
+
+========================
+PARTE 5 — UI / UX
+========================
+
+Adicionar mensagens claras:
+
+UPGRADE:
+"Seu upgrade foi aplicado imediatamente.
+Foi cobrada apenas a diferença proporcional do ciclo atual."
+
+DOWNGRADE:
+"Seu downgrade foi agendado.
+Seu plano atual permanece ativo até DD/MM.
+A mudança ocorrerá automaticamente na próxima renovação."
+
+FALHA:
+"Não foi possível confirmar o pagamento do upgrade.
+Seu plano atual permanece inalterado."
+
+Mostrar:
+- plano atual;
+- próximo plano;
+- data da troca.
+
+Admin também deve ver:
+- downgrade pendente;
+- data efetiva.
+
+========================
+PARTE 6 — SEGURANÇA
+========================
+
+Garantir:
+- nunca existirem 2 subscriptions ativas;
+- não perder assinatura antiga;
+- idempotência;
+- rollback em falha;
+- webhooks fora de ordem não quebrarem estado;
+- retries Stripe seguros.
+
+========================
+PARTE 7 — TESTES
+========================
+
+Testar:
+
+1. Upgrade normal
+2. Upgrade com cartão recusado
+3. Upgrade com 3DS
+4. Downgrade normal
+5. Downgrade durante grace period
+6. Downgrade com renewal futura
+7. Webhook fora de ordem
+8. Retry Stripe
+9. Usuário sem assinatura
+10. Usuário manual
+11. Admin changing plan
+12. Auto-upgrade limitEnforcer
+
+Confirmar:
+- nunca cria segunda subscription;
+- downgrade mantém acesso;
+- upgrade libera imediatamente;
+- limites corretos;
+- UI correta;
+- webhooks corretos.
+
+========================
+ENTREGA
+========================
+
+No final entregar:
+- arquivos alterados;
+- nova arquitetura;
+- fluxo upgrade;
+- fluxo downgrade;
+- como Stripe ficou configurado;
+- como webhooks aplicam mudanças;
+- como evitou dupla subscription;
+- testes realizados;
+- riscos restantes.

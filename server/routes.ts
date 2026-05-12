@@ -3281,6 +3281,115 @@ export async function registerRoutes(
           selectedPaymentMethod = customer.invoice_settings?.default_payment_method || paymentMethods.data[0].id;
         }
 
+        // ── Plan change for existing subscriber ──────────────────────────────
+        // If the user already has an active/trialing/past_due subscription, update it
+        // instead of creating a new one (which would cause duplicate billing).
+        const existingSubId = user.stripeSubscriptionId;
+        const canUpdateExisting = !!existingSubId &&
+          ['active', 'trialing', 'past_due'].includes(user.subscriptionStatus || '');
+
+        if (canUpdateExisting) {
+          const currentPlan = user.planId ? await storage.getPlan(user.planId) : null;
+          const isUpgrade = !currentPlan || plan.price > currentPlan.price;
+          const isDowngrade = !!currentPlan && plan.price < currentPlan.price;
+
+          if (!isUpgrade && !isDowngrade) {
+            return res.status(400).json({ message: "This is already your current plan.", code: "SAME_PLAN" });
+          }
+
+          // Retrieve current Stripe subscription to get item ID
+          let existingSub: any;
+          try {
+            existingSub = await stripe.subscriptions.retrieve(existingSubId!);
+          } catch (err: any) {
+            console.error('[Stripe] Could not retrieve existing subscription:', err.message);
+            return res.status(400).json({ message: "Could not retrieve current subscription. Please contact support." });
+          }
+
+          const currentItemId = existingSub.items?.data?.[0]?.id;
+          if (!currentItemId) {
+            return res.status(400).json({ message: "Current subscription has no items. Please contact support." });
+          }
+
+          if (isUpgrade) {
+            // ── UPGRADE: immediate + charge proration ────────────────────────
+            let updatedSub: any;
+            try {
+              updatedSub = await stripe.subscriptions.update(existingSubId!, {
+                items: [{ id: currentItemId, price: plan.stripePriceId }],
+                proration_behavior: 'always_invoice',
+                payment_behavior: 'error_if_incomplete',
+                default_payment_method: selectedPaymentMethod,
+                expand: ['latest_invoice.payment_intent'],
+              });
+            } catch (stripeErr: any) {
+              console.error('[Stripe] Upgrade failed:', stripeErr.message);
+              return res.status(400).json({ message: stripeErr.message || "Payment failed. Please try again or use a different card." });
+            }
+
+            const upgradeInvoice = updatedSub.latest_invoice as any;
+            const upgradePI = upgradeInvoice?.payment_intent;
+
+            if (upgradePI?.status === 'requires_action' || upgradePI?.status === 'requires_confirmation') {
+              return res.json({
+                requiresAction: true,
+                clientSecret: upgradePI.client_secret,
+                subscriptionId: updatedSub.id,
+                changeType: 'upgrade',
+              });
+            }
+
+            if (updatedSub.status === 'incomplete' || updatedSub.status === 'incomplete_expired') {
+              return res.status(400).json({ message: "Payment failed. Please try again or use a different card." });
+            }
+
+            await storage.updateUser(userId, {
+              planId: plan.id,
+              pendingPlanId: null,
+              pendingPlanChangeAt: null,
+              pendingPlanChangeType: null,
+            });
+
+            console.log(`[Stripe] ✓ Upgrade: user=${userId}, plan=${plan.name}`);
+            return res.json({ success: true, changeType: 'upgrade' });
+          }
+
+          if (isDowngrade) {
+            // ── DOWNGRADE: schedule for end of cycle, no immediate charge ────
+            if (user.subscriptionStatus === 'past_due') {
+              return res.status(400).json({
+                message: "Cannot downgrade while payment is pending. Please resolve your payment first.",
+                code: "DOWNGRADE_BLOCKED_PAST_DUE",
+              });
+            }
+
+            try {
+              await stripe.subscriptions.update(existingSubId!, {
+                items: [{ id: currentItemId, price: plan.stripePriceId }],
+                proration_behavior: 'none',
+              });
+            } catch (stripeErr: any) {
+              console.error('[Stripe] Downgrade scheduling failed:', stripeErr.message);
+              return res.status(400).json({ message: stripeErr.message || "Could not schedule downgrade. Please try again." });
+            }
+
+            const periodEnd = new Date(existingSub.current_period_end * 1000);
+            await storage.updateUser(userId, {
+              pendingPlanId: plan.id,
+              pendingPlanChangeAt: periodEnd,
+              pendingPlanChangeType: 'downgrade',
+            });
+
+            console.log(`[Stripe] ✓ Downgrade scheduled: user=${userId}, plan=${plan.name}, effective=${periodEnd.toISOString()}`);
+            return res.json({
+              success: true,
+              changeType: 'downgrade',
+              pendingPlanChangeAt: periodEnd.toISOString(),
+            });
+          }
+        }
+
+        // ── New subscriber: create subscription ──────────────────────────────
         const trialDays = plan.hasTrial ? plan.trialDays : undefined;
         
         let subscriptionConfig: any = {

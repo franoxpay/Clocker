@@ -554,6 +554,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
 
       const [
         plan,
+        pendingPlan,
         domains,
         sharedDomains,
         offers,
@@ -565,6 +566,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         clickHistory,
       ] = await Promise.all([
         user.planId ? storage.getPlan(user.planId) : Promise.resolve(null),
+        user.pendingPlanId ? storage.getPlan(user.pendingPlanId) : Promise.resolve(null),
         storage.getDomainsByUserId(userId),
         storage.getUserSharedDomains(userId),
         storage.getOffersByUserId(userId),
@@ -597,6 +599,7 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       res.json({
         profile: { ...safeUser, isAdminUser, isSubscriptionActive, isTrialing, isSuspended },
         plan,
+        pendingPlan,
         clickStats: {
           thisMonth: user.clicksUsedThisMonth,
           lifetime: lifetimeClicks,

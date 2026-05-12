@@ -409,7 +409,30 @@ export class WebhookHandlers {
     if (subscription.items?.data?.[0]?.price?.id) {
       const priceId = subscription.items.data[0].price.id;
       newPlan = await storage.getPlanByStripePriceId(priceId);
-      if (newPlan) updateData.planId = newPlan.id;
+      if (newPlan) {
+        // If the user has a pending downgrade for this exact plan, check whether
+        // this event is mid-cycle (scheduled) or a new billing period (renewal).
+        if (user.pendingPlanId && user.pendingPlanId === newPlan.id) {
+          const periodStartTs = subscription.current_period_start as number | null;
+          const dbStartTs = user.subscriptionStartDate
+            ? Math.floor(user.subscriptionStartDate.getTime() / 1000)
+            : null;
+          const isNewPeriod = dbStartTs === null || (periodStartTs !== null && periodStartTs > dbStartTs + 60);
+          if (isNewPeriod) {
+            // Renewal: apply the pending downgrade now
+            updateData.planId = newPlan.id;
+            updateData.pendingPlanId = null;
+            updateData.pendingPlanChangeAt = null;
+            updateData.pendingPlanChangeType = null;
+            console.log(`[Stripe Webhook] Pending downgrade applied on renewal — user: ${user.id}, plan: ${newPlan.name}`);
+          } else {
+            // Same period: downgrade was just scheduled mid-cycle — preserve current planId
+            console.log(`[Stripe Webhook] Pending downgrade mid-cycle event — user: ${user.id}, planId preserved, renewal on ${new Date((subscription.current_period_end as number) * 1000).toISOString()}`);
+          }
+        } else {
+          updateData.planId = newPlan.id;
+        }
+      }
     }
 
     const isNowActive = status === 'active' || status === 'trialing';
@@ -745,18 +768,30 @@ export class WebhookHandlers {
 
     // FIX: Always clear grace + suspension + restore active status.
     // Previous code only updated if status wasn't already active, missing suspendedAt clearance.
+    // Apply pending downgrade if present (this payment is the first one at the new lower price).
+    const effectivePlanId = user.pendingPlanId ?? user.planId;
     await storage.updateUser(user.id, {
       subscriptionStatus: 'active',
       stripeSubscriptionId: subscriptionId,
       gracePeriodEndsAt: null,
       suspendedAt: null,
       suspensionReason: null,
+      ...(user.pendingPlanId != null ? {
+        planId: user.pendingPlanId,
+        pendingPlanId: null,
+        pendingPlanChangeAt: null,
+        pendingPlanChangeType: null,
+      } : {}),
     });
+
+    if (user.pendingPlanId != null) {
+      console.log(`[Stripe Webhook] ✓ Pending downgrade applied on renewal — user: ${user.id}, new plan ID: ${user.pendingPlanId}`);
+    }
 
     // FIX: Restore offers that may have been deactivated.
     // Previous code never called restoreUserSubscription on payment success.
-    if (user.planId) {
-      await storage.restoreUserSubscription(user.id, user.planId, 'active');
+    if (effectivePlanId) {
+      await storage.restoreUserSubscription(user.id, effectivePlanId, 'active');
     }
 
     if (wasSuspended || hadGrace) {

@@ -37,6 +37,9 @@ interface UserDetailData {
     stripeCustomerId: string | null;
     stripeSubscriptionId: string | null;
     planId: number | null;
+    pendingPlanId: number | null;
+    pendingPlanChangeAt: string | null;
+    pendingPlanChangeType: string | null;
     subscriptionStatus: string | null;
     trialEndsAt: string | null;
     subscriptionStartDate: string | null;
@@ -65,6 +68,11 @@ interface UserDetailData {
     maxMonthlyClicks: number | null;
     price: number;
     isFree: boolean;
+  } | null;
+  pendingPlan: {
+    id: number;
+    name: string;
+    price: number;
   } | null;
   clickStats: {
     thisMonth: number;
@@ -210,6 +218,17 @@ function OverviewTab({ data, lang }: { data: UserDetailData; lang: string }) {
           )}
           {p.isSuspended && (
             <InfoRow label={lang === "pt-BR" ? "Suspenso em" : "Suspended at"} value={<span className="text-destructive">{fmtDate(p.suspendedAt, lang)}</span>} />
+          )}
+          {p.pendingPlanId && p.pendingPlanChangeAt && (
+            <InfoRow
+              label={lang === "pt-BR" ? "Downgrade pendente" : "Pending downgrade"}
+              value={
+                <span className="text-amber-400">
+                  {data.pendingPlan ? data.pendingPlan.name : `Plan #${p.pendingPlanId}`}
+                  {" — "}{fmtDate(p.pendingPlanChangeAt, lang)}
+                </span>
+              }
+            />
           )}
         </CardContent>
       </Card>

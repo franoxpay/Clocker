@@ -55,6 +55,9 @@ export const users = pgTable("users", {
   reminderSent2DaysAfter: timestamp("reminder_sent_2_days_after"),
   reminderSent7DaysAfter: timestamp("reminder_sent_7_days_after"),
   billingLockUntil: timestamp("billing_lock_until"),
+  pendingPlanId: integer("pending_plan_id"),
+  pendingPlanChangeAt: timestamp("pending_plan_change_at"),
+  pendingPlanChangeType: varchar("pending_plan_change_type"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

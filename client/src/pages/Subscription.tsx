@@ -382,12 +382,32 @@ export default function Subscription() {
         queryClient.invalidateQueries({ queryKey: ["/api/user/usage"] });
         queryClient.invalidateQueries({ queryKey: ["/api/billing/invoices"] });
         queryClient.invalidateQueries({ queryKey: ["/api/billing/payment-methods"] });
-        toast({
-          title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
-          description: language === "pt-BR" 
-            ? "Seu plano foi ativado com sucesso." 
-            : "Your plan has been successfully activated.",
-        });
+
+        if (data.changeType === 'upgrade') {
+          toast({
+            title: language === "pt-BR" ? "Upgrade realizado!" : "Upgrade complete!",
+            description: language === "pt-BR"
+              ? "Seu plano foi atualizado imediatamente. Foi cobrada apenas a diferença proporcional do ciclo atual."
+              : "Your plan was upgraded immediately. Only the proportional difference for the current cycle was charged.",
+          });
+        } else if (data.changeType === 'downgrade') {
+          const dateStr = data.pendingPlanChangeAt
+            ? format(new Date(data.pendingPlanChangeAt), "dd/MM/yyyy", { locale })
+            : '';
+          toast({
+            title: language === "pt-BR" ? "Downgrade agendado" : "Downgrade scheduled",
+            description: language === "pt-BR"
+              ? `Seu plano atual permanece ativo. A mudança ocorrerá automaticamente na próxima renovação${dateStr ? ` em ${dateStr}` : ''}.`
+              : `Your current plan remains active. The change will happen automatically at the next renewal${dateStr ? ` on ${dateStr}` : ''}.`,
+          });
+        } else {
+          toast({
+            title: language === "pt-BR" ? "Assinatura ativada!" : "Subscription activated!",
+            description: language === "pt-BR"
+              ? "Seu plano foi ativado com sucesso."
+              : "Your plan has been successfully activated.",
+          });
+        }
       }
     },
     onError: (error: any) => {
@@ -707,6 +727,19 @@ export default function Subscription() {
                 </span>
               </div>
             )}
+            {(user as any)?.pendingPlanId && (user as any)?.pendingPlanChangeAt && (() => {
+              const pPlan = plans.find(p => p.id === (user as any).pendingPlanId);
+              const pDate = format(new Date((user as any).pendingPlanChangeAt), "dd/MM/yyyy", { locale });
+              return (
+                <div className="flex items-start gap-2 p-2 rounded-md bg-amber-500/10 border border-amber-500/30" data-testid="alert-pending-downgrade">
+                  <span className="text-xs text-amber-600 dark:text-amber-400">
+                    {language === "pt-BR"
+                      ? `Downgrade para "${pPlan ? (language === "pt-BR" ? pPlan.name : pPlan.nameEn) : "plano menor"}" agendado para ${pDate}. Seu plano atual permanece ativo até então.`
+                      : `Downgrade to "${pPlan ? pPlan.nameEn : "lower plan"}" scheduled for ${pDate}. Your current plan remains active until then.`}
+                  </span>
+                </div>
+              );
+            })()}
             {currentPlan && (
               <div className="text-2xl font-bold">
                 {formatPrice(currentPlan.price)}
@@ -1069,18 +1102,20 @@ export default function Subscription() {
 
                 <Button
                   className="w-full"
-                  variant={isCurrentPlan(plan.id) ? "secondary" : (plan.isPopular ? "default" : "outline")}
-                  disabled={isCurrentPlan(plan.id) || checkoutMutation.isPending}
+                  variant={isCurrentPlan(plan.id) ? "secondary" : ((user as any)?.pendingPlanId === plan.id ? "outline" : (plan.isPopular ? "default" : "outline"))}
+                  disabled={isCurrentPlan(plan.id) || (user as any)?.pendingPlanId === plan.id || checkoutMutation.isPending}
                   onClick={() => handleSelectPlan(plan)}
                   data-testid={`button-select-plan-${plan.id}`}
                 >
-                  {isCurrentPlan(plan.id) 
-                    ? t("plan.current") 
-                    : (checkoutMutation.isPending 
-                        ? t("subscription.processing") 
-                        : (plan.hasTrial && plan.trialDays > 0 
-                            ? t("subscription.startTrial") 
-                            : t("subscription.subscribe")))}
+                  {isCurrentPlan(plan.id)
+                    ? t("plan.current")
+                    : ((user as any)?.pendingPlanId === plan.id
+                        ? (language === "pt-BR" ? "Agendado" : "Scheduled")
+                        : (checkoutMutation.isPending
+                            ? t("subscription.processing")
+                            : (plan.hasTrial && plan.trialDays > 0
+                                ? t("subscription.startTrial")
+                                : t("subscription.subscribe"))))}
                 </Button>
               </CardContent>
             </Card>

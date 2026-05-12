@@ -402,6 +402,11 @@ async function runSafeMigrations() {
         WHERE stripe_invoice_id IS NOT NULL
     `);
 
+    // Add pending plan change fields for scheduled downgrades
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan_id integer`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan_change_at timestamp`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_plan_change_type varchar`);
+
     console.log("[Migration] Safe schema migrations complete.");
   } catch (err: any) {
     console.error("[Migration] Error during safe migrations:", err.message);
