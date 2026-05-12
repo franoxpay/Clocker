@@ -756,6 +756,8 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         }
       }
       
+      const hadPendingChange = !!(user.pendingPlanId || user.pendingPlanChangeAt);
+
       const updateData: any = { 
         planId,
         suspendedAt: null,
@@ -763,6 +765,12 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         gracePeriodEndsAt: null,
         subscriptionStatus: 'active',
         subscriptionStartDate: new Date(),
+        // Always clear any pending plan change — admin decision is authoritative.
+        // Without this, a stale pendingPlanId would be applied by the webhook on the
+        // next renewal, silently overriding the admin's manual plan assignment.
+        pendingPlanId: null,
+        pendingPlanChangeAt: null,
+        pendingPlanChangeType: null,
       };
       
       if (!user.stripeSubscriptionId) {
@@ -770,6 +778,12 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       }
       
       await storage.updateUser(userId, updateData);
+
+      if (hadPendingChange) {
+        console.log(`[AdminPlanChange] Cleared pending plan change for user ${userId} (was pendingPlanId=${user.pendingPlanId}, type=${user.pendingPlanChangeType})`);
+      }
+      console.log(`[AdminPlanChange] Plan changed to ${newPlan.name} (id=${planId}) for user ${userId} by admin`);
+
       res.json({ success: true });
     } catch (error) {
       console.error("Error changing plan:", error);
