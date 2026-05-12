@@ -1,0 +1,119 @@
+Quero uma auditoria completa do sistema de indicação/afiliados antes de implementar melhorias.
+
+Importante:
+- NÃO implemente nada ainda.
+- Primeiro entenda como funciona hoje.
+- Quero mapear admin, seller/usuário, comissões, cupons e pagamentos.
+
+Analise:
+
+1. Painel do seller/usuário
+- onde o usuário vê indicação;
+- código/link de indicação;
+- comissões;
+- saldo pendente;
+- saldo pago;
+- histórico;
+- indicados;
+- status de cada indicação.
+
+2. Painel admin de indicações
+- quais telas existem;
+- quais métricas aparecem;
+- como aprova/paga comissão;
+- filtros;
+- histórico;
+- exportação;
+- busca por usuário.
+
+3. Backend
+Mapear endpoints:
+- criação de cupom/link;
+- tracking de indicação;
+- atribuição ao cadastro;
+- cálculo de comissão;
+- aprovação;
+- pagamento;
+- cancelamento;
+- reversão.
+
+4. Banco de dados
+Listar tabelas e campos:
+- coupons;
+- referrals;
+- commissions;
+- users;
+- payments;
+- subscriptions;
+- qualquer tabela relacionada.
+
+5. Fluxo completo
+Mapear:
+- usuário gera link;
+- lead acessa;
+- lead cadastra;
+- lead assina;
+- pagamento aprovado;
+- comissão gerada;
+- comissão fica pendente;
+- admin paga;
+- status muda para pago.
+
+6. Regras atuais
+Descobrir:
+- comissão é percentual ou fixa;
+- comissão recorrente ou única;
+- quanto tempo dura;
+- se conta upgrade;
+- se conta downgrade;
+- se conta reembolso;
+- se conta inadimplência;
+- se conta usuário manual;
+- se depende de Stripe real;
+- se existe mínimo para saque.
+
+7. Problemas reais
+Encontrar bugs:
+- comissão duplicada;
+- comissão gerada sem pagamento real;
+- usuário manual gerando comissão;
+- comissão sem Stripe;
+- indicação perdida no cadastro;
+- cookie expirando cedo;
+- cupom não aplicado;
+- pagamento falhou mas comissão ficou;
+- cancelamento não reverte;
+- admin paga errado;
+- métricas incorretas.
+
+8. Segurança
+Verificar:
+- autoindicação;
+- fraude;
+- múltiplas contas;
+- troca manual de referral;
+- usuário editando comissão;
+- endpoint sem proteção;
+- exposição de dados de outros usuários.
+
+9. UX
+Verificar:
+- seller entende quanto ganhou?
+- sabe quem indicou?
+- vê status claro?
+- admin consegue operar pagamentos rápido?
+- existe confusão entre cupom e indicação?
+
+10. Resultado final
+Me entregue:
+- arquitetura atual;
+- arquivos analisados;
+- endpoints;
+- tabelas;
+- fluxo real;
+- regras atuais;
+- bugs encontrados;
+- riscos;
+- melhorias recomendadas em ordem de prioridade.
+
+Não implemente nada ainda.
