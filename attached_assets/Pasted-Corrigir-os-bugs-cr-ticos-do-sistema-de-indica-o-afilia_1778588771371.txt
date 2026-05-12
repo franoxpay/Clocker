@@ -1,0 +1,82 @@
+Corrigir os bugs críticos do sistema de indicação/afiliados.
+
+Foco:
+- comissão recorrente real;
+- rastreabilidade;
+- dados corretos;
+- sem mexer em UI ainda.
+
+Corrigir exatamente:
+
+1. Comissão recorrente real
+Hoje commissionDurationMonths existe, mas só gera comissão no checkout.session.completed.
+Implementar geração de comissão também em invoice.payment_succeeded.
+
+Regra:
+- se o usuário indicado usou cupom afiliado;
+- se a assinatura Stripe está ativa;
+- se ainda não atingiu commissionDurationMonths;
+- então gerar nova comissão referente ao mês/invoice atual.
+
+2. Evitar comissão duplicada
+Antes de criar comissão, verificar:
+- affiliateUserId;
+- referredUserId;
+- couponId;
+- stripeInvoiceId.
+
+Se já existir comissão para esse invoice, não criar outra.
+
+3. Preencher campos faltantes
+Ao criar comissão, preencher:
+- type: "one_time" na primeira compra;
+- type: "recurring" nas renovações;
+- couponUsageId;
+- stripeInvoiceId;
+- stripeSubscriptionId;
+- amount.
+
+4. Corrigir cálculo do desconto aplicado
+Hoje discountAmountApplied usa session.amount_total, que já vem com desconto.
+Corrigir para calcular baseado no preço bruto do plano ou invoice subtotal antes do desconto.
+
+5. Corrigir rastreabilidade
+Garantir que cada comissão possa ser rastreada até:
+- usuário indicado;
+- afiliado;
+- cupom;
+- uso do cupom;
+- subscription Stripe;
+- invoice Stripe.
+
+6. Não gerar comissão se:
+- afiliado estiver inativo;
+- usuário indicado cancelou;
+- invoice não foi pago;
+- payment failed;
+- comissão para o invoice já existe;
+- usuário for manual sem Stripe.
+
+7. Ajustar reversão
+Quando assinatura for cancelada:
+- reverter apenas comissões pendentes futuras/atuais;
+- não alterar comissões pagas automaticamente;
+- registrar motivo claro.
+
+8. Testar:
+- primeira compra gera one_time;
+- renovação gera recurring;
+- 6 meses gera no máximo 6 comissões;
+- invoice repetido não duplica;
+- cancelamento reverte pendentes;
+- comissão paga não é revertida automaticamente;
+- cupom sem afiliado não gera comissão;
+- usuário manual não gera comissão.
+
+No final entregar:
+- arquivos alterados;
+- lógica nova;
+- eventos Stripe usados;
+- exemplos de comissões criadas;
+- como testou;
+- riscos restantes.

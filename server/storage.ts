@@ -406,6 +406,7 @@ export interface IStorage {
   
   // Commission functions
   getCommission(id: number): Promise<Commission | undefined>;
+  getCommissionByInvoiceId(invoiceId: string): Promise<Commission | undefined>;
   getCommissionsByAffiliateId(affiliateUserId: string): Promise<Commission[]>;
   getCommissionsByReferredUserId(referredUserId: string): Promise<Commission[]>;
   getAllCommissions(page: number, limit: number, status?: string): Promise<{ commissions: Commission[]; total: number }>;
@@ -2996,6 +2997,15 @@ export class DatabaseStorage implements IStorage {
 
   async getCommission(id: number): Promise<Commission | undefined> {
     const [commission] = await db.select().from(commissions).where(eq(commissions.id, id)).limit(1);
+    return commission;
+  }
+
+  async getCommissionByInvoiceId(invoiceId: string): Promise<Commission | undefined> {
+    const [commission] = await db
+      .select()
+      .from(commissions)
+      .where(eq(commissions.stripeInvoiceId, invoiceId))
+      .limit(1);
     return commission;
   }
 

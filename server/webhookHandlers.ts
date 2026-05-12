@@ -212,78 +212,162 @@ export class WebhookHandlers {
       }
     }
 
-    // Process coupon usage and commission
+    // Process coupon usage and first-purchase commission
     const couponIdStr = session.metadata?.couponId || session.subscription_data?.metadata?.couponId;
     const affiliateUserId = session.metadata?.affiliateUserId || session.subscription_data?.metadata?.affiliateUserId;
 
     if (couponIdStr && subscriptionId) {
       const couponId = parseInt(couponIdStr, 10);
       if (!isNaN(couponId)) {
-        await this.processCouponUsageAndCommission(couponId, userId, affiliateUserId, subscriptionId, session.amount_total);
+        // session.invoice is the invoice ID for the first billing period
+        const invoiceId = (session.invoice as string | null) ?? null;
+        // amount_subtotal = plan price BEFORE any Stripe coupon discount (gross amount)
+        const grossAmount = session.amount_subtotal ?? session.amount_total ?? 0;
+        await this.processCouponUsageAndCommission(
+          couponId,
+          userId,
+          affiliateUserId,
+          subscriptionId,
+          invoiceId,
+          grossAmount,
+          'one_time',
+        );
       }
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // Core commission engine — used for both first purchase (one_time) and
+  // recurring renewals (recurring).  All deduplication, limit checks, and
+  // field population happen here.
+  // ─────────────────────────────────────────────────────────────────────────
   private static async processCouponUsageAndCommission(
     couponId: number,
     userId: string,
     affiliateUserId: string | undefined,
     subscriptionId: string,
-    amountPaid: number
+    invoiceId: string | null,
+    grossAmount: number,
+    commissionType: 'one_time' | 'recurring',
   ): Promise<void> {
     try {
       const coupon = await storage.getCoupon(couponId);
       if (!coupon) {
-        console.log(`[Stripe Webhook] Coupon ${couponId} not found, skipping coupon processing`);
+        console.log(`[Stripe Webhook] Coupon ${couponId} not found, skipping`);
         return;
       }
 
+      // ── 1. Record coupon usage (first purchase only) ──────────────────────
+      // UNIQUE constraint on coupon_usages.userId prevents double-recording.
       const existingUsage = await storage.getCouponUsageByUserId(userId);
       if (!existingUsage) {
+        // Calculate discount on GROSS amount (before Stripe coupon reduces the total)
+        const discountAmountApplied = coupon.discountType === 'percentage'
+          ? Math.round(grossAmount * (coupon.discountValue / 100))
+          : coupon.discountValue;
+
         await storage.createCouponUsage({
           couponId,
           userId,
           stripeSubscriptionId: subscriptionId,
-          discountApplied: coupon.discountType === 'percentage'
-            ? Math.round(amountPaid * (coupon.discountValue / 100))
-            : coupon.discountValue,
+          discountAmountApplied,
         });
-        console.log(`[Stripe Webhook] Recorded coupon usage for user ${userId}, coupon ${couponId}`);
+        console.log(`[Commission] Coupon usage recorded — user: ${userId}, coupon: ${couponId}, discount: ${discountAmountApplied}`);
       }
 
-      if (affiliateUserId && coupon.commissionType && coupon.commissionValue) {
-        const affiliate = await storage.getUser(affiliateUserId);
-        if (affiliate && affiliate.subscriptionStatus === 'active') {
-          let commissionAmount: number;
-          if (coupon.commissionType === 'percentage') {
-            commissionAmount = Math.round(amountPaid * (coupon.commissionValue / 100));
-          } else {
-            commissionAmount = coupon.commissionValue;
-          }
+      // ── 2. Guard: commission requires affiliate + commission config ────────
+      if (!affiliateUserId || !coupon.commissionType || coupon.commissionValue == null) {
+        console.log(`[Commission] No commission config on coupon ${couponId} — skipping`);
+        return;
+      }
 
-          const existingCommissions = await storage.getCommissionsByReferredUserId(userId);
-          const maxCommissions = coupon.commissionDurationMonths || 1;
+      // ── 3. Guard: affiliate must be actively subscribed ───────────────────
+      const affiliate = await storage.getUser(affiliateUserId);
+      if (!affiliate || affiliate.subscriptionStatus !== 'active') {
+        console.log(`[Commission] Affiliate ${affiliateUserId} not active (status: ${affiliate?.subscriptionStatus ?? 'not found'}) — skipping`);
+        return;
+      }
 
-          if (existingCommissions.length >= maxCommissions) {
-            console.log(`[Stripe Webhook] Skipping commission for affiliate ${affiliateUserId} — reached limit of ${maxCommissions}`);
-            return;
-          }
-
-          await storage.createCommission({
-            affiliateUserId,
-            referredUserId: userId,
-            couponId,
-            stripeSubscriptionId: subscriptionId,
-            amount: commissionAmount,
-            status: 'pending',
-          });
-          console.log(`[Stripe Webhook] Created commission of ${commissionAmount} for affiliate ${affiliateUserId}`);
-        } else {
-          console.log(`[Stripe Webhook] Affiliate ${affiliateUserId} not active, skipping commission`);
+      // ── 4. Deduplication: one commission per invoice ──────────────────────
+      if (invoiceId) {
+        const existing = await storage.getCommissionByInvoiceId(invoiceId);
+        if (existing) {
+          console.log(`[Commission] Already exists for invoice ${invoiceId} (id: ${existing.id}) — skipping duplicate`);
+          return;
         }
       }
+
+      // ── 5. Duration limit: count non-reversed commissions for this referral
+      const existingCommissions = await storage.getCommissionsByReferredUserId(userId);
+      const activeCount = existingCommissions.filter(c => c.status !== 'reversed').length;
+      const maxCommissions = coupon.commissionDurationMonths ?? 1;
+
+      if (activeCount >= maxCommissions) {
+        console.log(`[Commission] Limit reached for user ${userId} — ${activeCount}/${maxCommissions} (coupon ${couponId})`);
+        return;
+      }
+
+      // ── 6. Calculate commission amount based on gross plan price ──────────
+      const commissionAmount = coupon.commissionType === 'percentage'
+        ? Math.round(grossAmount * (coupon.commissionValue / 100))
+        : coupon.commissionValue;
+
+      // ── 7. Fetch coupon usage ID for full traceability ────────────────────
+      const couponUsage = await storage.getCouponUsageByUserId(userId);
+
+      // ── 8. Create commission with all fields populated ────────────────────
+      await storage.createCommission({
+        affiliateUserId,
+        referredUserId: userId,
+        couponId,
+        couponUsageId: couponUsage?.id ?? null,
+        stripeSubscriptionId: subscriptionId,
+        stripeInvoiceId: invoiceId ?? null,
+        amount: commissionAmount,
+        type: commissionType,
+        status: 'pending',
+      });
+
+      console.log(
+        `[Commission] ✓ Created — type: ${commissionType}, amount: ${commissionAmount}, ` +
+        `affiliate: ${affiliateUserId}, referred: ${userId}, ` +
+        `invoice: ${invoiceId ?? 'n/a'}, count: ${activeCount + 1}/${maxCommissions}`
+      );
     } catch (error: any) {
-      console.error('[Stripe Webhook] Error processing coupon/commission:', error.message);
+      console.error('[Commission] Error in processCouponUsageAndCommission:', error.message);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Recurring commission — called on every invoice.payment_succeeded except
+  // the first (subscription_create), which is handled by checkout.session.completed.
+  // ─────────────────────────────────────────────────────────────────────────
+  private static async processRecurringCommission(
+    userId: string,
+    subscriptionId: string,
+    invoiceId: string,
+    grossAmount: number,
+  ): Promise<void> {
+    try {
+      const couponUsage = await storage.getCouponUsageByUserId(userId);
+      if (!couponUsage) return;
+
+      const coupon = await storage.getCoupon(couponUsage.couponId);
+      if (!coupon?.affiliateUserId || !coupon.commissionType || coupon.commissionValue == null) return;
+
+      console.log(`[Commission] Processing recurring commission — user: ${userId}, invoice: ${invoiceId}`);
+
+      await this.processCouponUsageAndCommission(
+        coupon.id,
+        userId,
+        coupon.affiliateUserId,
+        subscriptionId,
+        invoiceId,
+        grossAmount,
+        'recurring',
+      );
+    } catch (error: any) {
+      console.error('[Commission] Error in processRecurringCommission:', error.message);
     }
   }
 
@@ -553,6 +637,20 @@ export class WebhookHandlers {
       console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} reactivated from ${user.subscriptionStatus}`);
     } else {
       console.log(`[Stripe Webhook] ✓ Payment succeeded — user: ${user.id} renewal confirmed (already active)`);
+    }
+
+    // ── Recurring commission ──────────────────────────────────────────────
+    // subscription_create = first invoice, already handled by checkout.session.completed.
+    // All other billing reasons (subscription_cycle, subscription_update, etc.)
+    // trigger recurring commission here.
+    const invoiceId = invoice.id as string | undefined;
+    const billingReason = invoice.billing_reason as string | undefined;
+    const isFirstInvoice = billingReason === 'subscription_create';
+
+    if (!isFirstInvoice && invoiceId) {
+      // invoice.subtotal = plan price BEFORE any coupon discount applied by Stripe
+      const grossAmount = (invoice.subtotal as number | null) ?? (invoice.amount_paid as number | null) ?? 0;
+      await this.processRecurringCommission(user.id, subscriptionId, invoiceId, grossAmount);
     }
 
     // Send subscription_renewed email (on every successful payment: renewal or recovery)
