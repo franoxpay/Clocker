@@ -148,4 +148,16 @@ export function registerAffiliateRoutes(app: Express): void {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // Get enriched commission history for affiliate panel
+  app.get("/api/affiliate/commissions-detail", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const commissions = await storage.getAffiliateCommissionsDetail(userId);
+      res.json(commissions);
+    } catch (error) {
+      console.error("Error fetching affiliate commissions detail:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 }

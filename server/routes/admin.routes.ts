@@ -2074,13 +2074,79 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
   // ADMIN COMMISSION MANAGEMENT
   // ==========================================
 
+  // Admin commission dashboard metrics
+  app.get("/api/admin/commissions/dashboard", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const dashboard = await storage.getAdminCommissionsDashboard();
+      res.json(dashboard);
+    } catch (error) {
+      console.error("Error fetching commission dashboard:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Export commissions as CSV
+  app.get("/api/admin/commissions/export", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const type = req.query.type as string | undefined;
+      const affiliateUserId = req.query.affiliateId as string | undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+
+      const result = await storage.getAllCommissionsFiltered({
+        page: 1, limit: 10000, status, type, affiliateUserId, dateFrom, dateTo,
+      });
+
+      const headers = [
+        "ID", "Afiliado", "Indicado", "Cupom", "Invoice Stripe",
+        "Subscription Stripe", "Tipo", "Status", "Valor (R$)",
+        "Meses Comissão", "Data Criação", "Data Pagamento",
+        "Data Estorno", "Motivo Estorno"
+      ].join(",");
+
+      const rows = result.commissions.map(c => [
+        c.id,
+        c.affiliateEmail || c.affiliateUserId,
+        c.referredUserEmail || c.referredUserId,
+        c.couponCode || c.couponId,
+        c.stripeInvoiceId || "",
+        c.stripeSubscriptionId || "",
+        c.type || "",
+        c.status,
+        (c.amount / 100).toFixed(2),
+        c.commissionDurationMonths || "",
+        c.createdAt ? new Date(c.createdAt).toISOString() : "",
+        c.paidAt ? new Date(c.paidAt).toISOString() : "",
+        c.reversedAt ? new Date(c.reversedAt).toISOString() : "",
+        c.reversedReason || "",
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(","));
+
+      const csv = [headers, ...rows].join("\n");
+      const filename = `commissions-${new Date().toISOString().slice(0, 10)}.csv`;
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send("\ufeff" + csv); // BOM for Excel UTF-8
+    } catch (error) {
+      console.error("Error exporting commissions:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/commissions", isAdmin, async (req: Request, res: Response) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 25;
       const status = req.query.status as string | undefined;
+      const type = req.query.type as string | undefined;
+      const affiliateUserId = req.query.affiliateId as string | undefined;
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
 
-      const result = await storage.getAllCommissions(page, limit, status);
+      const result = await storage.getAllCommissionsFiltered({
+        page, limit, status, type, affiliateUserId, dateFrom, dateTo,
+      });
       res.json(result);
     } catch (error) {
       console.error("Error fetching commissions:", error);

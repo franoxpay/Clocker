@@ -22,14 +22,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp } from "lucide-react";
+import { User, Lock, CreditCard, Globe, ExternalLink, Check, Gift, Copy, DollarSign, Users, TrendingUp, RefreshCw, Activity, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR, enUS } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from "recharts";
 
 interface Invoice {
   id: string;
@@ -54,16 +59,37 @@ interface AffiliateStats {
   totalReferrals: number;
   totalEarnings: number;
   pendingEarnings: number;
+  paidEarnings: number;
+  reversedEarnings: number;
+  activeReferrals: number;
   couponUsages: number;
   paidConversions: number;
-  paidEarnings: number;
   coupon: {
     id: number;
     code: string;
     discountType: string;
     discountValue: number;
     usageCount: number;
+    commissionDurationMonths: number | null;
   } | null;
+}
+
+interface CommissionDetail {
+  id: number;
+  referredUserId: string;
+  referredUserEmail: string | null;
+  couponId: number;
+  couponCode: string | null;
+  commissionDurationMonths: number | null;
+  stripeInvoiceId: string | null;
+  stripeSubscriptionId: string | null;
+  amount: number;
+  type: string;
+  status: string;
+  createdAt: string;
+  paidAt: string | null;
+  reversedAt: string | null;
+  reversedReason: string | null;
 }
 
 export default function Settings() {
@@ -87,6 +113,10 @@ export default function Settings() {
 
   const { data: affiliateStats, isLoading: affiliateLoading } = useQuery<AffiliateStats>({
     queryKey: ["/api/affiliate/stats"],
+  });
+
+  const { data: commissionsDetail = [], isLoading: commissionsDetailLoading } = useQuery<CommissionDetail[]>({
+    queryKey: ["/api/affiliate/commissions-detail"],
   });
 
   const changePasswordMutation = useMutation({
@@ -420,211 +450,351 @@ export default function Settings() {
 
         <TabsContent value="referrals">
           <div className="space-y-6">
-            {affiliateLoading ? (
+            {(affiliateLoading || commissionsDetailLoading) ? (
               <div className="space-y-4">
-                <Skeleton className="h-32 w-full" />
-                <Skeleton className="h-48 w-full" />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}
+                </div>
+                <Skeleton className="h-64 w-full" />
               </div>
             ) : affiliateStats ? (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* ── Row 1: earnings metrics ─────────────────────────────── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-5 pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                          <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg shrink-0">
+                          <DollarSign className="w-4 h-4 text-green-600 dark:text-green-400" />
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            {language === "pt-BR" ? "Total de Indicados" : "Total Referrals"}
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Total Ganho" : "Total Earned"}
                           </p>
-                          <p className="text-2xl font-bold">{affiliateStats.totalReferrals}</p>
+                          <p className="text-xl font-bold">R$ {(affiliateStats.totalEarnings / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-5 pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                          <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg shrink-0">
+                          <DollarSign className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            {language === "pt-BR" ? "Total de Indicados" : "Total Referrals"}
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Pendente" : "Pending"}
                           </p>
-                          <p className="text-2xl font-bold">{affiliateStats.totalReferrals}</p>
+                          <p className="text-xl font-bold">R$ {(affiliateStats.pendingEarnings / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-5 pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                          <DollarSign className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg shrink-0">
+                          <Check className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            {language === "pt-BR" ? "Comissão Pendente" : "Pending Commission"}
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Pago" : "Paid"}
                           </p>
-                          <p className="text-2xl font-bold">R$ {(affiliateStats.pendingEarnings / 100).toFixed(2)}</p>
+                          <p className="text-xl font-bold">R$ {(affiliateStats.paidEarnings / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                   <Card>
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-5 pb-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                          <DollarSign className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg shrink-0">
+                          <RotateCcw className="w-4 h-4 text-red-600 dark:text-red-400" />
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">
-                            {language === "pt-BR" ? "Total Pago" : "Total Paid"}
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Estornado" : "Reversed"}
                           </p>
-                          <p className="text-2xl font-bold">R$ {(affiliateStats.paidEarnings / 100).toFixed(2)}</p>
+                          <p className="text-xl font-bold">R$ {((affiliateStats.reversedEarnings ?? 0) / 100).toFixed(2)}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {affiliateStats.coupon && (
+                {/* ── Row 2: activity metrics ──────────────────────────────── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <Card>
-                    <CardHeader>
-                      <CardTitle>
-                        {language === "pt-BR" ? "Conversão de Indicações" : "Referral Conversion"}
-                      </CardTitle>
-                      <CardDescription>
-                        {language === "pt-BR"
-                          ? "Quantas pessoas usaram seu cupom vs quantas pagaram a assinatura"
-                          : "How many people used your coupon vs how many paid for subscription"}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={[
-                              {
-                                name: language === "pt-BR" ? "Usaram Cupom" : "Used Coupon",
-                                value: affiliateStats.couponUsages,
-                                fill: "hsl(var(--primary))",
-                              },
-                              {
-                                name: language === "pt-BR" ? "Pagaram Assinatura" : "Paid Subscription",
-                                value: affiliateStats.paidConversions,
-                                fill: "hsl(142, 76%, 36%)",
-                              },
-                            ]}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis 
-                              dataKey="name" 
-                              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                            />
-                            <YAxis 
-                              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                              allowDecimals={false}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "hsl(var(--card))",
-                                border: "1px solid hsl(var(--border))",
-                                borderRadius: "8px",
-                              }}
-                              labelStyle={{ color: "hsl(var(--foreground))" }}
-                            />
-                            <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                              {[
-                                { fill: "hsl(var(--primary))" },
-                                { fill: "hsl(142, 76%, 36%)" },
-                              ].map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="mt-4 flex justify-center gap-8 text-sm">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-sm bg-primary"></div>
-                          <span className="text-muted-foreground">
-                            {language === "pt-BR" ? "Usaram Cupom" : "Used Coupon"}: <span className="font-bold text-foreground">{affiliateStats.couponUsages}</span>
-                          </span>
+                    <CardContent className="pt-5 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg shrink-0">
+                          <Users className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "hsl(142, 76%, 36%)" }}></div>
-                          <span className="text-muted-foreground">
-                            {language === "pt-BR" ? "Pagaram" : "Paid"}: <span className="font-bold text-foreground">{affiliateStats.paidConversions}</span>
-                          </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Total Indicados" : "Total Referred"}
+                          </p>
+                          <p className="text-xl font-bold">{affiliateStats.totalReferrals}</p>
                         </div>
-                        {affiliateStats.couponUsages > 0 && (
-                          <div className="flex items-center gap-2">
-                            <TrendingUp className="w-4 h-4 text-green-500" />
-                            <span className="text-muted-foreground">
-                              {language === "pt-BR" ? "Taxa de Conversão" : "Conversion Rate"}: <span className="font-bold text-green-600">{((affiliateStats.paidConversions / affiliateStats.couponUsages) * 100).toFixed(1)}%</span>
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
-                )}
+                  <Card>
+                    <CardContent className="pt-5 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg shrink-0">
+                          <Activity className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Clientes Ativos" : "Active Clients"}
+                          </p>
+                          <p className="text-xl font-bold">{affiliateStats.activeReferrals ?? affiliateStats.paidConversions}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-5 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg shrink-0">
+                          <TrendingUp className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Conversão" : "Conversion"}
+                          </p>
+                          <p className="text-xl font-bold">
+                            {affiliateStats.couponUsages > 0
+                              ? `${((affiliateStats.paidConversions / affiliateStats.couponUsages) * 100).toFixed(0)}%`
+                              : "—"}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="pt-5 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg shrink-0">
+                          <RefreshCw className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {language === "pt-BR" ? "Recorrentes" : "Recurring"}
+                          </p>
+                          <p className="text-xl font-bold">
+                            {commissionsDetail.filter(c => c.type === "recurring" && c.status !== "reversed").length}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
+                {/* ── Coupon card ───────────────────────────────────────────── */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>
-                      {language === "pt-BR" ? "Seus Cupons de Indicação" : "Your Referral Coupons"}
+                    <CardTitle className="flex items-center gap-2">
+                      <Gift className="w-4 h-4" />
+                      {language === "pt-BR" ? "Seu Cupom de Indicação" : "Your Referral Coupon"}
                     </CardTitle>
                     <CardDescription>
                       {language === "pt-BR"
-                        ? "Compartilhe estes códigos com amigos para ganhar comissões"
-                        : "Share these codes with friends to earn commissions"}
+                        ? "Compartilhe este código para ganhar comissões"
+                        : "Share this code to earn commissions"}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     {!affiliateStats.coupon ? (
-                      <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-center py-6 text-muted-foreground text-sm">
                         {language === "pt-BR"
-                          ? "Você ainda não possui cupons de indicação. Entre em contato com o suporte para solicitar."
-                          : "You don't have referral coupons yet. Contact support to request one."}
-                      </div>
+                          ? "Você ainda não possui cupom de indicação. Entre em contato com o suporte."
+                          : "You don't have a referral coupon yet. Contact support to request one."}
+                      </p>
                     ) : (
-                      <div className="space-y-4">
-                        <div
-                          className="flex items-center justify-between p-4 border rounded-lg"
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="p-2 bg-primary/10 rounded-lg">
-                              <Gift className="w-5 h-5 text-primary" />
-                            </div>
-                            <div>
-                              <p className="font-mono text-lg font-bold">{affiliateStats.coupon.code}</p>
-                              <p className="text-sm text-muted-foreground">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border rounded-lg bg-muted/30">
+                        <div className="flex items-center gap-4">
+                          <div className="p-2 bg-primary/10 rounded-lg">
+                            <Gift className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-mono text-2xl font-bold tracking-widest">{affiliateStats.coupon.code}</p>
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              <Badge variant="secondary" className="text-xs">
                                 {affiliateStats.coupon.discountType === "percentage"
-                                  ? `${affiliateStats.coupon.discountValue}% ${language === "pt-BR" ? "de desconto" : "off"}`
-                                  : `R$ ${(affiliateStats.coupon.discountValue / 100).toFixed(2)} ${language === "pt-BR" ? "de desconto" : "off"}`}
-                                {" • "}
-                                {affiliateStats.coupon.usageCount}{" "}
-                                {language === "pt-BR" ? "usos" : "uses"}
-                              </p>
+                                  ? `${affiliateStats.coupon.discountValue}% ${language === "pt-BR" ? "off" : "off"}`
+                                  : `R$ ${(affiliateStats.coupon.discountValue / 100).toFixed(2)} off`}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {affiliateStats.coupon.usageCount} {language === "pt-BR" ? "usos" : "uses"}
+                              </Badge>
+                              {affiliateStats.coupon.commissionDurationMonths && (
+                                <Badge variant="outline" className="text-xs text-blue-600 border-blue-300">
+                                  {affiliateStats.coupon.commissionDurationMonths} {language === "pt-BR" ? "meses de comissão" : "months commission"}
+                                </Badge>
+                              )}
                             </div>
                           </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyToClipboard(affiliateStats.coupon!.code)}
-                            data-testid={`button-copy-coupon-${affiliateStats.coupon.id}`}
-                          >
-                            <Copy className="w-4 h-4 mr-2" />
-                            {language === "pt-BR" ? "Copiar" : "Copy"}
-                          </Button>
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyToClipboard(affiliateStats.coupon!.code)}
+                          data-testid={`button-copy-coupon-${affiliateStats.coupon.id}`}
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          {language === "pt-BR" ? "Copiar Código" : "Copy Code"}
+                        </Button>
                       </div>
                     )}
+                  </CardContent>
+                </Card>
+
+                {/* ── Commission history table ──────────────────────────────── */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>{language === "pt-BR" ? "Histórico de Comissões" : "Commission History"}</CardTitle>
+                    <CardDescription>
+                      {language === "pt-BR"
+                        ? "Todas as comissões geradas pelas suas indicações"
+                        : "All commissions generated by your referrals"}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {commissionsDetail.length === 0 ? (
+                      <div className="text-center py-12 text-muted-foreground">
+                        <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                        <p className="font-medium">{language === "pt-BR" ? "Nenhuma comissão ainda" : "No commissions yet"}</p>
+                        <p className="text-sm mt-1">
+                          {language === "pt-BR"
+                            ? "As comissões aparecerão aqui quando seus indicados assinarem"
+                            : "Commissions will appear here when your referrals subscribe"}
+                        </p>
+                      </div>
+                    ) : (() => {
+                      // Compute monthsCompleted per referredUserId for this affiliate
+                      const completedMap: Record<string, number> = {};
+                      [...commissionsDetail]
+                        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                        .forEach(c => {
+                          if (c.status !== "reversed") {
+                            completedMap[c.referredUserId] = (completedMap[c.referredUserId] || 0) + 1;
+                          }
+                        });
+
+                      return (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>{language === "pt-BR" ? "Indicado" : "Referred"}</TableHead>
+                              <TableHead>{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                              <TableHead>{language === "pt-BR" ? "Status" : "Status"}</TableHead>
+                              <TableHead>{language === "pt-BR" ? "Valor" : "Amount"}</TableHead>
+                              <TableHead>{language === "pt-BR" ? "Data" : "Date"}</TableHead>
+                              <TableHead>Invoice</TableHead>
+                              <TableHead>{language === "pt-BR" ? "Meses" : "Months"}</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {commissionsDetail.map((commission) => {
+                              const maxMonths = commission.commissionDurationMonths ?? 1;
+                              const completed = completedMap[commission.referredUserId] ?? 0;
+                              const remaining = Math.max(0, maxMonths - completed);
+                              return (
+                                <TableRow key={commission.id} data-testid={`row-commission-${commission.id}`}>
+                                  <TableCell className="max-w-[160px] truncate text-sm">
+                                    <TooltipProvider>
+                                      <UITooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="cursor-default">
+                                            {commission.referredUserEmail
+                                              ? commission.referredUserEmail.split("@")[0] + "@…"
+                                              : commission.referredUserId.slice(0, 8) + "…"}
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>{commission.referredUserEmail || commission.referredUserId}</p>
+                                        </TooltipContent>
+                                      </UITooltip>
+                                    </TooltipProvider>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="outline"
+                                      className={commission.type === "recurring"
+                                        ? "text-blue-600 border-blue-300 bg-blue-50 dark:bg-blue-950/30"
+                                        : "text-gray-600 border-gray-300"}
+                                    >
+                                      {commission.type === "recurring"
+                                        ? (language === "pt-BR" ? "Recorrente" : "Recurring")
+                                        : (language === "pt-BR" ? "Única" : "One-time")}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      className={
+                                        commission.status === "paid"
+                                          ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-0"
+                                          : commission.status === "reversed"
+                                          ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 border-0"
+                                          : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-0"
+                                      }
+                                    >
+                                      {commission.status === "paid"
+                                        ? (language === "pt-BR" ? "Pago" : "Paid")
+                                        : commission.status === "reversed"
+                                        ? (language === "pt-BR" ? "Estornado" : "Reversed")
+                                        : (language === "pt-BR" ? "Pendente" : "Pending")}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="font-mono text-sm font-medium">
+                                    R$ {(commission.amount / 100).toFixed(2)}
+                                  </TableCell>
+                                  <TableCell className="text-sm text-muted-foreground">
+                                    {format(new Date(commission.createdAt), "dd/MM/yyyy", {
+                                      locale: language === "pt-BR" ? ptBR : enUS,
+                                    })}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground font-mono">
+                                    {commission.stripeInvoiceId ? (
+                                      <TooltipProvider>
+                                        <UITooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="cursor-default">
+                                              {commission.stripeInvoiceId.slice(0, 12)}…
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p>{commission.stripeInvoiceId}</p>
+                                          </TooltipContent>
+                                        </UITooltip>
+                                      </TooltipProvider>
+                                    ) : "—"}
+                                  </TableCell>
+                                  <TableCell>
+                                    {commission.status !== "reversed" ? (
+                                      <div className="text-xs">
+                                        <span className="font-medium">{completed}</span>
+                                        <span className="text-muted-foreground">/{maxMonths}</span>
+                                        {remaining > 0 && (
+                                          <span className="ml-1 text-blue-600">
+                                            ({remaining} {language === "pt-BR" ? "rest." : "left"})
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </>

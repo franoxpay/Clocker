@@ -1,0 +1,172 @@
+Agora quero melhorar o painel de afiliados/indicação no frontend e no admin.
+
+Objetivo:
+Transformar o sistema em algo profissional, claro e auditável para:
+- seller/afiliado;
+- admin financeiro;
+- suporte.
+
+NÃO quebrar a lógica backend recém corrigida.
+
+Implementar primeiro a estrutura visual e operacional.
+
+1. Painel do seller/afiliado
+Auditar e melhorar:
+- página atual;
+- métricas;
+- tabelas;
+- fluxo.
+
+Quero adicionar:
+
+A. Cards principais
+- Total ganho
+- Pendente
+- Pago
+- Estornado
+- Receita gerada
+- Clientes ativos
+- Conversão
+- Comissão recorrente ativa
+
+B. Histórico profissional
+Tabela com:
+- cliente indicado
+- plano
+- invoice Stripe
+- tipo (one_time / recurring)
+- status
+- valor
+- data
+- meses restantes da recorrência
+- botão detalhes
+
+C. Status visual claros
+pending → amarelo
+paid → verde
+reversed → vermelho
+recurring → azul
+
+D. Timeline do indicado
+Seller consegue ver:
+- cadastro
+- assinatura criada
+- renovação
+- cancelamento
+- comissão gerada
+- comissão paga
+
+E. Link/cupom afiliado
+Melhorar UX:
+- botão copiar
+- QR code
+- preview da URL
+- métricas por cupom
+
+2. Painel admin de afiliados
+Criar visão profissional financeira.
+
+A. Dashboard admin
+Cards:
+- comissões pendentes
+- pagas
+- recorrentes do mês
+- top afiliados
+- MRR afiliado
+- receita gerada
+- taxa de conversão
+
+B. Tabela admin completa
+Colunas:
+- afiliado
+- indicado
+- invoice
+- subscription
+- tipo
+- status
+- valor
+- data
+- método
+- origem
+- plano
+- meses restantes
+
+C. Filtros avançados
+- afiliado
+- indicado
+- status
+- tipo
+- plano
+- data
+- Stripe/live
+- recorrente
+- paga/não paga
+
+D. Ações admin
+- marcar como paga
+- reverter
+- adicionar observação
+- exportar CSV
+- abrir usuário
+- abrir assinatura Stripe
+
+3. Detalhes importantes
+A. Mostrar meses restantes da comissão recorrente
+Ex:
+“3/6 meses pagos”
+
+B. Mostrar origem:
+- Stripe real
+- manual
+- trial
+- coupon-only
+
+C. Mostrar motivo de reversão
+- cancelamento
+- refund
+- fraude
+- manual_admin
+
+4. Backend necessário
+Adicionar endpoints se necessário:
+- resumo seller
+- resumo admin
+- métricas recorrentes
+- detalhes comissão
+- timeline referral
+- export CSV
+
+5. Performance
+- sem N+1
+- usar joins
+- paginação
+- queries paralelas
+
+6. Segurança
+Seller:
+- só vê seus dados
+Admin:
+- vê tudo
+
+7. UX
+- loading skeleton
+- empty states
+- badges claros
+- tooltips
+- compact layout
+- responsivo
+
+8. Não alterar:
+- cloaker
+- domains
+- billing principal
+- monitoramento
+
+9. Entregar:
+- arquivos alterados;
+- novos endpoints;
+- métricas;
+- screenshots/descrição visual;
+- queries usadas;
+- testes feitos;
+- riscos restantes.

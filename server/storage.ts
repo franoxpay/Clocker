@@ -410,6 +410,39 @@ export interface IStorage {
   getCommissionsByAffiliateId(affiliateUserId: string): Promise<Commission[]>;
   getCommissionsByReferredUserId(referredUserId: string): Promise<Commission[]>;
   getAllCommissions(page: number, limit: number, status?: string): Promise<{ commissions: Commission[]; total: number }>;
+  getAllCommissionsFiltered(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    type?: string;
+    affiliateUserId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }): Promise<{
+    commissions: Array<Commission & {
+      affiliateEmail: string | null;
+      referredUserEmail: string | null;
+      couponCode: string | null;
+      commissionDurationMonths: number | null;
+    }>;
+    total: number;
+  }>;
+  getAffiliateCommissionsDetail(affiliateUserId: string): Promise<Array<Commission & {
+    referredUserEmail: string | null;
+    couponCode: string | null;
+    commissionDurationMonths: number | null;
+  }>>;
+  getAdminCommissionsDashboard(): Promise<{
+    pendingCount: number;
+    pendingAmount: number;
+    paidCount: number;
+    paidAmount: number;
+    reversedCount: number;
+    reversedAmount: number;
+    recurringThisMonth: number;
+    recurringAmountThisMonth: number;
+    totalAffiliatesWithPending: number;
+  }>;
   createCommission(commission: InsertCommission): Promise<Commission>;
   updateCommission(id: number, data: Partial<InsertCommission>): Promise<Commission | undefined>;
   markCommissionAsPaid(id: number, adminId: string): Promise<Commission | undefined>;
@@ -421,6 +454,8 @@ export interface IStorage {
     totalEarnings: number;
     pendingEarnings: number;
     paidEarnings: number;
+    reversedEarnings: number;
+    activeReferrals: number;
     coupon: Coupon | null;
     couponUsages: number;
     paidConversions: number;
@@ -3089,6 +3124,153 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  async getAllCommissionsFiltered(params: {
+    page: number;
+    limit: number;
+    status?: string;
+    type?: string;
+    affiliateUserId?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
+  }) {
+    const { page, limit, status, type, affiliateUserId, dateFrom, dateTo } = params;
+    const offset = (page - 1) * limit;
+
+    const conditions: any[] = [];
+    if (status) conditions.push(eq(commissions.status, status));
+    if (type) conditions.push(eq(commissions.type, type));
+    if (affiliateUserId) conditions.push(eq(commissions.affiliateUserId, affiliateUserId));
+    if (dateFrom) conditions.push(gte(commissions.createdAt, dateFrom));
+    if (dateTo) conditions.push(lte(commissions.createdAt, dateTo));
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(commissions)
+      .where(whereClause);
+
+    const rows = await db
+      .select({
+        id: commissions.id,
+        affiliateUserId: commissions.affiliateUserId,
+        referredUserId: commissions.referredUserId,
+        couponId: commissions.couponId,
+        couponUsageId: commissions.couponUsageId,
+        stripeSubscriptionId: commissions.stripeSubscriptionId,
+        stripeInvoiceId: commissions.stripeInvoiceId,
+        amount: commissions.amount,
+        type: commissions.type,
+        status: commissions.status,
+        createdAt: commissions.createdAt,
+        paidAt: commissions.paidAt,
+        paidByAdminId: commissions.paidByAdminId,
+        reversedAt: commissions.reversedAt,
+        reversedReason: commissions.reversedReason,
+        couponCode: coupons.code,
+        commissionDurationMonths: coupons.commissionDurationMonths,
+      })
+      .from(commissions)
+      .leftJoin(coupons, eq(commissions.couponId, coupons.id))
+      .where(whereClause)
+      .orderBy(desc(commissions.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    if (rows.length === 0) return { commissions: [] as any[], total: 0 };
+
+    const allUserIds = [...new Set([...rows.map(r => r.affiliateUserId), ...rows.map(r => r.referredUserId)])];
+    const usersList = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(inArray(users.id, allUserIds));
+    const userMap = new Map(usersList.map(u => [u.id, u.email]));
+
+    return {
+      commissions: rows.map(row => ({
+        ...row,
+        affiliateEmail: userMap.get(row.affiliateUserId) ?? null,
+        referredUserEmail: userMap.get(row.referredUserId) ?? null,
+      })),
+      total: countResult?.count || 0,
+    };
+  }
+
+  async getAffiliateCommissionsDetail(affiliateUserId: string) {
+    const rows = await db
+      .select({
+        id: commissions.id,
+        affiliateUserId: commissions.affiliateUserId,
+        referredUserId: commissions.referredUserId,
+        couponId: commissions.couponId,
+        couponUsageId: commissions.couponUsageId,
+        stripeSubscriptionId: commissions.stripeSubscriptionId,
+        stripeInvoiceId: commissions.stripeInvoiceId,
+        amount: commissions.amount,
+        type: commissions.type,
+        status: commissions.status,
+        createdAt: commissions.createdAt,
+        paidAt: commissions.paidAt,
+        paidByAdminId: commissions.paidByAdminId,
+        reversedAt: commissions.reversedAt,
+        reversedReason: commissions.reversedReason,
+        couponCode: coupons.code,
+        commissionDurationMonths: coupons.commissionDurationMonths,
+      })
+      .from(commissions)
+      .leftJoin(coupons, eq(commissions.couponId, coupons.id))
+      .where(eq(commissions.affiliateUserId, affiliateUserId))
+      .orderBy(desc(commissions.createdAt));
+
+    if (rows.length === 0) return [];
+
+    const referredUserIds = [...new Set(rows.map(r => r.referredUserId))];
+    const referredUsers = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(inArray(users.id, referredUserIds));
+    const userMap = new Map(referredUsers.map(u => [u.id, u.email]));
+
+    return rows.map(row => ({
+      ...row,
+      referredUserEmail: userMap.get(row.referredUserId) ?? null,
+    }));
+  }
+
+  async getAdminCommissionsDashboard() {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [stats] = await db
+      .select({
+        pendingCount: sql<number>`count(*) filter (where ${commissions.status} = 'pending')::int`,
+        pendingAmount: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.status} = 'pending'), 0)::int`,
+        paidCount: sql<number>`count(*) filter (where ${commissions.status} = 'paid')::int`,
+        paidAmount: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.status} = 'paid'), 0)::int`,
+        reversedCount: sql<number>`count(*) filter (where ${commissions.status} = 'reversed')::int`,
+        reversedAmount: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.status} = 'reversed'), 0)::int`,
+        recurringThisMonth: sql<number>`count(*) filter (where ${commissions.type} = 'recurring' and ${commissions.createdAt} >= ${startOfMonth})::int`,
+        recurringAmountThisMonth: sql<number>`coalesce(sum(${commissions.amount}) filter (where ${commissions.type} = 'recurring' and ${commissions.createdAt} >= ${startOfMonth}), 0)::int`,
+      })
+      .from(commissions);
+
+    const [affiliateResult] = await db
+      .select({ count: sql<number>`count(distinct ${commissions.affiliateUserId})::int` })
+      .from(commissions)
+      .where(eq(commissions.status, 'pending'));
+
+    return {
+      pendingCount: stats?.pendingCount ?? 0,
+      pendingAmount: stats?.pendingAmount ?? 0,
+      paidCount: stats?.paidCount ?? 0,
+      paidAmount: stats?.paidAmount ?? 0,
+      reversedCount: stats?.reversedCount ?? 0,
+      reversedAmount: stats?.reversedAmount ?? 0,
+      recurringThisMonth: stats?.recurringThisMonth ?? 0,
+      recurringAmountThisMonth: stats?.recurringAmountThisMonth ?? 0,
+      totalAffiliatesWithPending: affiliateResult?.count ?? 0,
+    };
+  }
+
   // ================== AFFILIATE REPORTS ==================
 
   async getAffiliateStats(affiliateUserId: string): Promise<{
@@ -3096,36 +3278,46 @@ export class DatabaseStorage implements IStorage {
     totalEarnings: number;
     pendingEarnings: number;
     paidEarnings: number;
+    reversedEarnings: number;
+    activeReferrals: number;
     coupon: Coupon | null;
     couponUsages: number;
     paidConversions: number;
   }> {
-    // Get affiliate's coupon
     const affiliateCoupons = await this.getCouponsByAffiliateId(affiliateUserId);
     const coupon = affiliateCoupons.length > 0 ? affiliateCoupons[0] : null;
 
-    // Get all commissions for this affiliate
     const affiliateCommissions = await this.getCommissionsByAffiliateId(affiliateUserId);
 
-    const totalReferrals = affiliateCommissions.length;
-    const totalEarnings = affiliateCommissions.reduce((sum, c) => sum + c.amount, 0);
+    const totalReferrals = new Set(affiliateCommissions.map(c => c.referredUserId)).size;
+    const totalEarnings = affiliateCommissions
+      .filter(c => c.status !== 'reversed')
+      .reduce((sum, c) => sum + c.amount, 0);
     const pendingEarnings = affiliateCommissions
-      .filter(c => c.status === "pending")
+      .filter(c => c.status === 'pending')
       .reduce((sum, c) => sum + c.amount, 0);
     const paidEarnings = affiliateCommissions
-      .filter(c => c.status === "paid")
+      .filter(c => c.status === 'paid')
+      .reduce((sum, c) => sum + c.amount, 0);
+    const reversedEarnings = affiliateCommissions
+      .filter(c => c.status === 'reversed')
       .reduce((sum, c) => sum + c.amount, 0);
 
-    // Calculate coupon usages and paid conversions
     const couponUsages = coupon?.usageCount || 0;
-    // paidConversions = number of commissions generated (pending or paid, not reversed)
-    const paidConversions = affiliateCommissions.filter(c => c.status !== "reversed").length;
+    const paidConversions = new Set(
+      affiliateCommissions.filter(c => c.status !== 'reversed').map(c => c.referredUserId)
+    ).size;
+    const activeReferrals = new Set(
+      affiliateCommissions.filter(c => c.status !== 'reversed').map(c => c.referredUserId)
+    ).size;
 
     return {
       totalReferrals,
       totalEarnings,
       pendingEarnings,
       paidEarnings,
+      reversedEarnings,
+      activeReferrals,
       coupon,
       couponUsages,
       paidConversions,
