@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, UserCog, Copy, CheckCircle2, XCircle, Clock, Globe, Zap,
-  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail, RotateCcw, Loader2,
+  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail, RotateCcw, Loader2, RefreshCw,
 } from "lucide-react";
 import {
   Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -980,6 +980,28 @@ export default function AdminUserDetail() {
     },
   });
 
+  const syncStripeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/users/${id}/sync-stripe`);
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${id}/details`] });
+      const planInfo = result.planName ? ` — ${result.planName}` : "";
+      toast({
+        title: language === "pt-BR" ? "Sincronizado com Stripe" : "Synced with Stripe",
+        description: `${result.action}: ${result.status}${planInfo}`,
+      });
+    },
+    onError: (err: any) => {
+      toast({
+        title: language === "pt-BR" ? "Erro ao sincronizar" : "Sync failed",
+        description: err?.message || (language === "pt-BR" ? "Não foi possível sincronizar com o Stripe" : "Could not sync with Stripe"),
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) return <DetailSkeleton />;
 
   if (error || !data) {
@@ -1022,16 +1044,32 @@ export default function AdminUserDetail() {
           {p.isAdminUser && <Badge variant="outline" className="border-primary/30 text-primary">Admin</Badge>}
         </div>
 
-        <Button
-          onClick={() => impersonateMutation.mutate()}
-          disabled={impersonateMutation.isPending || p.isAdminUser}
-          size="sm"
-          variant="secondary"
-          data-testid="button-impersonate-user"
-        >
-          <UserCog className="h-4 w-4 mr-2" />
-          {language === "pt-BR" ? "Entrar como usuário" : "Impersonate"}
-        </Button>
+        <div className="flex items-center gap-2">
+          {(p.stripeCustomerId || p.stripeSubscriptionId) && (
+            <Button
+              onClick={() => syncStripeMutation.mutate()}
+              disabled={syncStripeMutation.isPending}
+              size="sm"
+              variant="outline"
+              data-testid="button-sync-stripe"
+            >
+              {syncStripeMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <RefreshCw className="h-4 w-4 mr-2" />}
+              {language === "pt-BR" ? "Sync Stripe" : "Sync Stripe"}
+            </Button>
+          )}
+          <Button
+            onClick={() => impersonateMutation.mutate()}
+            disabled={impersonateMutation.isPending || p.isAdminUser}
+            size="sm"
+            variant="secondary"
+            data-testid="button-impersonate-user"
+          >
+            <UserCog className="h-4 w-4 mr-2" />
+            {language === "pt-BR" ? "Entrar como usuário" : "Impersonate"}
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="overview">
