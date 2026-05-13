@@ -1,0 +1,85 @@
+Quero revisar novamente o fluxo completo de planos no admin e no usuário após a implementação do botão "Alterar Plano" no AdminUserDetail.
+
+Não implementar nada agora.
+Apenas auditar e validar.
+
+Revisar:
+
+1. AdminUserDetail UI
+- botão "Alterar Plano" aparece na aba Overview;
+- botão aparece também na aba Billing;
+- modal abre corretamente;
+- plano atual vem pré-selecionado;
+- lista mostra apenas planos ativos;
+- Free aparece corretamente;
+- deprecated não aparece;
+- botão Confirmar desabilita se selecionar o plano atual;
+- loading/spinner funciona;
+- toast de sucesso;
+- toast de erro;
+- toast de warning Stripe.
+
+2. Endpoint change-plan
+Verificar:
+- POST /api/admin/users/:id/change-plan;
+- payload correto { planId };
+- auth admin;
+- validação do plano;
+- usuário sem Stripe;
+- usuário com Stripe;
+- usuário suspenso;
+- usuário em grace period;
+- usuário com downgrade pendente.
+
+3. Regra final de plano manual
+Confirmar:
+- banco atualiza primeiro;
+- subscriptionStatus='active';
+- subscriptionStartDate atualizada;
+- subscriptionEndDate +30 dias para manual;
+- suspendedAt=null;
+- gracePeriodEndsAt=null;
+- pendingPlanId=null;
+- pendingPlanChangeAt=null;
+- pendingPlanChangeType=null;
+- restoreUserSubscription executado.
+
+4. Stripe best-effort
+Confirmar:
+- se existe stripeSubscriptionId, tenta atualizar price no Stripe;
+- proration_behavior='none';
+- se Stripe falhar, DB continua atualizado;
+- UI mostra warning;
+- sem stripeSubscriptionId não chama Stripe;
+- sem stripePriceId não quebra.
+
+5. Consistência com billing normal
+Confirmar que isso NÃO quebra:
+- checkout usuário;
+- upgrade;
+- downgrade;
+- pendingPlan;
+- webhooks;
+- sync Stripe;
+- Jorge Filho;
+- afiliados/comissões.
+
+6. Testes obrigatórios
+Executar/simular:
+- alterar Jorge Filho de Ilimitado para Básico;
+- alterar de Básico para Ilimitado;
+- usuário sem Stripe recebe plano manual;
+- usuário com Stripe troca plano;
+- usuário suspenso recebe plano e é reativado;
+- usuário com downgrade pendente recebe plano manual e pending é limpo;
+- trocar para Free;
+- plano inválido retorna erro claro;
+- Stripe falhando retorna warning, não bloqueia.
+
+7. Resultado
+Entregar:
+- arquivos revisados;
+- bugs encontrados;
+- ajustes necessários;
+- testes feitos;
+- veredicto se o fluxo admin de adicionar/alterar plano está pronto.
