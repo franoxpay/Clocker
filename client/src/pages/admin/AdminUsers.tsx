@@ -166,7 +166,8 @@ export default function AdminUsers() {
 
   const changePlanMutation = useMutation({
     mutationFn: async ({ userId, planId }: { userId: string; planId: number }) => {
-      await apiRequest("POST", `/api/admin/users/${userId}/change-plan`, { planId });
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/change-plan`, { planId });
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
@@ -177,9 +178,10 @@ export default function AdminUsers() {
         description: language === "pt-BR" ? "Plano alterado" : "Plan changed",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: t("common.error"),
+        description: error?.message || (language === "pt-BR" ? "Erro ao alterar plano" : "Failed to change plan"),
         variant: "destructive",
       });
     },

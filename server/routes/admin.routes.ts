@@ -837,9 +837,54 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const userId = req.params.id;
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
-      if (!user.stripeSubscriptionId) return res.status(400).json({ message: "User has no Stripe subscription" });
 
       const stripe = await getStripeClient();
+
+      // If the user has no subscription ID but has a customer ID, look up the
+      // most recent active subscription by customer. This handles the case where
+      // a checkout completed in Stripe but the webhook was not processed.
+      if (!user.stripeSubscriptionId && user.stripeCustomerId) {
+        console.log(`[Admin sync-stripe] No subscription ID — looking up by customer ${user.stripeCustomerId}`);
+        const subs = await stripe.subscriptions.list({
+          customer: user.stripeCustomerId,
+          status: 'all',
+          limit: 5,
+        });
+        const activeSub = subs.data.find(s => s.status === 'active' || s.status === 'trialing')
+          ?? subs.data[0];
+        if (!activeSub) {
+          return res.status(400).json({ message: "No Stripe subscription found for this customer" });
+        }
+        // Find which plan matches
+        const priceId = activeSub.items.data[0]?.price?.id;
+        const matchedPlan = priceId ? await storage.getPlanByStripePriceId(priceId) : null;
+        const isActive = activeSub.status === 'active' || activeSub.status === 'trialing';
+        const periodEnd = (activeSub as any).current_period_end;
+        const endDate = periodEnd ? new Date(periodEnd * 1000) : new Date();
+        await storage.updateUser(userId, {
+          stripeSubscriptionId: activeSub.id,
+          subscriptionStatus: activeSub.status,
+          subscriptionEndDate: endDate,
+          ...(isActive && matchedPlan ? { planId: matchedPlan.id } : {}),
+          pendingPlanId: null,
+          pendingPlanChangeAt: null,
+          pendingPlanChangeType: null,
+          suspendedAt: null,
+          suspensionReason: null,
+          gracePeriodEndsAt: null,
+        });
+        console.log(`[Admin sync-stripe] Synced by customer — sub ${activeSub.id}, status ${activeSub.status}, plan ${matchedPlan?.name ?? 'unknown'}`);
+        return res.json({
+          action: 'synced_by_customer',
+          subscriptionId: activeSub.id,
+          status: activeSub.status,
+          planName: matchedPlan?.name ?? null,
+          subscriptionEndDate: endDate,
+        });
+      }
+
+      if (!user.stripeSubscriptionId) return res.status(400).json({ message: "User has no Stripe subscription and no Stripe customer ID" });
+
       const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
       const stripeStatus = sub.status;
       const periodEndTs = (sub as any).current_period_end;

@@ -31,7 +31,21 @@ export class WebhookHandlers {
       const sync = await getStripeSync();
       const event = await sync.processWebhook(payload, signature, uuid);
       console.log(`[Stripe Webhook] Processed via stripe-replit-sync: ${event?.type}`);
-      await this.handleStripeEvent(event);
+      if (event && event.type) {
+        await this.handleStripeEvent(event);
+        return;
+      }
+      // stripe-replit-sync verified the signature and processed its own sync,
+      // but returned no event object. Parse the raw payload directly — the
+      // signature was already validated so this is safe.
+      console.log('[Stripe Webhook] stripe-replit-sync returned no event — parsing raw payload');
+      const parsed = JSON.parse(payload.toString('utf8'));
+      if (parsed && parsed.type) {
+        console.log(`[Stripe Webhook] Parsed event from payload: ${parsed.type} (id: ${parsed.id})`);
+        await this.handleStripeEvent(parsed);
+        return;
+      }
+      console.warn('[Stripe Webhook] Could not extract valid event from payload after sync — skipping');
       return;
     } catch (syncError: any) {
       const isNoSecret = syncError.message?.includes('No webhook signing secret');

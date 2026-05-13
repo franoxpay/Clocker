@@ -1,0 +1,75 @@
+Investigue e corrija dois bugs urgentes de plano/pagamento.
+
+Problemas:
+
+1. Usuário Jorge Filho teve pagamento/plano marcado como aprovado, mas o sistema não atualizou o plano dele.
+Quero descobrir:
+- se foi pagamento Stripe;
+- se foi aprovação manual/admin;
+- se webhook chegou;
+- se user.planId mudou;
+- se subscriptionStatus mudou;
+- se stripeSubscriptionId está salvo;
+- se houve erro no webhook;
+- se o plano ficou ativo na Stripe mas não no banco.
+
+2. No painel admin, não consigo mais dar plano manual para usuário.
+O botão/fluxo de change-plan/force-payment parou de funcionar.
+
+Auditar:
+
+A. Usuário Jorge Filho
+- localizar usuário por nome/email;
+- verificar planId atual;
+- subscriptionStatus;
+- stripeCustomerId;
+- stripeSubscriptionId;
+- pendingPlanId;
+- último pagamento/invoice;
+- logs Stripe/webhook;
+- eventos em stripe_webhook_events;
+- se existe erro registrado.
+
+B. Fluxo admin manual
+Verificar endpoint:
+POST /api/admin/users/:id/change-plan
+
+Confirmar:
+- se rota existe;
+- se está protegida corretamente;
+- se frontend chama URL correta;
+- payload enviado;
+- erro retornado;
+- status HTTP;
+- se admin auth passa;
+- se plano manual deveria criar Stripe subscription ou só atualizar banco;
+- se pendingPlanId está sendo limpo;
+- se validação de plano bloqueou algo.
+
+C. Corrigir
+- se pagamento Stripe aprovado não atualizou banco, corrigir webhook/sync;
+- se admin manual falhou por validação, corrigir;
+- se endpoint quebrou após mudanças de pendingPlan/change-plan, corrigir;
+- garantir que admin consiga atribuir plano manualmente.
+
+D. Segurança
+- admin change-plan deve limpar pendingPlanId;
+- deve restaurar acesso;
+- deve limpar suspensão/grace;
+- deve registrar log claro;
+- não deve criar cobrança indevida sem intenção.
+
+E. Testar
+- usuário Jorge Filho sincronizado corretamente;
+- admin consegue dar plano manual;
+- admin consegue trocar plano manual;
+- pending downgrade antigo é limpo;
+- usuário passa a ver o plano correto;
+- painel admin mostra plano correto.
+
+No final entregar:
+- causa do Jorge não atualizar;
+- causa do plano manual não funcionar;
+- arquivos alterados;
+- correção aplicada;
+- testes feitos.
