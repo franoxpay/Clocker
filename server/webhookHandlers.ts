@@ -32,17 +32,17 @@ export class WebhookHandlers {
       const event = await sync.processWebhook(payload, signature, uuid);
       console.log(`[Stripe Webhook] Processed via stripe-replit-sync: ${event?.type}`);
       if (event && event.type) {
-        await this.handleStripeEvent(event);
+        await this.handleStripeEvent(event, 'managed_sync');
         return;
       }
       // stripe-replit-sync verified the signature and processed its own sync,
       // but returned no event object. Parse the raw payload directly — the
       // signature was already validated so this is safe.
-      console.log('[Stripe Webhook] stripe-replit-sync returned no event — parsing raw payload');
+      console.log('[Stripe Webhook] stripe-replit-sync returned no event — parsing raw payload (raw_payload_fallback)');
       const parsed = JSON.parse(payload.toString('utf8'));
       if (parsed && parsed.type) {
         console.log(`[Stripe Webhook] Parsed event from payload: ${parsed.type} (id: ${parsed.id})`);
-        await this.handleStripeEvent(parsed);
+        await this.handleStripeEvent(parsed, 'raw_payload_fallback');
         return;
       }
       console.warn('[Stripe Webhook] Could not extract valid event from payload after sync — skipping');
@@ -68,14 +68,17 @@ export class WebhookHandlers {
       const stripe = await getStripeClient();
       const event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
       console.log(`[Stripe Webhook] Verified directly — event: ${event.type}`);
-      await this.handleStripeEvent(event);
+      await this.handleStripeEvent(event, 'direct_verification');
     } catch (verifyError: any) {
       console.error('[Stripe Webhook] Invalid signature:', verifyError.message);
       throw verifyError;
     }
   }
 
-  static async handleStripeEvent(event: any): Promise<void> {
+  static async handleStripeEvent(
+    event: any,
+    source: 'managed_sync' | 'raw_payload_fallback' | 'direct_verification' | 'manual' = 'managed_sync',
+  ): Promise<void> {
     if (!event || !event.type) {
       console.log('[Stripe Webhook] Received undefined or invalid event, skipping');
       return;
@@ -87,12 +90,12 @@ export class WebhookHandlers {
     if (event.id) {
       const alreadyProcessed = await storage.hasProcessedWebhookEvent(event.id);
       if (alreadyProcessed) {
-        console.log(`[Stripe Webhook] Event ${event.id} (${event.type}) already processed — skipping (idempotent)`);
+        console.log(`[Stripe Webhook] SKIP event_id=${event.id} type=${event.type} source=${source} — already processed (idempotent)`);
         return;
       }
     }
 
-    console.log(`[Stripe Webhook] Processing event: ${event.type} (id: ${event.id})`);
+    console.log(`[Stripe Webhook] START event_id=${event.id ?? 'no-id'} type=${event.type} source=${source}`);
 
     let processingError: string | null = null;
     try {
@@ -127,20 +130,21 @@ export class WebhookHandlers {
       }
     } catch (err: any) {
       processingError = err.message;
-      console.error(`[Stripe Webhook] Error processing event ${event.id} (${event.type}):`, err.message);
+      console.error(`[Stripe Webhook] ERROR event_id=${event.id} type=${event.type} source=${source} — ${err.message}`);
       throw err;
     } finally {
+      const processed = !processingError;
       // Always record the event — even on error — so Stripe retries don't loop
       // indefinitely. Error field captures what went wrong for debugging.
       if (event.id) {
+        const customerId = event.data?.object?.customer;
+        const subscriptionId = event.data?.object?.subscription || event.data?.object?.id;
+        console.log(`[Stripe Webhook] DONE event_id=${event.id} type=${event.type} source=${source} processed=${processed} customerId=${customerId ?? 'n/a'} subscriptionId=${subscriptionId ?? 'n/a'}`);
         await storage.markWebhookEventProcessed(
           event.id,
           event.type,
           processingError,
-          {
-            customerId: event.data?.object?.customer,
-            subscriptionId: event.data?.object?.subscription || event.data?.object?.id,
-          }
+          { source, customerId, subscriptionId }
         ).catch((markErr: any) =>
           console.error('[Stripe Webhook] Failed to mark event as processed:', markErr.message)
         );

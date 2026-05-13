@@ -1,0 +1,78 @@
+Validar urgentemente o processamento real dos webhooks Stripe após o fix.
+
+Contexto:
+Foi descoberto que stripe-replit-sync retornava undefined e os eventos Stripe estavam sendo descartados.
+Agora o webhook faz parse do payload bruto quando sync.processWebhook() retorna undefined.
+
+Objetivo:
+Confirmar que webhooks Stripe agora são processados de verdade.
+
+Testar exatamente:
+
+1. Usuário Jorge Filho
+- abrir perfil no admin;
+- clicar "Sync Stripe";
+- confirmar:
+  - stripeSubscriptionId preenchido;
+  - subscriptionStatus = active;
+  - planId correto;
+  - subscriptionEndDate correta;
+  - acesso restaurado.
+
+2. Tabela stripe_webhook_events
+Antes do teste:
+- verificar quantos registros existem.
+
+Depois do teste:
+- confirmar que novos eventos são gravados.
+
+3. Teste checkout novo
+Criar um checkout real/teste com usuário de teste.
+Confirmar:
+- checkout.session.completed chegou;
+- usuário teve planId atualizado;
+- subscriptionStatus virou active;
+- stripeCustomerId salvo;
+- stripeSubscriptionId salvo.
+
+4. Teste invoice.payment_succeeded
+Confirmar:
+- evento foi processado;
+- grace/suspension foram limpos;
+- status active mantido;
+- comissão afiliada criada se houver cupom.
+
+5. Teste invoice.payment_failed
+Simular ou usar evento Stripe.
+Confirmar:
+- gracePeriodEndsAt preenchido;
+- subscriptionStatus = past_due;
+- email payment_failed enviado;
+- retry do mesmo evento não duplica grace.
+
+6. Teste idempotência
+Enviar o mesmo evento duas vezes.
+Confirmar:
+- primeira vez processa;
+- segunda vez pula;
+- não duplica comissão;
+- não duplica coupon usage;
+- não duplica logs críticos.
+
+7. Logs obrigatórios
+Quero ver logs claros:
+- event.id;
+- event.type;
+- processed=true/false;
+- source=managed_sync ou raw_payload_fallback;
+- userId afetado;
+- action executada.
+
+8. Resultado final
+Entregar:
+- eventos testados;
+- registros criados em stripe_webhook_events;
+- resultado do Jorge;
+- resultado do checkout;
+- qualquer erro encontrado;
+- veredicto: webhooks Stripe funcionando ou não.
