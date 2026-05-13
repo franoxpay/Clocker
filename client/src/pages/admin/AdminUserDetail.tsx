@@ -12,20 +12,36 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   ArrowLeft, UserCog, Copy, CheckCircle2, XCircle, Clock, Globe, Zap,
-  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail, RotateCcw, Loader2, RefreshCw,
+  AlertTriangle, Ban, Shield, Gift, TrendingUp, Mail, RotateCcw, Loader2, RefreshCw, CreditCard,
 } from "lucide-react";
 import {
   Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { EmailLog } from "@shared/schema";
+
+interface PlanOption {
+  id: number;
+  name: string;
+  nameEn: string | null;
+  price: number;
+  isActive: boolean;
+  isFree: boolean;
+}
 
 interface UserDetailData {
   profile: {
@@ -178,7 +194,7 @@ function fmtAmount(cents: number) {
   return `R$ ${(cents / 100).toFixed(2)}`;
 }
 
-function OverviewTab({ data, lang }: { data: UserDetailData; lang: string }) {
+function OverviewTab({ data, lang, onChangePlan }: { data: UserDetailData; lang: string; onChangePlan: () => void }) {
   const p = data.profile;
   const plan = data.plan;
   const fullName = [p.firstName, p.lastName].filter(Boolean).join(" ") || null;
@@ -204,8 +220,18 @@ function OverviewTab({ data, lang }: { data: UserDetailData; lang: string }) {
       </Card>
 
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2"><Shield className="h-4 w-4" />Assinatura</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onChangePlan}
+            data-testid="button-change-plan-overview"
+          >
+            <CreditCard className="h-3 w-3 mr-1" />
+            {lang === "pt-BR" ? "Alterar Plano" : "Change Plan"}
+          </Button>
         </CardHeader>
         <CardContent className="space-y-0">
           <InfoRow label="Plano" value={plan ? plan.name : <span className="text-muted-foreground">—</span>} />
@@ -301,13 +327,23 @@ function OverviewTab({ data, lang }: { data: UserDetailData; lang: string }) {
   );
 }
 
-function BillingTab({ data, lang }: { data: UserDetailData; lang: string }) {
+function BillingTab({ data, lang, onChangePlan }: { data: UserDetailData; lang: string; onChangePlan: () => void }) {
   const p = data.profile;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card>
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
           <CardTitle className="text-base">Stripe</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={onChangePlan}
+            data-testid="button-change-plan-billing"
+          >
+            <CreditCard className="h-3 w-3 mr-1" />
+            {lang === "pt-BR" ? "Alterar Plano" : "Change Plan"}
+          </Button>
         </CardHeader>
         <CardContent className="space-y-0">
           <InfoRow
@@ -1002,6 +1038,54 @@ export default function AdminUserDetail() {
     },
   });
 
+  // ── Change Plan ──────────────────────────────────────────────────────────
+  const [showChangePlan, setShowChangePlan] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+
+  const { data: availablePlans = [] } = useQuery<PlanOption[]>({
+    queryKey: ["/api/plans"],
+  });
+
+  const activePlans = availablePlans.filter((pl) => pl.isActive || pl.isFree);
+
+  const changePlanMutation = useMutation({
+    mutationFn: async (planId: number) => {
+      const res = await apiRequest("POST", `/api/admin/users/${id}/change-plan`, { planId });
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/users/${id}/details`] });
+      setShowChangePlan(false);
+      setSelectedPlanId("");
+      toast({
+        title: language === "pt-BR" ? "Plano alterado" : "Plan changed",
+        description: language === "pt-BR"
+          ? `Plano atualizado para ${result.planName ?? "—"}`
+          : `Plan updated to ${result.planName ?? "—"}`,
+      });
+      if (result?.stripeWarning) {
+        setTimeout(() => {
+          toast({
+            title: language === "pt-BR" ? "Aviso Stripe" : "Stripe Warning",
+            description: result.stripeWarning,
+            variant: "destructive",
+          });
+        }, 700);
+      }
+    },
+    onError: (err: any) => {
+      const raw = err?.message ?? "";
+      const clean = raw.replace(/^\d{3}:\s*/, "").trim();
+      let msg = clean;
+      try { msg = JSON.parse(clean)?.message ?? clean; } catch {}
+      toast({
+        title: language === "pt-BR" ? "Erro ao alterar plano" : "Failed to change plan",
+        description: msg || (language === "pt-BR" ? "Tente novamente" : "Please try again"),
+        variant: "destructive",
+      });
+    },
+  });
+
   if (isLoading) return <DetailSkeleton />;
 
   if (error || !data) {
@@ -1097,10 +1181,10 @@ export default function AdminUserDetail() {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          <OverviewTab data={data} lang={language} />
+          <OverviewTab data={data} lang={language} onChangePlan={() => { setSelectedPlanId(String(data.profile.planId ?? "")); setShowChangePlan(true); }} />
         </TabsContent>
         <TabsContent value="billing" className="mt-4">
-          <BillingTab data={data} lang={language} />
+          <BillingTab data={data} lang={language} onChangePlan={() => { setSelectedPlanId(String(data.profile.planId ?? "")); setShowChangePlan(true); }} />
         </TabsContent>
         <TabsContent value="domains" className="mt-4">
           <DomainsTab data={data} lang={language} />
@@ -1118,6 +1202,89 @@ export default function AdminUserDetail() {
           <EmailsTab userId={p.id} lang={language} />
         </TabsContent>
       </Tabs>
+
+      {/* ── Change Plan Dialog ─────────────────────────────────────────── */}
+      <Dialog open={showChangePlan} onOpenChange={(open) => { if (!open) { setShowChangePlan(false); setSelectedPlanId(""); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              {language === "pt-BR" ? "Alterar Plano" : "Change Plan"}
+            </DialogTitle>
+            <DialogDescription>
+              {language === "pt-BR"
+                ? `Usuário: ${p.email}`
+                : `User: ${p.email}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Current plan */}
+            <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">{language === "pt-BR" ? "Plano atual: " : "Current plan: "}</span>
+              <span className="font-medium">{data.plan?.name ?? (language === "pt-BR" ? "Nenhum" : "None")}</span>
+            </div>
+
+            {/* Plan selector */}
+            <div className="space-y-1.5">
+              <Label>{language === "pt-BR" ? "Novo plano" : "New plan"}</Label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger data-testid="select-plan">
+                  <SelectValue placeholder={language === "pt-BR" ? "Selecionar plano…" : "Select plan…"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {activePlans.map((pl) => (
+                    <SelectItem key={pl.id} value={String(pl.id)} data-testid={`select-plan-option-${pl.id}`}>
+                      <span className="flex items-center gap-2">
+                        {language === "pt-BR" ? pl.name : (pl.nameEn ?? pl.name)}
+                        {pl.isFree
+                          ? <Badge variant="outline" className="text-xs py-0 h-4">Free</Badge>
+                          : <span className="text-muted-foreground text-xs">— R$ {(pl.price / 100).toFixed(2)}</span>}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Warning notice */}
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-400 space-y-1">
+              <p className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                {language === "pt-BR" ? "Atribuição manual pelo admin" : "Manual admin assignment"}
+              </p>
+              <p className="text-amber-400/80 leading-relaxed">
+                {language === "pt-BR"
+                  ? "O banco será atualizado imediatamente. O Stripe será sincronizado apenas se o usuário já tiver uma assinatura Stripe vinculada. Nenhuma cobrança é gerada."
+                  : "The database will be updated immediately. Stripe is synced only if the user already has a linked Stripe subscription. No charge is generated."}
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setShowChangePlan(false); setSelectedPlanId(""); }}
+              disabled={changePlanMutation.isPending}
+            >
+              {language === "pt-BR" ? "Cancelar" : "Cancel"}
+            </Button>
+            <Button
+              onClick={() => selectedPlanId && changePlanMutation.mutate(parseInt(selectedPlanId))}
+              disabled={
+                !selectedPlanId ||
+                changePlanMutation.isPending ||
+                selectedPlanId === String(data.profile.planId)
+              }
+              data-testid="button-confirm-change-plan"
+            >
+              {changePlanMutation.isPending
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{language === "pt-BR" ? "Salvando…" : "Saving…"}</>
+                : language === "pt-BR" ? "Confirmar" : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
