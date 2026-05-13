@@ -73,6 +73,14 @@ import {
   HelpCircle,
   ExternalLink,
 } from "lucide-react";
+
+interface UserActivatedDomain {
+  id: number;
+  sharedDomainId: number;
+  isActive: boolean;
+  sharedDomain: SharedDomain;
+}
+
 interface OfferWithDomain extends Offer {
   domain?: Domain;
   sharedDomain?: SharedDomain;
@@ -122,10 +130,13 @@ export default function Offers() {
     queryKey: ["/api/domains"],
   });
 
-  // Fetch all active shared domains (available to all users automatically)
-  const { data: sharedDomains = [] } = useQuery<SharedDomain[]>({
-    queryKey: ["/api/shared-domains"],
+  const { data: userActivatedDomains = [] } = useQuery<UserActivatedDomain[]>({
+    queryKey: ["/api/user/shared-domains"],
   });
+
+  const sharedDomains: SharedDomain[] = userActivatedDomains
+    .filter(a => a.isActive && a.sharedDomain)
+    .map(a => a.sharedDomain);
 
   const { data: platformConfig } = useQuery<{ tiktokEnabled: boolean }>({
     queryKey: ["/api/platform-config"],

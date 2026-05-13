@@ -2180,9 +2180,33 @@ export async function registerRoutes(
         if (String(domainId).startsWith("shared_")) {
           parsedSharedDomainId = parseInt(String(domainId).replace("shared_", ""));
           console.log("[Offer Create] Parsed as SHARED domain:", parsedSharedDomainId);
+
+          const activated = await storage.hasUserActivatedSharedDomain(userId, parsedSharedDomainId);
+          if (!activated) {
+            return res.status(403).json({
+              message: "Você precisa ativar este domínio compartilhado antes de usá-lo em uma campanha.",
+              code: "SHARED_DOMAIN_NOT_ACTIVATED",
+            });
+          }
+
+          const sharedDomain = await storage.getSharedDomain(parsedSharedDomainId);
+          if (!sharedDomain || !sharedDomain.isActive || !sharedDomain.isVerified) {
+            return res.status(400).json({
+              message: "Este domínio compartilhado não está ativo ou verificado.",
+              code: "SHARED_DOMAIN_UNAVAILABLE",
+            });
+          }
         } else {
           parsedDomainId = parseInt(domainId);
           console.log("[Offer Create] Parsed as USER domain:", parsedDomainId);
+
+          const domain = await storage.getDomain(parsedDomainId);
+          if (!domain || domain.userId !== userId || !domain.isVerified) {
+            return res.status(403).json({
+              message: "Domínio inválido ou não verificado.",
+              code: "DOMAIN_NOT_ALLOWED",
+            });
+          }
         }
       }
 
@@ -2253,8 +2277,32 @@ export async function registerRoutes(
       if (domainId && domainId !== "platform" && domainId !== "0" && domainId !== "") {
         if (String(domainId).startsWith("shared_")) {
           parsedSharedDomainId = parseInt(String(domainId).replace("shared_", ""));
+
+          const activated = await storage.hasUserActivatedSharedDomain(userId, parsedSharedDomainId);
+          if (!activated) {
+            return res.status(403).json({
+              message: "Você precisa ativar este domínio compartilhado antes de usá-lo em uma campanha.",
+              code: "SHARED_DOMAIN_NOT_ACTIVATED",
+            });
+          }
+
+          const sharedDomain = await storage.getSharedDomain(parsedSharedDomainId);
+          if (!sharedDomain || !sharedDomain.isActive || !sharedDomain.isVerified) {
+            return res.status(400).json({
+              message: "Este domínio compartilhado não está ativo ou verificado.",
+              code: "SHARED_DOMAIN_UNAVAILABLE",
+            });
+          }
         } else {
           parsedDomainId = parseInt(domainId);
+
+          const domain = await storage.getDomain(parsedDomainId);
+          if (!domain || domain.userId !== userId || !domain.isVerified) {
+            return res.status(403).json({
+              message: "Domínio inválido ou não verificado.",
+              code: "DOMAIN_NOT_ALLOWED",
+            });
+          }
         }
       }
 

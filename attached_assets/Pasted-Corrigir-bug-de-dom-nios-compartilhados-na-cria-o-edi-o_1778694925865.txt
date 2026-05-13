@@ -1,0 +1,66 @@
+Corrigir bug de domínios compartilhados na criação/edição de campanhas.
+
+Problema:
+Na tela de criar/editar campanha, o usuário vê todos os domínios compartilhados globais, inclusive os que ele não ativou. Além disso, o backend permite salvar campanha com sharedDomainId não ativado via payload manual.
+
+Objetivo:
+Usuário só pode usar:
+- domínios próprios dele;
+- domínios compartilhados que ele ativou;
+- somente domínios ativos/verificados.
+
+Implementar:
+
+1. Frontend — Offers.tsx
+Trocar a query do seletor:
+DE:
+GET /api/shared-domains
+
+PARA:
+GET /api/user/shared-domains
+
+O dropdown deve mostrar somente shared domains ativados pelo usuário.
+
+2. Backend — segurança
+Em POST /api/offers e PUT /api/offers/:id:
+
+Se domainId vier como shared_X:
+- parsear sharedDomainId;
+- verificar se existe ativação em user_shared_domains para:
+  - req.user.id;
+  - sharedDomainId;
+  - isActive=true;
+- verificar se shared_domain também está ativo/verificado.
+
+Se não ativou:
+- retornar 403 ou 400:
+"Você precisa ativar este domínio compartilhado antes de usá-lo em uma campanha."
+
+3. Domínios próprios
+Continuar permitindo somente:
+- domains.userId = req.user.id;
+- isActive=true;
+- isVerified=true.
+
+4. Manter /api/shared-domains
+Não remover esse endpoint, pois ele pode ser usado na tela Domains.tsx para listar domínios disponíveis para ativação.
+
+5. Testes
+Testar:
+- usuário sem shared domains ativados → dropdown não mostra shared domains;
+- usuário ativa 1 shared domain → dropdown mostra só esse;
+- usuário não vê shared domains de outros;
+- shared domain inativo não aparece;
+- domínio próprio ativo aparece;
+- domínio próprio não verificado não aparece;
+- tentar criar offer via API com sharedDomainId não ativado → bloqueado;
+- editar offer para sharedDomainId não ativado → bloqueado;
+- offer existente com sharedDomain ativado continua funcionando.
+
+6. Entrega
+No final entregar:
+- arquivos alterados;
+- endpoint usado no frontend;
+- validação backend;
+- testes feitos;
+- riscos restantes.
