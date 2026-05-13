@@ -1,0 +1,102 @@
+Implementar os 2 fixes encontrados na auditoria do fluxo admin change-plan.
+
+========================
+BUG #1 — CRÍTICO
+Offers não são reativadas
+========================
+
+Problema:
+No endpoint change-plan:
+
+1. updateUser(offersDeactivatedBySystem=false)
+2. restoreUserSubscription()
+3. reactivateUserOffers()
+
+Mas reactivateUserOffers usa:
+if (!user.offersDeactivatedBySystem) return;
+
+Então:
+- a flag é zerada ANTES;
+- as offers nunca são religadas;
+- usuário continua sem offers mesmo com plano ativo.
+
+Corrigir.
+
+Objetivo:
+Quando admin adicionar/trocar plano:
+- offers suspensas pelo sistema devem ser reativadas corretamente.
+
+Implementação segura:
+- salvar hadOffersDisabledBeforeUpdate antes do updateUser;
+- se true:
+  - reativar offers diretamente;
+  OU
+  - chamar reactivateUserOffers antes de zerar o flag;
+- garantir:
+  - offers.isActive=true;
+  - offersDeactivatedBySystem=false no user.
+
+Adicionar log:
+[AdminPlanChange] Reactivated X offers for user Y
+
+Testar:
+- usuário com offers desativadas;
+- admin dá plano;
+- offers voltam ativas;
+- user.offersDeactivatedBySystem=false;
+- cloaker libera novamente.
+
+========================
+BUG #2 — MENOR
+Plano Free invisível
+========================
+
+Problema:
+Frontend faz:
+(pl.isActive || pl.isFree)
+
+Mas backend /api/plans já filtra:
+plans.filter(p => p.isActive)
+
+Então:
+- Free inativo nunca chega ao frontend.
+
+Corrigir.
+
+Opções aceitáveis:
+A) endpoint /api/plans incluir sempre:
+p.isActive || p.isFree
+
+OU
+
+B) garantir no banco que plano Free sempre é isActive=true.
+
+Preferência:
+corrigir no endpoint.
+
+Resultado esperado:
+- plano Free sempre aparece no modal admin;
+- planos deprecated continuam escondidos.
+
+========================
+VALIDAÇÃO
+========================
+
+Revalidar:
+- admin change-plan;
+- usuário suspenso;
+- usuário com offers desativadas;
+- plano Free;
+- Stripe best-effort;
+- downgrade pendente.
+
+========================
+ENTREGA
+========================
+
+Entregar:
+- arquivos alterados;
+- causa;
+- correção aplicada;
+- logs adicionados;
+- testes executados.

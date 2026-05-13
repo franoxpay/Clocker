@@ -694,6 +694,20 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       const oldPlanId = user.planId;
       const oldPlan = oldPlanId ? await storage.getPlan(oldPlanId) : null;
       const hadPendingChange = !!(user.pendingPlanId || user.pendingPlanChangeAt);
+      // Capture BEFORE updateUser clears the flag — reactivateUserOffers guards on this.
+      const hadOffersDisabled = user.offersDeactivatedBySystem;
+
+      // ── 0. REACTIVATE OFFERS (must run BEFORE updateUser) ───────────────────
+      // reactivateUserOffers() has a guard: `if (!user.offersDeactivatedBySystem) return`.
+      // updateUser below sets offersDeactivatedBySystem=false, so if we call it after,
+      // the guard would always fire and the offers would remain deactivated.
+      // Solution: reactivate BEFORE clearing the flag.
+      if (hadOffersDisabled) {
+        await storage.reactivateUserOffers(userId).catch((err: any) =>
+          console.error(`[AdminPlanChange] reactivateUserOffers error:`, err.message)
+        );
+        console.log(`[AdminPlanChange] Reactivated offers for user ${userId} (system had suspended them)`);
+      }
 
       // ── 1. DATABASE UPDATE (always, unconditional) ──────────────────────────
       // Admin manual plan assignment is authoritative — no Stripe dependency.
@@ -715,11 +729,6 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         pendingPlanChangeType: null,
         offersDeactivatedBySystem: false,
       });
-
-      // Re-enable any offers that were deactivated by the system
-      await storage.restoreUserSubscription(userId, Number(planId), 'active').catch((err: any) =>
-        console.error(`[AdminPlanChange] restoreUserSubscription error:`, err.message)
-      );
 
       if (hadPendingChange) {
         console.log(`[AdminPlanChange] Cleared pending plan change for user ${userId} (was pendingPlanId=${user.pendingPlanId}, type=${user.pendingPlanChangeType})`);

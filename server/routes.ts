@@ -1888,7 +1888,9 @@ export async function registerRoutes(
   app.get("/api/plans", async (req: Request, res: Response) => {
     try {
       const plans = await storage.getAllPlans();
-      res.json(plans.filter(p => p.isActive));
+      // Include active plans AND free plans (even if isActive=false on the free tier row).
+      // Deprecated/deactivated non-free plans are excluded.
+      res.json(plans.filter(p => p.isActive || p.isFree));
     } catch (error) {
       console.error("Error fetching plans:", error);
       res.status(500).json({ message: "Internal server error" });
