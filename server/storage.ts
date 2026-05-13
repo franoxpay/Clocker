@@ -2143,39 +2143,63 @@ export class DatabaseStorage implements IStorage {
     }
 
     const now = new Date();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const weekStart = new Date(today);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const weekStart = new Date(todayStart);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-    
+
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const result = await db
-      .select({
-        userId: clickLogs.userId,
-        today: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${today} THEN 1 ELSE 0 END)`,
-        thisWeek: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${weekStart} THEN 1 ELSE 0 END)`,
-        thisMonth: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${monthStart} THEN 1 ELSE 0 END)`,
-        lifetime: sql<number>`COUNT(*)`,
-      })
-      .from(clickLogs)
-      .where(inArray(clickLogs.userId, userIds))
-      .groupBy(clickLogs.userId);
+    // Two parallel queries to minimise wall-clock time.
+    // Query 1: today / thisWeek / thisMonth — filtered to the current month only so the
+    //   composite index (user_id, created_at DESC) is used as an index-range scan.
+    // Query 2: lifetime COUNT(*) — no date filter, uses the user_id index directly.
+    // Running both with Promise.all means total latency ≈ max(Q1, Q2) instead of Q1+Q2.
+    const [recentResult, lifetimeResult] = await Promise.all([
+      db
+        .select({
+          userId: clickLogs.userId,
+          today: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${todayStart} THEN 1 ELSE 0 END)`,
+          thisWeek: sql<number>`SUM(CASE WHEN ${clickLogs.createdAt} >= ${weekStart} THEN 1 ELSE 0 END)`,
+          thisMonth: sql<number>`COUNT(*)`,
+        })
+        .from(clickLogs)
+        .where(and(
+          inArray(clickLogs.userId, userIds),
+          gte(clickLogs.createdAt, monthStart),
+        ))
+        .groupBy(clickLogs.userId),
+
+      db
+        .select({
+          userId: clickLogs.userId,
+          lifetime: sql<number>`COUNT(*)`,
+        })
+        .from(clickLogs)
+        .where(inArray(clickLogs.userId, userIds))
+        .groupBy(clickLogs.userId),
+    ]);
 
     const map = new Map<string, { today: number; thisWeek: number; thisMonth: number; lifetime: number }>();
-    
+
     for (const userId of userIds) {
       map.set(userId, { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 });
     }
-    
-    for (const row of result) {
+
+    for (const row of recentResult) {
+      const existing = map.get(row.userId) ?? { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 };
       map.set(row.userId, {
+        ...existing,
         today: Number(row.today),
         thisWeek: Number(row.thisWeek),
         thisMonth: Number(row.thisMonth),
-        lifetime: Number(row.lifetime),
       });
+    }
+
+    for (const row of lifetimeResult) {
+      const existing = map.get(row.userId) ?? { today: 0, thisWeek: 0, thisMonth: 0, lifetime: 0 };
+      map.set(row.userId, { ...existing, lifetime: Number(row.lifetime) });
     }
 
     return map;

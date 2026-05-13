@@ -1,0 +1,85 @@
+Quero uma auditoria completa do filtro/cloaker do TikTok.
+
+Problema:
+O filtro do TikTok ainda não está bom. Parece que muita gente está indo para BLACK indevidamente.
+
+Objetivo:
+Entender exatamente como o TikTok está decidindo BLACK/WHITE hoje e comparar com o filtro do Facebook, que está mais estável.
+
+Não implementar nada ainda.
+Primeiro auditar.
+
+Analisar:
+
+1. Fluxo TikTok atual
+- rotas usadas;
+- parâmetros exigidos;
+- xcode;
+- ttclid;
+- macros TikTok;
+- user-agent;
+- IP API;
+- device;
+- país;
+- rate limit;
+- bot detection.
+
+2. Comparar com Facebook
+Mapear lado a lado:
+- regra Facebook;
+- regra TikTok;
+- diferenças;
+- proteções existentes no Facebook que não existem no TikTok;
+- falsos positivos/falsos negativos possíveis.
+
+3. Logs reais
+Verificar logs recentes de TikTok:
+- quantos BLACK;
+- quantos WHITE;
+- decisionReason;
+- botReasons;
+- IP type;
+- country;
+- device;
+- user-agent;
+- paramsValid;
+- xcodeValid;
+- ttclidValid.
+
+4. Bot/reviewer TikTok
+Investigar detecção de:
+- TikTokBot;
+- ByteDance;
+- ByteSpider;
+- TikTok internal browser;
+- datacenter ByteDance;
+- macros não resolvidas;
+- headless;
+- proxy/datacenter.
+
+5. Regra esperada
+Definir qual deve ser o comportamento ideal:
+- humano real vindo do TikTok Ads → BLACK;
+- bot/reviewer/crawler TikTok → WHITE;
+- acesso direto sem params → WHITE;
+- macros TikTok não resolvidas → WHITE;
+- datacenter/proxy → WHITE;
+- humano mobile real com params válidos → BLACK.
+
+6. Segurança backend
+Verificar se alguém consegue forçar BLACK só enviando params manualmente.
+Verificar se xcode/ttclid são suficientes.
+Verificar se TikTok precisa de challenge adicional.
+
+7. Não quebrar Facebook
+Qualquer melhoria no TikTok não pode alterar o comportamento do Facebook.
+
+8. Resultado final
+Entregar:
+- arquitetura atual do filtro TikTok;
+- diferença para Facebook;
+- causa provável de muitos BLACK;
+- riscos;
+- plano ideal de correção;
+- testes necessários;
+- recomendação: replicar lógica Facebook ou criar lógica própria.
