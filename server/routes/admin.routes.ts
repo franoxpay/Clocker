@@ -677,117 +677,99 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
     try {
       const userId = req.params.id;
       const { planId } = req.body;
-      
+
+      if (!planId || isNaN(Number(planId))) {
+        return res.status(400).json({ message: "planId is required and must be a number" });
+      }
+
       const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-      
-      const newPlan = await storage.getPlan(planId);
-      if (!newPlan) {
-        return res.status(404).json({ message: "Plan not found" });
-      }
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const newPlan = await storage.getPlan(Number(planId));
+      if (!newPlan) return res.status(404).json({ message: "Plan not found" });
       if (!newPlan.isActive && !newPlan.isFree) {
-        return res.status(400).json({ message: `Plan "${newPlan.name}" is deprecated and cannot be assigned to users` });
+        return res.status(400).json({ message: `Plano "${newPlan.name}" está desativado e não pode ser atribuído` });
       }
-      
-      const subscriptionEndDate = new Date();
-      subscriptionEndDate.setDate(subscriptionEndDate.getDate() + 30);
-      
-      if (user.stripeSubscriptionId && newPlan.stripePriceId) {
-        try {
-          const stripe = await getStripeClient();
-          const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
-          
-          if (subscription && subscription.items?.data?.length > 0) {
-            const currentPriceId = subscription.items.data[0].price?.id;
-            
-            if (currentPriceId !== newPlan.stripePriceId) {
-              const subscriptionItemId = subscription.items.data[0].id;
-              
-              await stripe.subscriptions.update(user.stripeSubscriptionId, {
-                items: [{
-                  id: subscriptionItemId,
-                  price: newPlan.stripePriceId,
-                }],
-                proration_behavior: 'none',
-              });
-              
-              console.log(`[ADMIN] Updated Stripe subscription for user ${userId} to plan ${newPlan.name} (no charge)`);
-            }
-          }
-        } catch (stripeError: any) {
-          console.error(`[ADMIN] Failed to update Stripe subscription:`, stripeError.message);
-          return res.status(500).json({ message: "Failed to update Stripe subscription: " + stripeError.message });
-        }
-      } else if (!user.stripeSubscriptionId && newPlan.stripePriceId) {
-        try {
-          const stripe = await getStripeClient();
-          
-          let customerId = user.stripeCustomerId;
-          if (!customerId) {
-            const customer = await stripe.customers.create({
-              email: user.email,
-              name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-              metadata: { userId: user.id },
-            });
-            customerId = customer.id;
-            await storage.updateUser(userId, { stripeCustomerId: customerId });
-            console.log(`[ADMIN] Created Stripe customer ${customerId} for user ${userId}`);
-          }
-          
-          const trialEnd = Math.floor(subscriptionEndDate.getTime() / 1000);
-          const subscription = await stripe.subscriptions.create({
-            customer: customerId,
-            items: [{ price: newPlan.stripePriceId }],
-            trial_end: trialEnd,
-          });
-          
-          await storage.updateUser(userId, { 
-            stripeSubscriptionId: subscription.id,
-            subscriptionStatus: subscription.status,
-            subscriptionEndDate,
-          });
-          
-          console.log(`[ADMIN] Created Stripe subscription ${subscription.id} for user ${userId} with 30-day trial (status: ${subscription.status})`);
-        } catch (stripeError: any) {
-          console.error(`[ADMIN] Failed to create Stripe subscription:`, stripeError.message);
-          return res.status(500).json({ message: "Failed to create Stripe subscription: " + stripeError.message });
-        }
-      }
-      
+
+      const oldPlanId = user.planId;
+      const oldPlan = oldPlanId ? await storage.getPlan(oldPlanId) : null;
       const hadPendingChange = !!(user.pendingPlanId || user.pendingPlanChangeAt);
 
-      const updateData: any = { 
-        planId,
+      // ── 1. DATABASE UPDATE (always, unconditional) ──────────────────────────
+      // Admin manual plan assignment is authoritative — no Stripe dependency.
+      // End date: keep existing if user already has Stripe subscription,
+      // otherwise set 30 days from now as a safety net.
+      const subscriptionEndDate = new Date();
+      subscriptionEndDate.setDate(subscriptionEndDate.getDate() + 30);
+
+      await storage.updateUser(userId, {
+        planId: Number(planId),
+        subscriptionStatus: 'active',
+        subscriptionStartDate: new Date(),
+        ...(!user.stripeSubscriptionId ? { subscriptionEndDate } : {}),
         suspendedAt: null,
         suspensionReason: null,
         gracePeriodEndsAt: null,
-        subscriptionStatus: 'active',
-        subscriptionStartDate: new Date(),
-        // Always clear any pending plan change — admin decision is authoritative.
-        // Without this, a stale pendingPlanId would be applied by the webhook on the
-        // next renewal, silently overriding the admin's manual plan assignment.
         pendingPlanId: null,
         pendingPlanChangeAt: null,
         pendingPlanChangeType: null,
-      };
-      
-      if (!user.stripeSubscriptionId) {
-        updateData.subscriptionEndDate = subscriptionEndDate;
-      }
-      
-      await storage.updateUser(userId, updateData);
+        offersDeactivatedBySystem: false,
+      });
+
+      // Re-enable any offers that were deactivated by the system
+      await storage.restoreUserSubscription(userId, Number(planId), 'active').catch((err: any) =>
+        console.error(`[AdminPlanChange] restoreUserSubscription error:`, err.message)
+      );
 
       if (hadPendingChange) {
         console.log(`[AdminPlanChange] Cleared pending plan change for user ${userId} (was pendingPlanId=${user.pendingPlanId}, type=${user.pendingPlanChangeType})`);
       }
-      console.log(`[AdminPlanChange] Plan changed to ${newPlan.name} (id=${planId}) for user ${userId} by admin`);
+      console.log(`[AdminPlanChange] user=${userId} oldPlan=${oldPlan?.name ?? 'none'}(${oldPlanId ?? 'null'}) newPlan=${newPlan.name}(${planId}) source=manual_admin`);
 
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error changing plan:", error);
-      res.status(500).json({ message: "Internal server error" });
+      // ── 2. STRIPE SYNC (best-effort, never blocks) ──────────────────────────
+      // Only attempt if user already has a Stripe subscription AND the new plan
+      // has a Stripe price. Admin assigning a plan without Stripe is fully valid.
+      let stripeResult: 'updated' | 'skipped' | 'warning' = 'skipped';
+      let stripeWarning: string | null = null;
+
+      if (user.stripeSubscriptionId && newPlan.stripePriceId) {
+        try {
+          const stripe = await getStripeClient();
+          const sub = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+          if (sub && sub.items?.data?.length > 0) {
+            const currentPriceId = sub.items.data[0].price?.id;
+            if (currentPriceId !== newPlan.stripePriceId) {
+              await stripe.subscriptions.update(user.stripeSubscriptionId, {
+                items: [{ id: sub.items.data[0].id, price: newPlan.stripePriceId }],
+                proration_behavior: 'none',
+              });
+              stripeResult = 'updated';
+              console.log(`[AdminPlanChange] Stripe subscription ${user.stripeSubscriptionId} updated to price ${newPlan.stripePriceId} (no charge)`);
+            } else {
+              stripeResult = 'skipped';
+              console.log(`[AdminPlanChange] Stripe already on correct price — no update needed`);
+            }
+          }
+        } catch (stripeError: any) {
+          stripeResult = 'warning';
+          stripeWarning = stripeError.message;
+          console.warn(`[AdminPlanChange] Stripe sync failed (non-blocking) — ${stripeError.message}`);
+        }
+      } else if (user.stripeSubscriptionId && !newPlan.stripePriceId) {
+        console.log(`[AdminPlanChange] New plan has no stripePriceId — Stripe subscription left unchanged`);
+      } else {
+        console.log(`[AdminPlanChange] User has no Stripe subscription — DB-only assignment (OK)`);
+      }
+
+      return res.json({
+        success: true,
+        planName: newPlan.name,
+        stripeResult,
+        ...(stripeWarning ? { stripeWarning } : {}),
+      });
+    } catch (error: any) {
+      console.error("[AdminPlanChange] Unexpected error:", error);
+      res.status(500).json({ message: error?.message || "Internal server error" });
     }
   });
 

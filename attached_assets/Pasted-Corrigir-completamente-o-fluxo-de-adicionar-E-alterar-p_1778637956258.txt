@@ -1,0 +1,96 @@
+Corrigir completamente o fluxo de adicionar E alterar plano manualmente pelo painel admin.
+
+Problema:
+O admin não consegue mais:
+- adicionar plano manual para usuário sem assinatura;
+- alterar plano manual de usuário existente.
+
+Objetivo:
+Restaurar os dois fluxos:
+1. adicionar plano;
+2. alterar plano.
+
+Auditar:
+
+1. Frontend admin
+- botão/modal de change-plan;
+- payload enviado;
+- endpoint;
+- planId;
+- mensagens de erro;
+- loading;
+- toast.
+
+2. Backend
+Endpoint:
+POST /api/admin/users/:id/change-plan
+
+Verificar:
+- validações;
+- auth;
+- busca do usuário;
+- busca do plano;
+- dependência indevida de Stripe;
+- falha em usuário sem stripeCustomerId;
+- falha em usuário sem stripeSubscriptionId;
+- falha em plano sem stripePriceId.
+
+3. Regra desejada
+
+A) ADMIN ADICIONAR PLANO MANUAL
+Usuário sem assinatura:
+- admin escolhe plano;
+- sistema atualiza:
+  - planId;
+  - subscriptionStatus='active';
+  - subscriptionStartDate;
+  - subscriptionEndDate opcional;
+  - limpa suspensão;
+  - limpa grace;
+  - limpa pending downgrade.
+- NÃO precisa Stripe;
+- NÃO cria cobrança;
+- NÃO exige stripeCustomerId.
+
+B) ADMIN ALTERAR PLANO MANUAL
+Usuário já com plano:
+- admin pode trocar plano;
+- troca imediata;
+- limpa pending downgrade;
+- usuário recebe novo limite imediatamente.
+
+4. Stripe
+Se existir assinatura Stripe:
+- tentar sincronizar sem cobrança;
+OU
+- manter apenas o banco atualizado.
+
+Mas:
+- erro Stripe NÃO deve impedir plano manual.
+
+5. Logs
+Adicionar logs claros:
+[AdminPlanChange] user=X oldPlan=Y newPlan=Z source=manual_admin
+
+6. UI
+- mensagens claras;
+- mostrar erro real;
+- mostrar sucesso;
+- atualizar tela automaticamente.
+
+7. Testes
+- usuário sem Stripe;
+- usuário com Stripe;
+- usuário manual;
+- usuário com downgrade pendente;
+- alterar plano;
+- adicionar plano;
+- remover suspensão;
+- plano refletindo no painel.
+
+8. Entrega
+- causa exata;
+- arquivos alterados;
+- regra final;
+- comportamento com/sem Stripe;
+- testes executados.

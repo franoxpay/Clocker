@@ -169,19 +169,33 @@ export default function AdminUsers() {
       const res = await apiRequest("POST", `/api/admin/users/${userId}/change-plan`, { planId });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       queryClient.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/admin/users") });
       setActionType(null);
       setSelectedUser(null);
+      const planLabel = result?.planName ? ` — ${result.planName}` : "";
       toast({
-        title: t("common.success"),
-        description: language === "pt-BR" ? "Plano alterado" : "Plan changed",
+        title: language === "pt-BR" ? "Plano alterado" : "Plan changed",
+        description: language === "pt-BR" ? `Plano atualizado com sucesso${planLabel}` : `Plan updated successfully${planLabel}`,
       });
+      if (result?.stripeWarning) {
+        setTimeout(() => {
+          toast({
+            title: language === "pt-BR" ? "Aviso Stripe" : "Stripe Warning",
+            description: result.stripeWarning,
+            variant: "destructive",
+          });
+        }, 600);
+      }
     },
     onError: (error: any) => {
+      const raw = error?.message ?? "";
+      const msg = raw.replace(/^\d{3}:\s*/, "").trim();
+      let parsed = msg;
+      try { parsed = JSON.parse(msg)?.message ?? msg; } catch {}
       toast({
         title: t("common.error"),
-        description: error?.message || (language === "pt-BR" ? "Erro ao alterar plano" : "Failed to change plan"),
+        description: parsed || (language === "pt-BR" ? "Erro ao alterar plano" : "Failed to change plan"),
         variant: "destructive",
       });
     },
