@@ -1,0 +1,95 @@
+Implementar P1 do filtro TikTok: permitir iPad/tablet TikTok legítimo chegar na bait page.
+
+Contexto:
+Auditoria mostrou que muitos cliques TikTok reais em iPad estão indo para WHITE por invalid_device:tablet.
+Esses cliques têm:
+- UA musical_ly/trill/WKWebView;
+- referer tiktok.com;
+- ttclid válido;
+- xcode válido;
+- IP residencial;
+- sem sinais de bot.
+
+Problema:
+Hoje tablet → WHITE antes da bait page.
+Mas a bait page é o mecanismo correto para separar humano real de automação.
+
+Objetivo:
+Para TikTok, tablet/iPad com sinais limpos deve ir para a bait page, não WHITE direto.
+
+Implementar:
+
+1. Manter bloqueios duros antes da bait:
+- datacenter ByteDance/TikTok;
+- unresolved_macro;
+- headless/automation;
+- bot_ua_pattern forte;
+- rate limit;
+- params inválidos;
+- xcode inválido;
+- ttclid ausente/inválido;
+- proxy fraudulento conhecido.
+
+2. Relaxar apenas device tablet para TikTok:
+Se:
+- platform === "tiktok";
+- device === "tablet";
+- ttclid válido;
+- xcode válido;
+- referer contém tiktok.com;
+- UA contém musical_ly, trill ou TikTok WebView;
+- IP não é datacenter;
+- IP não é proxy fraudulento;
+- sem macro não resolvida;
+- sem headless/bot pattern;
+
+Então:
+- não retornar WHITE por invalid_device:tablet;
+- enviar para bait page normalmente;
+- logar:
+decisionReason = "tiktok_tablet_allowed_to_bait"
+ou campo similar.
+
+3. Não alterar Facebook.
+Facebook + tablet deve continuar igual.
+
+4. Não liberar tablets sem sinais TikTok:
+- tablet sem ttclid → WHITE;
+- tablet sem referer TikTok → WHITE;
+- tablet com datacenter → WHITE;
+- tablet com macro unresolved → WHITE;
+- tablet com trafficforce/code200/Oxylabs → WHITE.
+
+5. Bait page:
+Confirmar que funciona em iPad/WKWebView:
+- touchstart;
+- scroll;
+- mouse/pointer;
+- token TTL;
+- redirect para BLACK após challenge humano.
+
+6. Logs:
+Salvar nos click logs:
+- deviceOriginal;
+- deviceNormalized;
+- tiktokTabletAllowed;
+- decisionReason;
+- baitServed=true/false.
+
+7. Testes:
+- TikTok + iPad + params válidos + referer tiktok.com + IP residencial → bait page → BLACK se challenge passa
+- TikTok + iPad + ByteDance datacenter → WHITE
+- TikTok + iPad + missing ttclid → WHITE
+- TikTok + iPad + unresolved macro → WHITE
+- TikTok + tablet Android real + params válidos → bait page
+- Facebook + iPad → comportamento inalterado
+- Desktop TikTok → continua WHITE
+- Headless tablet UA → WHITE
+
+8. Entrega:
+- arquivos alterados;
+- regra nova;
+- logs adicionados;
+- testes feitos;
+- impacto estimado;
+- riscos restantes.
