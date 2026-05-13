@@ -206,6 +206,8 @@ export interface BotDetectionInput {
   route: string;
   slug?: string;
   platform?: string;
+  /** HTTP Referer header — used to allow "Bulid" typo on confirmed TikTok traffic. */
+  referer?: string;
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -281,11 +283,39 @@ export function detectBotTraffic(input: BotDetectionInput): BotDetectionResult {
   }
 
   // 7. UA typos / raw SDK identifiers
+  // "Bulid" appears in some Samsung Galaxy S20/S21 firmware TikTok WebView UAs.
+  // When ALL strong signals point to a real user (TikTok platform, valid ttclid,
+  // tiktok.com referer, residential IP, no other bot flags), we downgrade it to
+  // informational-only to avoid false positives.
   for (const typo of UA_TYPO_PATTERNS) {
-    if (ua.includes(typo)) {
-      reasons.push(`ua_typo:${typo}`);
-      if (confidence === 'low') confidence = 'medium';
+    if (!ua.includes(typo)) continue;
+
+    // Special case: "Bulid" on TikTok with clean signals → non-blocking
+    if (
+      typo === 'Bulid' &&
+      platform === 'tiktok' &&
+      ttclid &&
+      !ttclid.includes('__') &&  // no unresolved macro
+      (input.referer ?? '').toLowerCase().includes('tiktok.com') &&
+      !ipAnalysis.isDatacenter &&
+      !ipAnalysis.isProxy &&
+      reasons.length === 0  // no other bot signal already detected
+    ) {
+      // Check UA looks like a mobile device (not desktop/headless)
+      const uaMobile = /android.*mobile|iphone|ipod|musical_ly|bytedancewebview/i.test(ua);
+      if (uaMobile) {
+        console.log(
+          `[BotDetection] suspicious_ua_typo_bulid_non_blocking ` +
+          `route=${route} slug=${slug ?? '-'} platform=${platform} ` +
+          `referer=${input.referer?.substring(0, 40) ?? '-'} ` +
+          `ttclid_present=true datacenter=false proxy=false — NOT flagging as bot`
+        );
+        continue;  // skip — informational only, not added to reasons
+      }
     }
+
+    reasons.push(`ua_typo:${typo}`);
+    if (confidence === 'low') confidence = 'medium';
   }
 
   // 8. Chrome version check — informational only, does NOT block traffic

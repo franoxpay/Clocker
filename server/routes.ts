@@ -839,8 +839,24 @@ function selectBlackPageUrl(offer: { blackPageUrl: string; blackPages?: Array<{ 
   return offer.blackPages[offer.blackPages.length - 1].url;
 }
 
+/**
+ * Samsung foldable model numbers that are smartphones despite tablet-like screen sizes.
+ * These match the "SM-F9xx" / "SM-F9x" series (Galaxy Fold / Z Fold / Z Flip family).
+ * The regex also catches variants like SM-F900U, SM-F916B, SM-F926U, SM-F936B, SM-F946U, SM-F956.
+ */
+const SAMSUNG_FOLDABLE_RE = /SM-F9\d{2}[A-Z0-9]*/i;
+
 function parseUserAgent(ua: string): "smartphone" | "tablet" | "desktop" {
   const uaLower = ua.toLowerCase();
+
+  // Samsung foldable phones must be classified as smartphone BEFORE the tablet check,
+  // because their screen dimensions can trigger "android(?!.*mobile)" tablet detection.
+  if (SAMSUNG_FOLDABLE_RE.test(ua)) {
+    const matched = ua.match(SAMSUNG_FOLDABLE_RE)?.[0] ?? 'foldable';
+    console.log(`[DeviceDetect] Samsung foldable detected (${matched}) → smartphone`);
+    return "smartphone";
+  }
+
   if (/android.*mobile|iphone|ipod|blackberry|windows phone/i.test(uaLower)) {
     return "smartphone";
   }
@@ -3881,6 +3897,7 @@ export async function registerRoutes(
         route:    '/r/:slug',
         slug,
         platform: offer.platform,
+        referer,
       });
       const isBotDetected = botResult.isBot;
       if (isBotDetected) failReason = botResult.primaryReason;
@@ -4460,6 +4477,7 @@ export async function registerRoutes(
         route:   '/:slug',
         slug,
         platform: offer.platform,
+        referer,
       });
       const isBotDetected2 = botResult2.isBot;
       if (isBotDetected2) failReason = botResult2.primaryReason;

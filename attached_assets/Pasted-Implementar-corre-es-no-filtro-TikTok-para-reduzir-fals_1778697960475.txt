@@ -1,0 +1,95 @@
+Implementar correções no filtro TikTok para reduzir falsos positivos reais.
+
+Contexto da auditoria:
+O filtro TikTok está mandando usuários reais para WHITE por dois motivos principais:
+
+1. Samsung Galaxy Fold SM-F900U classificado como tablet
+- 101 cliques afetados
+- é smartphone dobrável, não tablet
+- deve passar como mobile/smartphone
+
+2. UA typo "Bulid" bloqueando Samsung Galaxy S20 SM-G980F
+- 16 cliques afetados
+- tem ttclid válido
+- referer tiktok.com
+- IP residencial
+- xcode válido
+- parece usuário real
+
+Objetivo:
+Reduzir falso positivo sem abrir crawlers/bots do TikTok.
+
+Implementar:
+
+1. Device detection
+Atualizar parseUserAgent/device detection para tratar modelos dobráveis Samsung como smartphone/mobile, incluindo:
+- SM-F900U
+- SM-F900
+- SM-F916
+- SM-F926
+- SM-F936
+- SM-F946
+- SM-F956
+- Galaxy Fold / Z Fold patterns
+
+Resultado:
+Esses dispositivos NÃO devem ser classificados como tablet.
+
+2. UA typo "Bulid"
+Não bloquear automaticamente por "Bulid" quando todos os sinais fortes forem humanos:
+
+Permitir BLACK se:
+- platform = TikTok;
+- ttclid válido;
+- xcode válido;
+- referer contém tiktok.com;
+- IP não é datacenter;
+- IP não é proxy;
+- device é mobile/smartphone;
+- nenhum headless/webdriver/bot pattern forte.
+
+Nesse caso:
+- não adicionar reason bot_detected:ua_typo;
+- registrar apenas sinal informativo:
+suspicious_ua_typo_bulid_non_blocking
+
+Continuar bloqueando "Bulid" se combinado com:
+- datacenter;
+- proxy;
+- headless;
+- UA bot pattern;
+- macro não resolvida;
+- rate limit;
+- ttclid ausente/inválido.
+
+3. Não alterar Facebook
+Garantir que mudanças sejam específicas para TikTok ou seguras globalmente.
+Facebook não pode mudar de comportamento.
+
+4. Logs
+Adicionar logs claros:
+- deviceOriginal
+- deviceNormalized
+- foldableSamsungDetected
+- uaTypoNonBlocking
+- decisionReason
+
+5. Testes
+Testar:
+- TikTok + SM-F900U + params válidos → BLACK
+- TikTok + SM-F900U sem ttclid → WHITE
+- TikTok + SM-G980F Bulid + ttclid válido + referrer TikTok + IP residencial → BLACK
+- Bulid + datacenter → WHITE
+- Bulid + proxy → WHITE
+- Bulid + missing ttclid → WHITE
+- TikTok crawler IP ByteDance + unresolved macro → WHITE
+- HeadlessChrome → WHITE
+- Facebook flow permanece igual
+
+6. Entrega
+No final entregar:
+- arquivos alterados;
+- regra nova;
+- testes feitos;
+- quantos falsos positivos devem ser recuperados;
+- riscos restantes.
