@@ -1,0 +1,132 @@
+Quero investigar um bug urgente no filtro Facebook/cloaker antes de qualquer alteração.
+
+IMPORTANTE:
+Este é um chat novo. Primeiro leia e entenda a estrutura do projeto.
+Não implemente nada ainda.
+Não edite arquivos ainda.
+Faça apenas auditoria detalhada.
+
+Problema:
+Pessoas vindas do Facebook, com parâmetros corretos, estão indo para WHITE.
+O painel/log diz que o motivo é xcode inválido/ausente, mas visualmente o xcode está chegando na URL.
+
+Objetivo:
+Descobrir exatamente por que o sistema está marcando xcode como inválido mesmo quando ele chega.
+
+Primeiro, entenda o sistema:
+1. Ler estrutura geral do projeto.
+2. Mapear:
+- rotas de redirect /r/:slug e /:slug;
+- criação/edição de offer/campanha;
+- validação de parâmetros;
+- xcode;
+- fbcl/fbclid;
+- platform Facebook;
+- botDetection;
+- IP analysis;
+- logs de clique;
+- decisionReason;
+- black/white page.
+
+Auditar com foco em Facebook:
+
+1. Fluxo Facebook completo
+- quais parâmetros são obrigatórios;
+- como xcode é definido na campanha;
+- como xcode é comparado;
+- se compara case-sensitive;
+- se trim/normalize existe;
+- se decodeURIComponent interfere;
+- se querystring está sendo parseada corretamente;
+- se xcode vem como array;
+- se xcode vem duplicado;
+- se xcode vem com espaço, barra, pipe, unicode, % encoding;
+- se o redirect remove ou altera xcode.
+
+2. Logs recentes
+Buscar cliques Facebook recentes que foram WHITE por:
+- invalid_xcode;
+- missing_xcode;
+- missing_params;
+- invalid_fbcl;
+- bot_detected.
+
+Para cada um, mostrar:
+- full originalUrl;
+- parsed query params;
+- raw xcode;
+- expected xcode da offer;
+- normalized xcode;
+- comparação true/false;
+- decisionReason;
+- finalDecision.
+
+3. Comparar URL real vs parser
+Verificar se a URL tem:
+- ?xcode=...
+- &xcode=...
+- XCODE maiúsculo;
+- x_code;
+- xcode com trailing slash;
+- xcode depois de #fragment;
+- xcode dentro de encoded URL;
+- xcode duplicado.
+
+4. Verificar config da offer
+Para as offers afetadas:
+- platform;
+- trafficSource;
+- expected xcode;
+- parâmetros configurados;
+- blackUrl;
+- whiteUrl;
+- allowedDevices;
+- allowedCountries.
+
+5. Backend security
+Confirmar se backend valida xcode tanto em /r/:slug quanto em /:slug.
+Confirmar se as duas rotas usam a mesma lógica.
+Confirmar se há divergência entre as rotas.
+
+6. Possíveis causas a investigar
+- bug de normalização;
+- xcode salvo com espaço no banco;
+- URL chegando encoded;
+- query parser retornando array;
+- comparação com valor antigo em cache;
+- offer editada mas cache não invalidado;
+- rota /:slug usando variável errada;
+- logs usando xcode errado;
+- decisionReason errado;
+- fbcl/fbclid confundindo o motivo;
+- parâmetros do Facebook usando fbcl={{campaign.name}}|{{campaign.id}} e xcode=V90Z-MM3W;
+- URL final removendo xcode antes da validação.
+
+7. Não alterar nada ainda
+Quero primeiro um relatório completo com:
+- causa provável;
+- evidências reais;
+- arquivo/linha;
+- rota afetada;
+- exemplos de cliques;
+- se é bug de parser, config, cache ou logs;
+- plano de correção seguro.
+
+8. Testes que devem ser planejados
+- Facebook humano mobile + xcode correto → BLACK;
+- xcode com espaço antes/depois → BLACK após trim;
+- xcode encoded → BLACK;
+- xcode duplicado → regra clara;
+- xcode incorreto → WHITE;
+- missing xcode → WHITE;
+- bot Facebook/crawler → WHITE;
+- datacenter Meta → WHITE;
+- rota /r/:slug e /:slug iguais.
+
+No final entregue:
+- arquitetura do filtro Facebook;
+- causa exata do invalid_xcode;
+- logs analisados;
+- correção recomendada;
+- riscos;
+- testes necessários.
