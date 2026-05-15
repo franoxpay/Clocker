@@ -163,6 +163,34 @@ function extractClientIP(req: Request): string {
 // ==========================================
 // Append UTM parameters (and other tracking params) from query string to destination URL
 // Excludes internal cloaking params like fbcl, xcode, ttclid, cname
+/**
+ * Normalizes an xcode value coming from a query string parameter.
+ *
+ * Handles all known malformation patterns:
+ *   - Array (duplicate param): picks first element
+ *   - Trailing garbage after `?`  e.g. "M5GB-7BT5?utm_source=FB" → "M5GB-7BT5"
+ *   - Trailing garbage after `&`  e.g. "M5GB-7BT5&utm_source=FB" → "M5GB-7BT5"
+ *   - Leading/trailing whitespace: trimmed
+ *   - URL-encoded `?` (%3F) or `&` (%26): decoded first, then split
+ *
+ * Returns undefined when the raw value is absent/empty.
+ */
+function normalizeXcode(raw: string | string[] | undefined): string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+
+  // If qs returned an array (param appeared twice), take the first element
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate !== 'string') return undefined;
+
+  // Decode any percent-encoded characters first (%3F → ?, %26 → &)
+  let decoded = candidate;
+  try { decoded = decodeURIComponent(candidate); } catch { /* keep original */ }
+
+  // Cut at the first `?` or `&` — everything after is junk from a malformed ad URL
+  const clean = decoded.split('?')[0].split('&')[0].trim();
+  return clean || undefined;
+}
+
 function appendUTMParams(targetUrl: string, queryParams: Record<string, any>): string {
   // List of internal cloaking params to exclude
   const excludedParams = ['fbcl', 'xcode', 'ttclid', 'cname', 'adname', 'adset'];
@@ -3873,7 +3901,9 @@ export async function registerRoutes(
       const ttclid = fixedQuery.ttclid || rawQuery.ttclid;
       const cname = fixedQuery.cname || rawQuery.cname;
       const fbcl = fixedQuery.fbcl || rawQuery.fbcl;
-      const xcode = fixedQuery.xcode || rawQuery.xcode;
+      // Normalize xcode: handles arrays, trailing ?/& garbage, whitespace, and percent-encoding
+      const rawXcode = fixedQuery.xcode || rawQuery.xcode;
+      const xcode = normalizeXcode(rawXcode as string | string[] | undefined);
       
       // TikTok UTM parameters (new format)
       const utmMedium = fixedQuery.utm_medium || rawQuery.utm_medium;
@@ -3964,10 +3994,11 @@ export async function registerRoutes(
             paramsValid = true;
           }
 
-          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium}, utm_content=${!!utmContent}, utm_campaign=${!!utmCampaign}, src=${!!csite}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
+          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium}, utm_content=${!!utmContent}, utm_campaign=${!!utmCampaign}, src=${!!csite}, rawXcode="${rawXcode}", xcode="${xcode}", expected="${offer.xcode}", match=${xcode === offer.xcode} → ${paramsValid ? 'VALID' : failReason}`);
         }
       } else if (offer.platform === "facebook") {
         // Facebook requires: fbcl (campaign.name|campaign.id), xcode
+        console.log(`[Facebook] xcode normalization: raw="${rawXcode}" → normalized="${xcode}" | expected="${offer.xcode}" | match=${xcode === offer.xcode}`);
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";
         } else if (xcode !== offer.xcode) {
@@ -4053,6 +4084,9 @@ export async function registerRoutes(
             isProxy: ipAnalysis.isProxy,
             isCorporateProxy: ipAnalysis.isCorporateProxy,
             route: '/r/:slug',
+            rawXcode: rawXcode != null ? String(rawXcode) : null,
+            normalizedXcode: xcode || null,
+            expectedXcode: offer.xcode,
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
@@ -4064,6 +4098,8 @@ export async function registerRoutes(
           ` | device=${deviceType}` +
           ` | ua="${userAgent.substring(0, 80)}"` +
           ` | paramsValid=${paramsValid}` +
+          ` | rawXcode="${rawXcode}"` +
+          ` | xcode="${xcode}"` +
           ` | xcodeValid=${xcodeValid}` +
           ` | fbclValid=${fbclValid}` +
           ` | countryAllowed=${countryAllowed}` +
@@ -4451,7 +4487,9 @@ export async function registerRoutes(
       const ttclid = fixedQuery2.ttclid || rawQuery2.ttclid;
       const cname = fixedQuery2.cname || rawQuery2.cname;
       const fbcl = fixedQuery2.fbcl || rawQuery2.fbcl;
-      const xcode = fixedQuery2.xcode || rawQuery2.xcode;
+      // Normalize xcode: handles arrays, trailing ?/& garbage, whitespace, and percent-encoding
+      const rawXcode2 = fixedQuery2.xcode || rawQuery2.xcode;
+      const xcode = normalizeXcode(rawXcode2 as string | string[] | undefined);
       
       // TikTok UTM parameters (new format)
       const utmMedium2 = fixedQuery2.utm_medium || rawQuery2.utm_medium;
@@ -4537,9 +4575,11 @@ export async function registerRoutes(
             paramsValid = true;
           }
 
-          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium2}, utm_content=${!!utmContent2}, utm_campaign=${!!utmCampaign2}, src=${!!csite2}, xcode=${xcode === offer.xcode ? 'match' : 'mismatch'} → ${paramsValid ? 'VALID' : failReason}`);
+          console.log(`[TikTok2] Param validation: ttclid=${!!ttclid}, utm_medium=${!!utmMedium2}, utm_content=${!!utmContent2}, utm_campaign=${!!utmCampaign2}, src=${!!csite2}, rawXcode="${rawXcode2}", xcode="${xcode}", expected="${offer.xcode}", match=${xcode === offer.xcode} → ${paramsValid ? 'VALID' : failReason}`);
         }
       } else if (offer.platform === "facebook" && !isBotDetected2) {
+        // Facebook requires: fbcl (campaign.name|campaign.id), xcode
+        console.log(`[Facebook] xcode normalization: raw="${rawXcode2}" → normalized="${xcode}" | expected="${offer.xcode}" | match=${xcode === offer.xcode}`);
         if (!fbcl || !xcode) {
           failReason = "missing_facebook_params";
         } else if (xcode !== offer.xcode) {
@@ -4623,6 +4663,9 @@ export async function registerRoutes(
             isProxy: ipAnalysis2.isProxy,
             isCorporateProxy: ipAnalysis2.isCorporateProxy,
             route: '/:slug',
+            rawXcode: rawXcode2 != null ? String(rawXcode2) : null,
+            normalizedXcode: xcode || null,
+            expectedXcode: offer.xcode,
           },
         }).catch(err => console.error('[Analytics] createClickLog failed:', err.message));
         storage.incrementOfferClicks(offer.id, false)
@@ -4634,6 +4677,8 @@ export async function registerRoutes(
           ` | device=${deviceType}` +
           ` | ua="${userAgent.substring(0, 80)}"` +
           ` | paramsValid=${paramsValid}` +
+          ` | rawXcode="${rawXcode2}"` +
+          ` | xcode="${xcode}"` +
           ` | xcodeValid=${xcodeValid2}` +
           ` | fbclValid=${fbclValid2}` +
           ` | countryAllowed=${countryAllowed}` +
