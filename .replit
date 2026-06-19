@@ -59,3 +59,7 @@ stack = "FULLSTACK_JS"
 [userenv.shared]
 CNAME_TARGET = "clerion.app"
 FROM_EMAIL = "contact@clerion.app"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000
