@@ -406,6 +406,14 @@ export default function Offers() {
     return `fbcl={{campaign.name}}|{{campaign.id}}&xcode=${offer.xcode}`;
   };
 
+  const getTikTokFullUrl = (offer: OfferWithDomain) => {
+    const base = getOfferUrl(offer);
+    const params = getOfferParams(offer);
+    if (!base) return "";
+    const separator = base.includes("?") ? "&" : "?";
+    return `${base}${separator}${params}`;
+  };
+
   const getMergedParams = () => {
     if (!mergeParamsOffer) return "";
     const baseParams = getOfferParams(mergeParamsOffer);
@@ -1063,80 +1071,120 @@ export default function Offers() {
                       <TableRow key={`${offer.id}-expanded`} className="bg-muted/50">
                         <TableCell colSpan={6} className="p-4">
                           <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <Link className="w-4 h-4" />
-                                {language === "pt-BR" ? "URL da Campanha:" : "Campaign URL:"}
-                              </Label>
-                              <div className="flex items-center gap-2 bg-background border rounded-md">
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="shrink-0"
-                                  onClick={() => copyToClipboard(getOfferUrl(offer), `url-${offer.id}`)}
-                                  data-testid={`button-copy-url-${offer.id}`}
-                                >
-                                  {copiedField === `url-${offer.id}` ? (
-                                    <Check className="w-4 h-4 text-green-500" />
-                                  ) : (
-                                    <Copy className="w-4 h-4" />
-                                  )}
-                                </Button>
-                                <div className="flex items-center flex-1 overflow-hidden">
-                                  <span className="text-muted-foreground text-sm px-2 py-2 bg-muted rounded-l shrink-0">
-                                    https://{getOfferDomain(offer)}/
-                                  </span>
-                                  <span className="text-sm font-medium px-2 py-2">
-                                    {offer.slug}
-                                  </span>
+                            {offer.platform === "tiktok" ? (
+                              /* ── TikTok: URL completa pronta para colar ── */
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium flex items-center gap-2">
+                                  <Link className="w-4 h-4" />
+                                  {language === "pt-BR" ? "URL da Campanha:" : "Campaign URL:"}
+                                </Label>
+                                <div className="flex items-center gap-1 bg-background border rounded-md">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="shrink-0 h-8 px-2 gap-1"
+                                    onClick={() => copyToClipboard(getTikTokFullUrl(offer), `url-${offer.id}`)}
+                                    data-testid={`button-copy-url-${offer.id}`}
+                                    title={language === "pt-BR" ? "Copiar URL completa" : "Copy full URL"}
+                                  >
+                                    {copiedField === `url-${offer.id}` ? (
+                                      <Check className="w-4 h-4 text-green-500" />
+                                    ) : (
+                                      <Copy className="w-4 h-4" />
+                                    )}
+                                    <span className="text-xs">{language === "pt-BR" ? "Copiar" : "Copy"}</span>
+                                  </Button>
+                                  <div className="flex-1 overflow-x-auto py-2 px-2">
+                                    <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
+                                      {getTikTokFullUrl(offer)}
+                                    </code>
+                                  </div>
                                 </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {language === "pt-BR"
+                                    ? "URL completa com todos os parâmetros TikTok — pronta para colar no TikTok Ads"
+                                    : "Full URL with all TikTok parameters — ready to paste in TikTok Ads"}
+                                </p>
                               </div>
-                              <p className="text-xs text-muted-foreground">
-                                {language === "pt-BR" 
-                                  ? "O domínio não pode ser alterado após a criação da campanha" 
-                                  : "The domain cannot be changed after campaign creation"}
-                              </p>
-                            </div>
+                            ) : (
+                              /* ── Outros (Facebook, Google…): comportamento original ── */
+                              <>
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium flex items-center gap-2">
+                                    <Link className="w-4 h-4" />
+                                    {language === "pt-BR" ? "URL da Campanha:" : "Campaign URL:"}
+                                  </Label>
+                                  <div className="flex items-center gap-2 bg-background border rounded-md">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="shrink-0"
+                                      onClick={() => copyToClipboard(getOfferUrl(offer), `url-${offer.id}`)}
+                                      data-testid={`button-copy-url-${offer.id}`}
+                                    >
+                                      {copiedField === `url-${offer.id}` ? (
+                                        <Check className="w-4 h-4 text-green-500" />
+                                      ) : (
+                                        <Copy className="w-4 h-4" />
+                                      )}
+                                    </Button>
+                                    <div className="flex items-center flex-1 overflow-hidden">
+                                      <span className="text-muted-foreground text-sm px-2 py-2 bg-muted rounded-l shrink-0">
+                                        https://{getOfferDomain(offer)}/
+                                      </span>
+                                      <span className="text-sm font-medium px-2 py-2">
+                                        {offer.slug}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground">
+                                    {language === "pt-BR"
+                                      ? "O domínio não pode ser alterado após a criação da campanha"
+                                      : "The domain cannot be changed after campaign creation"}
+                                  </p>
+                                </div>
 
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium flex items-center gap-2">
-                                <Settings2 className="w-4 h-4" />
-                                {language === "pt-BR" ? "Parâmetros:" : "Parameters:"}
-                              </Label>
-                              <div className="flex items-center gap-1 bg-background border rounded-md">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="shrink-0 h-8 px-2 gap-1"
-                                  onClick={() => copyToClipboard(getOfferParams(offer), `params-${offer.id}`)}
-                                  data-testid={`button-copy-params-${offer.id}`}
-                                  title={language === "pt-BR" ? "Copiar os parâmetros" : "Copy parameters"}
-                                >
-                                  {copiedField === `params-${offer.id}` ? (
-                                    <Check className="w-4 h-4 text-green-500" />
-                                  ) : (
-                                    <Copy className="w-4 h-4" />
-                                  )}
-                                  <span className="text-xs">{language === "pt-BR" ? "Copiar" : "Copy"}</span>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="shrink-0 h-8 px-2 gap-1"
-                                  onClick={() => openMergeModal(offer)}
-                                  data-testid={`button-merge-params-${offer.id}`}
-                                  title={language === "pt-BR" ? "Adicionar mais parâmetros aos existentes" : "Add more parameters to existing ones"}
-                                >
-                                  <Plus className="w-4 h-4" />
-                                  <span className="text-xs">{language === "pt-BR" ? "Adicionar" : "Add"}</span>
-                                </Button>
-                                <div className="flex-1 overflow-x-auto py-2 px-2">
-                                  <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
-                                    {getOfferParams(offer)}
-                                  </code>
+                                <div className="space-y-2">
+                                  <Label className="text-sm font-medium flex items-center gap-2">
+                                    <Settings2 className="w-4 h-4" />
+                                    {language === "pt-BR" ? "Parâmetros:" : "Parameters:"}
+                                  </Label>
+                                  <div className="flex items-center gap-1 bg-background border rounded-md">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="shrink-0 h-8 px-2 gap-1"
+                                      onClick={() => copyToClipboard(getOfferParams(offer), `params-${offer.id}`)}
+                                      data-testid={`button-copy-params-${offer.id}`}
+                                      title={language === "pt-BR" ? "Copiar os parâmetros" : "Copy parameters"}
+                                    >
+                                      {copiedField === `params-${offer.id}` ? (
+                                        <Check className="w-4 h-4 text-green-500" />
+                                      ) : (
+                                        <Copy className="w-4 h-4" />
+                                      )}
+                                      <span className="text-xs">{language === "pt-BR" ? "Copiar" : "Copy"}</span>
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="shrink-0 h-8 px-2 gap-1"
+                                      onClick={() => openMergeModal(offer)}
+                                      data-testid={`button-merge-params-${offer.id}`}
+                                      title={language === "pt-BR" ? "Adicionar mais parâmetros aos existentes" : "Add more parameters to existing ones"}
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                      <span className="text-xs">{language === "pt-BR" ? "Adicionar" : "Add"}</span>
+                                    </Button>
+                                    <div className="flex-1 overflow-x-auto py-2 px-2">
+                                      <code className="text-xs font-mono whitespace-nowrap text-muted-foreground">
+                                        {getOfferParams(offer)}
+                                      </code>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
