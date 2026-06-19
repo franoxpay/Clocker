@@ -1,0 +1,143 @@
+Quero uma auditoria final da mudança da URL completa para TikTok.
+
+NÃO implementar nada ainda.
+Primeiro fazer uma revisão detalhada.
+
+Objetivo:
+Garantir que a nova UI do TikTok não quebrou Facebook nem outros fluxos.
+
+1. Frontend
+Auditar Offers.tsx.
+
+Verificar:
+
+- getOfferUrl()
+- getOfferParams()
+- getTikTokFullUrl()
+
+Confirmar que:
+
+TikTok:
+URL completa = URL + parâmetros
+
+Facebook:
+continua URL separada + bloco Parâmetros
+
+Outras plataformas:
+continuam iguais.
+
+2. Botão Copiar
+Verificar:
+
+TikTok:
+copia a URL completa.
+
+Facebook:
+continua copiando somente a URL.
+
+Parâmetros Facebook:
+continuam com botão Copiar separado.
+
+3. Separadores
+Garantir:
+
+sem "??"
+sem "&&"
+sem "?&"
+
+Se URL já possui query:
+usar "&"
+
+Caso contrário:
+usar "?"
+
+4. Parâmetros
+Comparar a URL TikTok completa com a lógica antiga.
+
+Confirmar que nenhum parâmetro foi perdido:
+
+src
+ttclid
+utm_medium
+utm_content
+utm_campaign
+utm_term
+xcode
+
+Verificar ordem e conteúdo.
+
+5. xcode
+Confirmar:
+
+xcode continua presente.
+
+Não houve dupla inclusão.
+
+Não foi encodeado incorretamente.
+
+6. Slug e domínio
+Testar:
+
+domínio próprio
+shared domain
+domínio principal
+
+Confirmar que a URL completa é montada corretamente em todos.
+
+7. Plataforma
+Verificar comparação:
+
+platform === "tiktok"
+
+Conferir se existe:
+
+"TikTok"
+"TIKTOK"
+"tiktok"
+
+Garantir que não há bug de case-sensitive.
+
+8. Facebook
+Garantir que absolutamente nada mudou:
+
+URL da campanha
+Parâmetros
+Botão Adicionar
+Botão Copiar
+
+9. Google e futuras plataformas
+Garantir que continuam usando o fluxo antigo.
+
+10. UX
+Verificar:
+
+quebra de layout
+overflow horizontal
+tooltip
+botão copiar
+texto de ajuda
+
+11. Testes
+
+TikTok:
+✓ URL completa pronta para colar
+✓ copiar funciona
+✓ domínio próprio
+✓ domínio compartilhado
+✓ sem parâmetros duplicados
+
+Facebook:
+✓ comportamento idêntico ao anterior
+
+Google:
+✓ comportamento original
+
+12. Entrega
+
+Informar:
+
+- arquivos revisados;
+- bugs encontrados;
+- regressões encontradas;
+- melhorias recomendadas;
+- confirmação se está pronto para produção.
