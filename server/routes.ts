@@ -2604,10 +2604,11 @@ export async function registerRoutes(
       });
 
       // Sync with EasyPanel (add domain automatically)
-      const { easypanelService } = await import("./easypanel");
-      console.log(`[EasyPanel] Attempting to add domain: ${subdomain}, isConfigured: ${easypanelService.isConfigured()}`);
+      const { easypanelService, getAppPort } = await import("./easypanel");
+      const appPort = getAppPort();
+      console.log(`[EasyPanel] Attempting to add domain: ${subdomain}, isConfigured: ${easypanelService.isConfigured()}, port: ${appPort}`);
       if (easypanelService.isConfigured()) {
-        const result = await easypanelService.addDomain(subdomain);
+        const result = await easypanelService.addDomain(subdomain, appPort);
         console.log(`[EasyPanel] Add domain result:`, result);
         if (result.success && result.domainId) {
           // Save the EasyPanel domain ID

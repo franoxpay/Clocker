@@ -1385,9 +1385,10 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
         sslStatus: "pending",
       });
       
-      const { easypanelService } = await import("../easypanel");
+      const { easypanelService, getAppPort } = await import("../easypanel");
+      const appPort = getAppPort();
       if (easypanelService.isConfigured()) {
-        const result = await easypanelService.addDomain(subdomain);
+        const result = await easypanelService.addDomain(subdomain, appPort);
         if (result.success && result.domainId) {
           domain = await storage.updateSharedDomain(domain.id, {
             easypanelDomainId: result.domainId
@@ -2759,6 +2760,235 @@ export function registerAdminRoutes(app: Express, invalidateSettingsCache: () =>
       if (error.name === "ZodError") return res.status(400).json({ message: "Reason is required" });
       console.error("Error cancelling withdrawal:", error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ── EASYPANEL RESYNC ENDPOINTS ──────────────────────────────────────────────
+
+  app.get("/api/admin/easypanel/status", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { easypanelService, getAppPort } = await import("../easypanel");
+      
+      if (!easypanelService.isConfigured()) {
+        return res.status(503).json({ 
+          configured: false, 
+          message: "EasyPanel not configured — missing EASYPANEL_URL, EASYPANEL_TOKEN, EASYPANEL_PROJECT_NAME or EASYPANEL_SERVICE_NAME" 
+        });
+      }
+
+      const appPort = getAppPort();
+
+      // Fetch live domains registered in EasyPanel
+      let easypanelDomains: any[] = [];
+      let easypanelError: string | null = null;
+      try {
+        easypanelDomains = await easypanelService.getAllDomains();
+      } catch (err: any) {
+        easypanelError = err.message;
+      }
+
+      const registeredHosts = new Set(easypanelDomains.map((d: any) => d.host));
+
+      // Fetch all user domains from DB
+      const userDomains = await storage.getAllUserDomains();
+      // Fetch all shared domains from DB
+      const sharedDomains = await storage.getAllSharedDomains();
+
+      const userReport = userDomains.map(d => ({
+        id: d.id,
+        subdomain: d.subdomain,
+        type: 'user',
+        isActive: d.isActive,
+        isVerified: d.isVerified,
+        easypanelDomainId: d.easypanelDomainId || null,
+        registeredInEasyPanel: registeredHosts.has(d.subdomain),
+      }));
+
+      const sharedReport = sharedDomains.map(d => ({
+        id: d.id,
+        subdomain: d.subdomain,
+        type: 'shared',
+        isActive: d.isActive,
+        isVerified: d.isVerified,
+        easypanelDomainId: (d as any).easypanelDomainId || null,
+        registeredInEasyPanel: registeredHosts.has(d.subdomain),
+      }));
+
+      const allDomains = [...userReport, ...sharedReport];
+      const missingCount = allDomains.filter(d => !d.registeredInEasyPanel).length;
+
+      return res.json({
+        configured: true,
+        appPort,
+        easypanelDomainsCount: easypanelDomains.length,
+        easypanelError,
+        dbDomainsCount: allDomains.length,
+        missingCount,
+        domains: allDomains,
+      });
+    } catch (error: any) {
+      console.error("[EasyPanel Status] Error:", error);
+      return res.status(500).json({ message: error.message || "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/easypanel/resync", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { easypanelService, getAppPort } = await import("../easypanel");
+
+      if (!easypanelService.isConfigured()) {
+        return res.status(503).json({ message: "EasyPanel not configured" });
+      }
+
+      const appPort = getAppPort();
+      console.log(`[EasyPanel Resync] Starting resync of all domains, port: ${appPort}`);
+
+      // Fetch live registered domains from EasyPanel
+      let easypanelDomains: any[] = [];
+      try {
+        easypanelDomains = await easypanelService.getAllDomains();
+      } catch (err: any) {
+        console.warn("[EasyPanel Resync] Could not fetch existing domains:", err.message);
+      }
+      const registeredHosts = new Set(easypanelDomains.map((d: any) => d.host));
+      console.log(`[EasyPanel Resync] Currently registered in EasyPanel: ${easypanelDomains.length} domains`);
+
+      const results: Array<{ subdomain: string; type: string; action: string; success: boolean; error?: string; newId?: string }> = [];
+
+      // --- Resync user domains ---
+      const userDomains = await storage.getAllUserDomains();
+      for (const domain of userDomains) {
+        if (registeredHosts.has(domain.subdomain)) {
+          // Already registered — ensure ID is correct in DB
+          const epDomain = easypanelDomains.find((d: any) => d.host === domain.subdomain);
+          const currentId = epDomain?.id || null;
+          if (currentId && currentId !== domain.easypanelDomainId) {
+            await storage.updateDomain(domain.id, { easypanelDomainId: currentId });
+            console.log(`[EasyPanel Resync] Updated user domain ID: ${domain.subdomain} → ${currentId}`);
+          }
+          results.push({ subdomain: domain.subdomain, type: 'user', action: 'already_registered', success: true, newId: currentId || undefined });
+          continue;
+        }
+
+        // Not registered — add to EasyPanel
+        console.log(`[EasyPanel Resync] Adding user domain to EasyPanel: ${domain.subdomain}`);
+        const result = await easypanelService.addDomain(domain.subdomain, appPort);
+        if (result.success) {
+          await storage.updateDomain(domain.id, { easypanelDomainId: result.domainId || null });
+          console.log(`[EasyPanel Resync] Added user domain: ${domain.subdomain} → ID: ${result.domainId}`);
+          results.push({ subdomain: domain.subdomain, type: 'user', action: 'added', success: true, newId: result.domainId || undefined });
+        } else {
+          console.error(`[EasyPanel Resync] Failed to add user domain ${domain.subdomain}: ${result.error}`);
+          results.push({ subdomain: domain.subdomain, type: 'user', action: 'add_failed', success: false, error: result.error });
+        }
+      }
+
+      // --- Resync shared domains ---
+      const sharedDomains = await storage.getAllSharedDomains();
+      for (const domain of sharedDomains) {
+        if (registeredHosts.has(domain.subdomain)) {
+          const epDomain = easypanelDomains.find((d: any) => d.host === domain.subdomain);
+          const currentId = epDomain?.id || null;
+          const storedId = (domain as any).easypanelDomainId || null;
+          if (currentId && currentId !== storedId) {
+            await storage.updateSharedDomain(domain.id, { easypanelDomainId: currentId });
+            console.log(`[EasyPanel Resync] Updated shared domain ID: ${domain.subdomain} → ${currentId}`);
+          }
+          results.push({ subdomain: domain.subdomain, type: 'shared', action: 'already_registered', success: true, newId: currentId || undefined });
+          continue;
+        }
+
+        console.log(`[EasyPanel Resync] Adding shared domain to EasyPanel: ${domain.subdomain}`);
+        const result = await easypanelService.addDomain(domain.subdomain, appPort);
+        if (result.success) {
+          await storage.updateSharedDomain(domain.id, { easypanelDomainId: result.domainId || null });
+          console.log(`[EasyPanel Resync] Added shared domain: ${domain.subdomain} → ID: ${result.domainId}`);
+          results.push({ subdomain: domain.subdomain, type: 'shared', action: 'added', success: true, newId: result.domainId || undefined });
+        } else {
+          console.error(`[EasyPanel Resync] Failed to add shared domain ${domain.subdomain}: ${result.error}`);
+          results.push({ subdomain: domain.subdomain, type: 'shared', action: 'add_failed', success: false, error: result.error });
+        }
+      }
+
+      const added = results.filter(r => r.action === 'added' && r.success).length;
+      const alreadyOk = results.filter(r => r.action === 'already_registered').length;
+      const failed = results.filter(r => !r.success).length;
+
+      console.log(`[EasyPanel Resync] Done — added: ${added}, already OK: ${alreadyOk}, failed: ${failed}`);
+
+      return res.json({
+        success: true,
+        appPort,
+        summary: { total: results.length, added, alreadyOk, failed },
+        results,
+      });
+    } catch (error: any) {
+      console.error("[EasyPanel Resync] Error:", error);
+      return res.status(500).json({ message: error.message || "Internal server error" });
+    }
+  });
+
+  app.post("/api/admin/easypanel/resync-domain", isAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id, type } = req.body as { id: number; type: 'user' | 'shared' };
+      if (!id || !type) return res.status(400).json({ message: "id and type are required" });
+
+      const { easypanelService, getAppPort } = await import("../easypanel");
+      if (!easypanelService.isConfigured()) {
+        return res.status(503).json({ message: "EasyPanel not configured" });
+      }
+
+      const appPort = getAppPort();
+
+      let subdomain: string;
+      let oldEasypanelId: string | null = null;
+
+      if (type === 'user') {
+        const domain = await storage.getDomain(id);
+        if (!domain) return res.status(404).json({ message: "Domain not found" });
+        subdomain = domain.subdomain;
+        oldEasypanelId = domain.easypanelDomainId || null;
+      } else {
+        const domain = await storage.getSharedDomain(id);
+        if (!domain) return res.status(404).json({ message: "Shared domain not found" });
+        subdomain = domain.subdomain;
+        oldEasypanelId = (domain as any).easypanelDomainId || null;
+      }
+
+      // Check if already registered
+      let easypanelDomains: any[] = [];
+      try {
+        easypanelDomains = await easypanelService.getAllDomains();
+      } catch {}
+      const existing = easypanelDomains.find((d: any) => d.host === subdomain);
+      if (existing) {
+        // Update ID in DB if different
+        if (existing.id !== oldEasypanelId) {
+          if (type === 'user') {
+            await storage.updateDomain(id, { easypanelDomainId: existing.id });
+          } else {
+            await storage.updateSharedDomain(id, { easypanelDomainId: existing.id });
+          }
+        }
+        return res.json({ success: true, action: 'already_registered', domainId: existing.id, subdomain });
+      }
+
+      // Add to EasyPanel
+      const result = await easypanelService.addDomain(subdomain, appPort);
+      if (!result.success) {
+        return res.status(500).json({ success: false, message: result.error, subdomain });
+      }
+
+      if (type === 'user') {
+        await storage.updateDomain(id, { easypanelDomainId: result.domainId || null });
+      } else {
+        await storage.updateSharedDomain(id, { easypanelDomainId: result.domainId || null });
+      }
+
+      return res.json({ success: true, action: 'added', domainId: result.domainId, subdomain });
+    } catch (error: any) {
+      console.error("[EasyPanel ResyncDomain] Error:", error);
+      return res.status(500).json({ message: error.message || "Internal server error" });
     }
   });
 }

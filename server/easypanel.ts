@@ -296,17 +296,23 @@ class EasyPanelService {
 
 export const easypanelService = new EasyPanelService();
 
+export function getAppPort(): number {
+  return parseInt(process.env.EASYPANEL_APP_PORT || process.env.PORT || "5000", 10);
+}
+
 export function initEasyPanel() {
   const endpoint = process.env.EASYPANEL_URL;
   const token = process.env.EASYPANEL_TOKEN;
   const projectName = process.env.EASYPANEL_PROJECT_NAME;
   const serviceName = process.env.EASYPANEL_SERVICE_NAME;
+  const appPort = getAppPort();
 
   console.log('[EasyPanel] Checking configuration...');
   console.log(`[EasyPanel] EASYPANEL_URL: ${endpoint ? 'SET' : 'NOT SET'}`);
   console.log(`[EasyPanel] EASYPANEL_TOKEN: ${token ? 'SET (' + token.substring(0, 8) + '...)' : 'NOT SET'}`);
   console.log(`[EasyPanel] EASYPANEL_PROJECT_NAME: ${projectName || 'NOT SET'}`);
   console.log(`[EasyPanel] EASYPANEL_SERVICE_NAME: ${serviceName || 'NOT SET'}`);
+  console.log(`[EasyPanel] EASYPANEL_APP_PORT (app internal port): ${appPort}`);
 
   if (endpoint && token && projectName && serviceName) {
     easypanelService.configure({

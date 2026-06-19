@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw, Info, CheckSquare } from "lucide-react";
+import { Globe, Trash2, Search, History, AlertTriangle, User, Share2, Plus, Loader2, Copy, CheckCircle2, RefreshCw, Info, CheckSquare, Server, Zap, XCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
@@ -90,6 +90,7 @@ export default function AdminDomains() {
   const [bulkDeleteStep, setBulkDeleteStep] = useState<0 | 1 | 2>(0);
   const [bulkReason, setBulkReason] = useState<string>("admin_action");
   const [bulkConfirmInput, setBulkConfirmInput] = useState<string>("");
+  const [easypanelOpen, setEasypanelOpen] = useState(false);
 
   const DNS_DESTINATION = "clerion.app";
 
@@ -123,6 +124,79 @@ export default function AdminDomains() {
 
   const { data: inactiveSharedDomains } = useQuery<InactiveSharedDomain[]>({
     queryKey: ["/api/admin/shared-domains/inactive"],
+  });
+
+  interface EasypanelDomainStatus {
+    id: number;
+    subdomain: string;
+    type: string;
+    isActive: boolean;
+    isVerified: boolean;
+    easypanelDomainId: string | null;
+    registeredInEasyPanel: boolean;
+  }
+
+  interface EasypanelStatus {
+    configured: boolean;
+    appPort: number;
+    easypanelDomainsCount: number;
+    easypanelError: string | null;
+    dbDomainsCount: number;
+    missingCount: number;
+    domains: EasypanelDomainStatus[];
+    message?: string;
+  }
+
+  const { data: epStatus, isLoading: epLoading, refetch: refetchEpStatus } = useQuery<EasypanelStatus>({
+    queryKey: ["/api/admin/easypanel/status"],
+    enabled: easypanelOpen,
+    refetchOnWindowFocus: false,
+  });
+
+  const resyncAllMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/easypanel/resync");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      refetchEpStatus();
+      toast({
+        title: language === "pt-BR" ? "Resync concluído" : "Resync completed",
+        description: language === "pt-BR"
+          ? `Adicionados: ${data.summary.added} | Já OK: ${data.summary.alreadyOk} | Falhas: ${data.summary.failed}`
+          : `Added: ${data.summary.added} | Already OK: ${data.summary.alreadyOk} | Failed: ${data.summary.failed}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: language === "pt-BR" ? "Erro no resync" : "Resync error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resyncOneMutation = useMutation({
+    mutationFn: async ({ id, type }: { id: number; type: string }) => {
+      const res = await apiRequest("POST", "/api/admin/easypanel/resync-domain", { id, type });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      refetchEpStatus();
+      toast({
+        title: language === "pt-BR" ? "Domínio sincronizado" : "Domain synced",
+        description: data.action === 'already_registered'
+          ? (language === "pt-BR" ? "Já estava registrado" : "Already registered")
+          : (language === "pt-BR" ? `Adicionado com ID: ${data.domainId}` : `Added with ID: ${data.domainId}`),
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: language === "pt-BR" ? "Erro" : "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const createSharedDomainMutation = useMutation({
@@ -346,7 +420,161 @@ export default function AdminDomains() {
           <History className="w-4 h-4 mr-2" />
           {language === "pt-BR" ? "Histórico" : "History"}
         </Button>
+        <Button
+          variant="outline"
+          onClick={() => setEasypanelOpen(prev => !prev)}
+          data-testid="button-easypanel-toggle"
+        >
+          <Server className="w-4 h-4 mr-2" />
+          {language === "pt-BR" ? "Diagnóstico EasyPanel" : "EasyPanel Diagnostics"}
+        </Button>
       </div>
+
+      {/* EasyPanel Resync Panel */}
+      {easypanelOpen && (
+        <Card className="border-blue-500/40 bg-blue-500/5">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-lg flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <Server className="w-5 h-5" />
+                {language === "pt-BR" ? "Sincronização EasyPanel" : "EasyPanel Sync"}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchEpStatus()}
+                  disabled={epLoading}
+                  data-testid="button-ep-refresh"
+                >
+                  <RefreshCw className={`w-3 h-3 mr-1 ${epLoading ? "animate-spin" : ""}`} />
+                  {language === "pt-BR" ? "Atualizar" : "Refresh"}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => resyncAllMutation.mutate()}
+                  disabled={resyncAllMutation.isPending || epLoading}
+                  data-testid="button-ep-resync-all"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {resyncAllMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                  ) : (
+                    <Zap className="w-3 h-3 mr-1" />
+                  )}
+                  {language === "pt-BR" ? "Resync Todos" : "Resync All"}
+                </Button>
+              </div>
+            </div>
+            <CardDescription>
+              {language === "pt-BR"
+                ? "Verifica quais domínios estão registrados no EasyPanel e re-registra os que faltam (necessário após migração de servidor)."
+                : "Checks which domains are registered in EasyPanel and re-registers missing ones (needed after server migration)."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {epLoading ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+              </div>
+            ) : !epStatus ? (
+              <div className="text-sm text-muted-foreground">
+                {language === "pt-BR" ? "Clique em Atualizar para carregar o status." : "Click Refresh to load status."}
+              </div>
+            ) : !epStatus.configured ? (
+              <div className="flex items-center gap-2 text-destructive text-sm">
+                <XCircle className="w-4 h-4" />
+                <span>{epStatus.message || (language === "pt-BR" ? "EasyPanel não configurado." : "EasyPanel not configured.")}</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-md border bg-background p-3 text-center">
+                    <div className="text-2xl font-bold">{epStatus.easypanelDomainsCount}</div>
+                    <div className="text-xs text-muted-foreground">{language === "pt-BR" ? "No EasyPanel" : "In EasyPanel"}</div>
+                  </div>
+                  <div className="rounded-md border bg-background p-3 text-center">
+                    <div className="text-2xl font-bold">{epStatus.dbDomainsCount}</div>
+                    <div className="text-xs text-muted-foreground">{language === "pt-BR" ? "No Banco" : "In Database"}</div>
+                  </div>
+                  <div className={`rounded-md border p-3 text-center ${epStatus.missingCount > 0 ? "border-destructive/50 bg-destructive/5" : "border-green-500/50 bg-green-500/5"}`}>
+                    <div className={`text-2xl font-bold ${epStatus.missingCount > 0 ? "text-destructive" : "text-green-600"}`}>{epStatus.missingCount}</div>
+                    <div className="text-xs text-muted-foreground">{language === "pt-BR" ? "Faltando" : "Missing"}</div>
+                  </div>
+                  <div className="rounded-md border bg-background p-3 text-center">
+                    <div className="text-2xl font-bold text-muted-foreground">{epStatus.appPort}</div>
+                    <div className="text-xs text-muted-foreground">{language === "pt-BR" ? "Porta do App" : "App Port"}</div>
+                  </div>
+                </div>
+
+                {epStatus.easypanelError && (
+                  <div className="flex items-center gap-2 text-destructive text-sm border border-destructive/30 rounded-md p-2 bg-destructive/5">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>{language === "pt-BR" ? "Erro ao listar domínios do EasyPanel: " : "Error listing EasyPanel domains: "}{epStatus.easypanelError}</span>
+                  </div>
+                )}
+
+                {epStatus.missingCount > 0 && (
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>
+                      {language === "pt-BR"
+                        ? `${epStatus.missingCount} domínio(s) não encontrado(s) no EasyPanel. Clique em "Resync Todos" para corrigir.`
+                        : `${epStatus.missingCount} domain(s) not found in EasyPanel. Click "Resync All" to fix.`}
+                    </span>
+                  </div>
+                )}
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{language === "pt-BR" ? "Domínio" : "Domain"}</TableHead>
+                      <TableHead>{language === "pt-BR" ? "Tipo" : "Type"}</TableHead>
+                      <TableHead className="text-center">{language === "pt-BR" ? "No EasyPanel" : "In EasyPanel"}</TableHead>
+                      <TableHead className="text-right">{language === "pt-BR" ? "Ação" : "Action"}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {epStatus.domains.map(d => (
+                      <TableRow key={`${d.type}-${d.id}`} data-testid={`ep-domain-row-${d.id}`}>
+                        <TableCell className="font-medium">{d.subdomain}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">
+                            {d.type === 'shared'
+                              ? (language === "pt-BR" ? "Compartilhado" : "Shared")
+                              : (language === "pt-BR" ? "Usuário" : "User")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {d.registeredInEasyPanel
+                            ? <CheckCircle2 className="w-4 h-4 text-green-600 inline" />
+                            : <XCircle className="w-4 h-4 text-destructive inline" />}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {!d.registeredInEasyPanel && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => resyncOneMutation.mutate({ id: d.id, type: d.type })}
+                              disabled={resyncOneMutation.isPending && resyncOneMutation.variables?.id === d.id}
+                              data-testid={`button-ep-resync-${d.id}`}
+                            >
+                              {resyncOneMutation.isPending && resyncOneMutation.variables?.id === d.id
+                                ? <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                : <Zap className="w-3 h-3 mr-1" />}
+                              {language === "pt-BR" ? "Sincronizar" : "Sync"}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {inactiveSharedDomains && inactiveSharedDomains.length > 0 && (
         <Card className="border-amber-500/50 bg-amber-500/5">

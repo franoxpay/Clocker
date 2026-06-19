@@ -1,0 +1,149 @@
+Investigar e corrigir bug após migração de EasyPanel: domínios próprios adicionados pelo usuário não carregam campanha.
+
+Contexto:
+- Migramos o projeto para outro EasyPanel/servidor.
+- O app principal está funcionando normalmente.
+- Banco e Redis foram migrados/trocados.
+- O problema ocorre quando o usuário adiciona um domínio próprio e tenta usar esse domínio em uma oferta.
+- Ao acessar a URL da oferta pelo domínio próprio, não carrega nem black nem white.
+- Em vez disso aparece a tela do EasyPanel:
+  "O serviço está inacessível. Certifique-se de que o serviço esteja funcionando corretamente e sem problemas."
+
+Isso indica que o domínio está chegando no EasyPanel, mas o EasyPanel não está roteando corretamente para o serviço/app.
+
+NÃO assumir que é bug de campanha antes de verificar infraestrutura.
+
+Auditar:
+
+1. Fluxo completo de domínio próprio
+Mapear:
+- usuário adiciona domínio;
+- verificação DNS;
+- criação/registro no EasyPanel;
+- SSL;
+- status no banco;
+- uso na oferta;
+- roteamento /r/:slug e /:slug.
+
+2. EasyPanel / domínio customizado
+Verificar se, após a migração:
+- EASY_PANEL_URL está correto;
+- EASY_PANEL_API_KEY está correto;
+- EASY_PANEL_PROJECT_ID está correto;
+- EASY_PANEL_SERVICE_ID está correto;
+- qualquer variável antiga ainda aponta para o EasyPanel antigo;
+- o serviço correto recebe os domínios customizados;
+- os domínios novos estão sendo adicionados ao serviço/app correto;
+- o container/app está healthy no novo EasyPanel.
+
+3. DNS
+Para os domínios afetados, verificar:
+- CNAME/A record;
+- se aponta para o novo servidor/EasyPanel;
+- se ainda aponta para o EasyPanel antigo;
+- se CNAME_TARGET mudou;
+- se MAIN_DOMAIN mudou;
+- se o domínio validado no app é o mesmo que o EasyPanel usa.
+
+4. Banco
+Para um domínio afetado, verificar:
+- domains.subdomain;
+- domains.isVerified;
+- domains.isActive;
+- domains.sslStatus;
+- domains.easypanelDomainId;
+- domains.userId;
+- offer.domainId;
+- offer.sharedDomainId;
+- offer.slug;
+- se o domínio está vinculado à offer correta.
+
+5. Roteamento real
+Fazer teste com curl:
+
+curl -I https://DOMINIO_DO_USUARIO/SLUG
+curl -I https://DOMINIO_DO_USUARIO/r/SLUG
+curl -I https://DOMINIO_DO_USUARIO/health-or-root
+
+Verificar:
+- status HTTP;
+- headers;
+- se a request chega no Node app;
+- se aparece log no servidor;
+- se EasyPanel retorna erro antes de chegar no app.
+
+6. Logs do app
+Adicionar/checar log no início das rotas:
+- host recebido;
+- originalUrl;
+- slug;
+- matched domain;
+- matched offer;
+- decision.
+
+Se não aparecer log quando acessa domínio próprio:
+→ problema é EasyPanel/proxy/DNS, não código da oferta.
+
+7. EasyPanel API
+Verificar integração que cria domínio no EasyPanel:
+- endpoint chamado;
+- payload;
+- resposta;
+- ID salvo no banco;
+- se a resposta é do EasyPanel novo;
+- se a API mudou entre instalações;
+- se precisa atualizar project/service IDs.
+
+8. SSL
+Verificar se:
+- certificado foi emitido;
+- domínio está attached ao serviço;
+- status SSL no EasyPanel;
+- app marca sslStatus corretamente;
+- erro aparece antes ou depois do TLS.
+
+9. Possível causa provável
+Investigar especialmente:
+- easypanelDomainId salvo do EasyPanel antigo;
+- env ainda apontando para EasyPanel antigo;
+- serviço ID antigo;
+- CNAME_TARGET apontando para host antigo;
+- domínio criado no EasyPanel novo mas em serviço errado;
+- EasyPanel proxy sem domínio anexado ao serviço;
+- app valida DNS como OK mas não registra no novo proxy.
+
+10. Correção esperada
+Dependendo da causa:
+- atualizar envs EasyPanel;
+- limpar easypanelDomainId antigo;
+- recriar domínio no EasyPanel novo;
+- criar endpoint/admin action "Re-sincronizar domínio no EasyPanel";
+- ao verificar domínio, se easypanelDomainId antigo/inválido, recriar no novo EasyPanel;
+- melhorar logs e mensagens no painel.
+
+11. Não quebrar:
+- domínios compartilhados;
+- domínios já funcionando;
+- DNS monitor;
+- cloaker / black-white;
+- ofertas existentes.
+
+12. Testes
+Testar:
+- domínio novo adicionado após migração;
+- domínio antigo recriado no novo EasyPanel;
+- oferta com domínio próprio;
+- /slug e /r/slug;
+- black/white carregando;
+- logs chegando no app;
+- EasyPanel mostra domínio no serviço correto;
+- SSL ativo.
+
+Entregar:
+- causa raiz;
+- se a request chega ou não no app;
+- envs incorretos se houver;
+- domínio exemplo analisado;
+- arquivos alterados;
+- correção aplicada;
+- testes feitos.
