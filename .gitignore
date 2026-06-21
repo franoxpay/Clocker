@@ -6,3 +6,4 @@ vite.config.ts.*
 *.tar.gz
 *.sql.gz
 backups/
+attached_assets/Pasted-Commit-*.txt

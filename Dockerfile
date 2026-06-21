@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -16,7 +16,8 @@ ENV NODE_ENV=production
 ENV PORT=80
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --omit=dev
 
 COPY --from=builder /app/dist ./dist
 

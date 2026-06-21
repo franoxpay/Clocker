@@ -1,0 +1,1 @@
+- [Docker Alpine npm ci crash](docker-alpine-npm-ci.md) — esbuild/native pkgs crash npm ci on Alpine with "Exit handler never called!"; fix: use node:20-slim for builder.
